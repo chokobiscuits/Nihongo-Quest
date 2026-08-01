@@ -40,9 +40,12 @@ export interface Rank {
 }
 
 function bandFor(level: number): RankBand {
-  const band = RANK_BANDS.find((b) => level >= b.min && (b.max === null || level <= b.max));
+  // Levels at or below the lowest band's floor clamp to that floor (Iron IV),
+  // so this lookup is total for all inputs once clamped by the caller.
+  const clamped = Math.max(level, RANK_BANDS[0].min);
+  const band = RANK_BANDS.find((b) => clamped >= b.min && (b.max === null || clamped <= b.max));
   if (!band) {
-    throw new Error(`No rank band covers level ${level}`);
+    throw new Error(`No rank band covers level ${clamped}`);
   }
   return band;
 }
@@ -66,9 +69,13 @@ function divisionFor(band: RankBand, level: number): number {
 }
 
 export function rankForLevel(level: number): Rank {
-  const band = bandFor(level);
+  // Clamp to a minimum of level 1: a freshly created profile (level 0) or
+  // any invalid negative level should resolve to the lowest rank (Iron IV)
+  // rather than throwing.
+  const clampedLevel = Math.max(level, 1);
+  const band = bandFor(clampedLevel);
   return {
     tier: band.tier,
-    division: band.hasDivisions ? divisionFor(band, level) : null,
+    division: band.hasDivisions ? divisionFor(band, clampedLevel) : null,
   };
 }

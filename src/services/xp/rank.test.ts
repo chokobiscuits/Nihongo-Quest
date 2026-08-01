@@ -58,6 +58,26 @@ describe("rankForLevel: tier boundaries", () => {
   });
 });
 
+describe("rankForLevel: clamps low/invalid levels", () => {
+  it("level 0 resolves to Iron IV instead of throwing", () => {
+    const rank = rankForLevel(0);
+    expect(rank.tier).toBe("IRON");
+    expect(rank.division).toBe(4);
+  });
+
+  it("negative levels resolve to Iron IV instead of throwing", () => {
+    const rank = rankForLevel(-10);
+    expect(rank.tier).toBe("IRON");
+    expect(rank.division).toBe(4);
+  });
+
+  it("level 1 resolves to Iron IV", () => {
+    const rank = rankForLevel(1);
+    expect(rank.tier).toBe("IRON");
+    expect(rank.division).toBe(4);
+  });
+});
+
 describe("rankForLevel: divisions", () => {
   it("Iron (span 4, band width 1) walks IV -> I", () => {
     expect(rankForLevel(1).division).toBe(4);

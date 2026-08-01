@@ -26,4 +26,14 @@ describe("shouldShowFurigana", () => {
     expect(shouldShowFurigana(1, { furiganaOverride: false })).toBe(false);
     expect(shouldShowFurigana(64, { furiganaOverride: false })).toBe(false);
   });
+
+  it("null override falls through to default behavior, not forced off", () => {
+    expect(shouldShowFurigana(30, { furiganaOverride: null })).toBe(true);
+    expect(shouldShowFurigana(70, { furiganaOverride: null })).toBe(false);
+  });
+
+  it("undefined override falls through to default behavior at both levels", () => {
+    expect(shouldShowFurigana(30, { furiganaOverride: undefined })).toBe(true);
+    expect(shouldShowFurigana(70, { furiganaOverride: undefined })).toBe(false);
+  });
 });
