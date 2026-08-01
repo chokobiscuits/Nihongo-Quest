@@ -1,0 +1,253 @@
+// Choko Japan data model.
+//
+// Single user, so there is no User table and no RLS: every row belongs to
+// the one person running this instance. `UserProfile.userId` and the various
+// `userId` columns exist anyway so the schema does not have to be reshaped if
+// this ever grows multi-user, and so seed/export scripts have something
+// concrete to key on.
+//
+// The other idea driving this schema: seeded dictionary content (JMdict,
+// KanjiVG, WaniKani-style subject data — all CC BY-SA) and the user's own
+// writing (mnemonics, hints, accepted-meaning synonyms) must stay cleanly
+// separable. See the "USER-AUTHORED" block on Subject below: those fields are
+// never touched by the seed scripts and must be excludable from any export
+// that redistributes seeded content under CC BY-SA without also publishing
+// personal notes.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7: connection URLs live in prisma.config.ts, and the runtime client
+// takes a driver adapter instead of a URL. See src/lib/db.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubjectType {
+  RADICAL
+  KANJI
+  VOCAB
+  GRAMMAR
+  SENTENCE
+  READING
+}
+
+enum QuestionType {
+  MEANING
+  READING
+}
+
+enum SessionKind {
+  LESSON
+  REVIEW
+  EXAM
+}
+
+// ------------------------------------------------------------------ Subjects
+
+model Subject {
+  id    String      @id @default(cuid())
+  type  SubjectType
+  level Int
+  slug  String      @unique
+
+  characters String?
+  imageUrl   String?
+
+  /// Seeded from dictionary sources. Shape: string[] with a "primary" flag
+  /// pattern left to the app layer (WaniKani-style [{ meaning, primary }]).
+  meanings Json
+  /// Seeded from dictionary sources. Same shape as `meanings`.
+  readings Json
+
+  // ---------------------------------------------------------- USER-AUTHORED
+  // Everything below this line is written by the user, never by a seed
+  // script. Kept together and clearly labeled so a future "export my seeded
+  // library" job can select every column above this block and skip these —
+  // the seeded content is CC BY-SA and redistributable, this is not.
+  meaningMnemonic  String?
+  readingMnemonic  String?
+  meaningHint      String?
+  readingHint      String?
+  /// Synonym whitelist: alternate meanings the user wants accepted as
+  /// correct, on top of whatever `meanings` already allows.
+  acceptedMeanings Json    @default("[]")
+  authored         Boolean @default(false)
+  // ------------------------------------------------------ END USER-AUTHORED
+
+  jlpt       Int?
+  jlptLegacy Int?
+  frequency  Int?
+  /// Free-form seeded metadata that doesn't merit its own column (parts of
+  /// speech, KanjiVG stroke count, source ids, ...).
+  metadata   Json    @default("{}")
+
+  /// JmdictFurigana-shaped segment array: [{ ruby, rt? }, ...]. Null when no
+  /// furigana entry exists for this subject.
+  furigana         Json?
+  /// True when `furigana` had to be synthesized as a single whole-word ruby
+  /// span rather than sourced from JmdictFurigana per-character segments.
+  furiganaFallback Boolean @default(false)
+
+  parentLinks SubjectComponent[] @relation("SubjectAsParent")
+  childLinks  SubjectComponent[] @relation("SubjectAsChild")
+  userSubject UserSubject[]
+
+  @@index([type, level])
+  @@index([jlpt])
+}
+
+/// Composition edges: which Subjects make up which other Subjects (radicals
+/// inside kanji, kanji inside vocab, ...). Sourced from KanjiVG for the
+/// radical/kanji layer.
+model SubjectComponent {
+  parentId String
+  childId  String
+
+  /// KanjiVG-style placement of the child within the parent glyph.
+  position String?
+  isRadical Boolean @default(false)
+  /// The specific reading of the child that is "in play" for this
+  /// composition, when relevant (e.g. the on'yomi that gives a phonetic
+  /// component its sound in the parent kanji).
+  readingUsed String?
+
+  parent Subject @relation("SubjectAsParent", fields: [parentId], references: [id], onDelete: Cascade)
+  child  Subject @relation("SubjectAsChild", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@id([parentId, childId])
+  @@index([childId])
+}
+
+// -------------------------------------------------------------- SRS + review
+
+model UserSubject {
+  id        String   @id @default(cuid())
+  userId    String
+  subjectId String
+
+  unlockedAt DateTime  @default(now())
+  startedAt  DateTime?
+
+  srsStage Int       @default(0)
+  dueAt    DateTime?
+
+  passedAt DateTime?
+  burnedAt DateTime?
+
+  meaningCorrect   Int @default(0)
+  meaningIncorrect Int @default(0)
+  readingCorrect   Int @default(0)
+  readingIncorrect Int @default(0)
+
+  masteryLevel Int @default(0)
+  masteryXp    Int @default(0)
+
+  /// Last time this item advanced a stage. Drives the 4-hour promotion cap:
+  /// see src/services/srs/transition.ts.
+  lastPromotedAt DateTime?
+
+  subject    Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  reviewLogs ReviewLog[]
+
+  @@unique([userId, subjectId])
+  @@index([userId, srsStage, dueAt])
+  @@index([userId, passedAt])
+}
+
+model ReviewLog {
+  id            String       @id @default(cuid())
+  userSubjectId String
+  sessionId     String?
+  questionType  QuestionType
+
+  incorrectCount Int
+  startedStage   Int
+  endedStage     Int
+  answeredAt     DateTime     @default(now())
+
+  userSubject UserSubject @relation(fields: [userSubjectId], references: [id], onDelete: Cascade)
+
+  @@index([userSubjectId, answeredAt])
+  @@index([answeredAt])
+}
+
+model Session {
+  id     String      @id @default(cuid())
+  userId String
+  kind   SessionKind
+
+  /// What was in play: subject ids, level range, etc. Shape depends on kind.
+  scope Json?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  totalItems   Int   @default(0)
+  correctItems Int   @default(0)
+  scorePct     Float?
+  xpAwarded    Int   @default(0)
+
+  @@index([userId, kind, startedAt])
+}
+
+// ------------------------------------------------------------------ Profile
+
+model UserProfile {
+  userId String @id
+
+  displayName  String
+  avatarPath   String?
+
+  totalXp      BigInt @default(0)
+  accountLevel Int    @default(1)
+
+  rank         String @default("IRON")
+  rankDivision Int?
+
+  currentStreak Int       @default(0)
+  longestStreak Int       @default(0)
+  lastActiveDay DateTime? @db.Date
+
+  timezone String @default("Asia/Tokyo")
+
+  /// User-controlled preferences, e.g. { furiganaOverride: true|false|null }.
+  settings Json @default("{}")
+}
+
+model DailyActivity {
+  userId String
+  day    DateTime @db.Date
+
+  reviewCount Int @default(0)
+  lessonCount Int @default(0)
+  xpEarned    Int @default(0)
+
+  @@id([userId, day])
+}
+
+model XpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// --------------------------------------------------------------- Attribution
+
+/// Backs the required license attribution screen (/about). One row per
+/// upstream dataset the seed scripts pull from (JMdict, KanjiVG, etc.).
+model DataSource {
+  id           String   @id @default(cuid())
+  name         String
+  url          String
+  license      String
+  versionDate  DateTime @db.Date
+  attribution  String
+}
