@@ -29,7 +29,9 @@ export interface FuriganaSegment {
 export interface SubjectRecord {
   tempId: string;
   type: SubjectType;
-  level: number;
+  /// Curriculum level 1-60, or null when the subject is seeded but not part
+  /// of the 60-level ladder (searchable/linkable, not scheduled).
+  level: number | null;
   slug: string;
   characters: string | null;
   meanings: MeaningEntry[];

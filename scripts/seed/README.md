@@ -146,24 +146,28 @@ newlines and only the `Meaning` column ever needs quoting).
 ## Level heuristic (`lib/level-heuristic.ts`)
 
 Curriculum `level` (1–60) is a design decision, not sourced data, and lives
-as a single pure, retunable function:
+as a single pure, retunable function. Not every seeded subject is on the
+ladder — `level` is nullable, and most kanji/vocab stay `null` (seeded,
+searchable, linkable, but outside the 60-level curriculum):
 
-1. **Topological sort** on the dependency graph built from
-   `SubjectComponent` edges (`topologicalOrder`, Kahn's algorithm): radicals
-   before the kanji that use them, kanji before the vocab that uses them.
-   Guarantees a subject never lands at a lower level than anything it's
-   composed of.
-2. **Tie-break within a topological wave**: `RADICAL` < `KANJI` < `VOCAB`,
-   then ascending KANJIDIC2 grade (nulls last), then ascending frequency
-   rank (nulls last), then `tempId` for full determinism.
-3. **Banding**: the ordered list is chunked into `ceil(n / 60)`-sized bands
-   across levels 1–60 (`assignLevels`), so the level count adapts to however
-   many subjects were actually seeded instead of assuming a fixed
-   items-per-level count.
+1. **Selection** (`selectLadderSet`): picks ~2,000 kanji for the ladder,
+   preferring JLPT-banded kanji (N5 first, then frequency within a band),
+   topping up with non-JLPT kanji only when their frequency rank beats
+   `NON_JLPT_FREQUENCY_CEILING`. Pulls in every radical any selected kanji
+   transitively depends on. Picks vocab (up to `VOCAB_LADDER_TARGET`) whose
+   kanji dependencies are all already selected, common vocab first.
+2. **Topological sort** on the dependency graph restricted to the selected
+   set (Kahn's algorithm): radicals before the kanji that use them, kanji
+   before the vocab that uses them. Ties within a wave break by JLPT band,
+   then frequency, then grade, then `tempId`.
+3. **Quota-fill placement** (`assignLevels`): walks the ordered list and
+   places each item at the earliest level that is at or after all of its
+   dependencies' levels and still has quota room for its type
+   (`KANJI_PER_LEVEL`, `VOCAB_PER_LEVEL`, tapering `RADICAL_QUOTA_*`).
+   Dependency order constrains placement; quotas decide it.
 
-To retune: change the comparator in `topologicalOrder` for a different
-within-wave ordering, or the banding math in `assignLevels` for a different
-level count/shape. Both are pure functions covered by
+To retune: adjust the exported `*_QUOTA` / `*_TARGET` / `*_CEILING`
+constants at the top of the file. All pure, all covered by
 `lib/__tests__/level-heuristic.test.ts`.
 
 ## Vocab scope control

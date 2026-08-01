@@ -50,7 +50,10 @@ enum SessionKind {
 model Subject {
   id    String      @id @default(cuid())
   type  SubjectType
-  level Int
+  /// Curriculum level 1-60, or null when the subject is seeded but not part
+  /// of the ladder (searchable/linkable from other subjects, not scheduled
+  /// in lessons). See scripts/seed/lib/level-heuristic.ts.
+  level Int?
   slug  String      @unique
 
   characters String?

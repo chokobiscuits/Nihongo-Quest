@@ -144,7 +144,15 @@ async function main() {
       furiganaFallback: false,
     });
 
-    levelInputs.push({ tempId, type: "RADICAL", grade: null, frequency: null, dependsOn: [] });
+    levelInputs.push({
+      tempId,
+      type: "RADICAL",
+      grade: null,
+      frequency: null,
+      jlpt: null,
+      isCommon: false,
+      dependsOn: [],
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -224,7 +232,15 @@ async function main() {
       }
     }
 
-    levelInputs.push({ tempId, type: "KANJI", grade: kanji.grade, frequency: kanji.frequency, dependsOn });
+    levelInputs.push({
+      tempId,
+      type: "KANJI",
+      grade: kanji.grade,
+      frequency: kanji.frequency,
+      jlpt: jlptByKanji.get(kanji.literal) ?? null,
+      isCommon: false,
+      dependsOn,
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -339,7 +355,15 @@ async function main() {
       }
     }
 
-    levelInputs.push({ tempId, type: "VOCAB", grade: null, frequency: nfRank, dependsOn });
+    levelInputs.push({
+      tempId,
+      type: "VOCAB",
+      grade: null,
+      frequency: nfRank,
+      jlpt: null,
+      isCommon,
+      dependsOn,
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -347,7 +371,7 @@ async function main() {
   // ---------------------------------------------------------------------
   const levels = assignLevels(levelInputs);
   for (const subject of subjects) {
-    subject.level = levels.get(subject.tempId) ?? 1;
+    subject.level = levels.get(subject.tempId) ?? null;
   }
 
   // ---------------------------------------------------------------------
@@ -376,6 +400,24 @@ async function main() {
   console.log(`KRADFILE coverage gaps (components KanjiVG's direct children miss): ${coverage.kradfileCoverageGaps.length}`);
   if (coverage.kradfileCoverageGaps.length > 0) {
     console.log("Sample gaps:", coverage.kradfileCoverageGaps.slice(0, 10));
+  }
+
+  console.log("\n--- Level distribution ---");
+  for (const type of ["RADICAL", "KANJI", "VOCAB"] as const) {
+    const laddered = subjects.filter((s) => s.type === type && s.level !== null);
+    const unladdered = subjects.filter((s) => s.type === type && s.level === null);
+    console.log(`${type}: ${laddered.length} laddered, ${unladdered.length} null`);
+  }
+  const byLevel = new Map<number, Record<string, number>>();
+  for (const s of subjects) {
+    if (s.level === null) continue;
+    const row = byLevel.get(s.level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0 };
+    row[s.type] += 1;
+    byLevel.set(s.level, row);
+  }
+  for (let level = 1; level <= 60; level += 1) {
+    const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0 };
+    console.log(`  L${level}: radical=${row.RADICAL} kanji=${row.KANJI} vocab=${row.VOCAB}`);
   }
 }
 

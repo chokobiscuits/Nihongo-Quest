@@ -1,34 +1,89 @@
 // Curriculum level (1-60) assignment. This is a design decision, not data
 // pulled from any source, so it lives as a single pure, retunable function.
 //
-// Heuristic:
-//   1. Topological sort on the component dependency graph built from
-//      SubjectComponent edges (radicals before the kanji that use them,
-//      kanji before the vocab that use them). This guarantees a subject
-//      never gets a level lower than anything it's composed of.
-//   2. Within a topological "wave" (all nodes whose dependencies are already
-//      placed), order by: RADICAL < KANJI < VOCAB, then ascending
-//      grade (kanji-data schoolbook grade, lower = more basic, nulls last),
-//      then ascending frequency rank (lower = more common, nulls last).
-//   3. Levels are assigned by chunking the ordered list into fixed-size
-//      bands across the 60 available levels, proportional to how many
-//      subjects need to fit. This keeps radicals/early kanji front-loaded
-//      into low levels the way WaniKani-style curricula expect, without
-//      hardcoding a fixed items-per-level count that might not fit the
-//      actual seeded volume.
+// Heuristic (quota-filling, not depth-assignment):
+//   1. SELECT which kanji/radicals go on the 60-level ladder at all. Not
+//      every seeded subject belongs on the ladder — only ~2,000 kanji and
+//      the radicals those kanji actually depend on. Everything else gets
+//      level = null: still seeded, searchable, and linkable, just outside
+//      the curriculum. Kanji selection prefers JLPT-banded kanji (N5 first,
+//      easiest) and falls back to frequency-ranked non-JLPT kanji only to
+//      fill a level's quota.
+//   2. ORDER the selected radicals/kanji with Kahn's-algorithm topological
+//      sort so a radical always precedes the kanji that uses it. Within a
+//      topological "wave", ties break by the curriculum ordering key (JLPT
+//      band, then frequency, then grade, then id) rather than by
+//      dependency depth.
+//   3. FILL levels 1..60 by walking the ordered radical/kanji list and
+//      assigning each item to the earliest level that (a) is at or after
+//      every one of its dependencies' levels and (b) still has quota room
+//      for that type. Dependency order is a CONSTRAINT on placement, not
+//      the thing that picks the level — quotas are.
+//   4. SELECT AND FILL vocab in a second pass, level by level, once every
+//      radical/kanji has a level: at level N, a vocab item becomes eligible
+//      once all of its kanji have a level <= N, and eligible vocab (common
+//      first, then curriculum order) fill level N's vocab quota. This ties
+//      vocab supply to kanji supply per level instead of pre-selecting the
+//      globally most-common ~5,400 words and placing them after, which
+//      jams whichever levels happen to unlock the most common kanji.
 //
-// Retuning: adjust `tieBreakKey` for a different ordering within a wave, or
-// `LEVEL_COUNT` / the banding math in `assignLevels` for a different level
-// count or distribution shape.
+// Retuning: adjust the *_QUOTA / *_TARGET constants below. Everything that
+// shapes level count, per-level quotas, or selection thresholds is a named
+// exported constant, not a magic number inline.
 import type { SubjectType } from "./types";
 
 export const LEVEL_COUNT = 60;
+
+// ---------------------------------------------------------------- Quotas
+// Per-level targets. Kanji and vocab are flat (a kanji/vocab item is only
+// ever "due" once, so an even quota spreads the curriculum evenly). Radical
+// quota tapers because radicals are only needed once, the first time some
+// kanji requires them — most of the component alphabet is exhausted well
+// before level 60.
+export const KANJI_PER_LEVEL = 33;
+export const VOCAB_PER_LEVEL = 90;
+// Capacity across the three bands must comfortably exceed the number of
+// radicals actually pulled onto the ladder (every radical any laddered
+// kanji transitively depends on) or the tail levels back up and dump
+// everything downstream into level 60. With KanjiVG's real decomposition
+// graph that's on the order of several hundred to low thousands of distinct
+// components for ~2,000 kanji, hence the generous late-band quota.
+export const RADICAL_QUOTA_EARLY = 20; // levels 1-10
+export const RADICAL_QUOTA_MID = 16; // levels 11-30
+export const RADICAL_QUOTA_LATE = 27; // levels 31-60
+export const RADICAL_EARLY_LEVEL_CUTOFF = 10;
+export const RADICAL_MID_LEVEL_CUTOFF = 30;
+
+// A level may run over its type quota by up to this fraction before we
+// consider the distribution broken (tested, not enforced at runtime — an
+// overrun can legitimately happen near the tail when dependency constraints
+// leave no earlier level with room).
+export const QUOTA_OVERRUN_TOLERANCE = 0.2;
+
+// ------------------------------------------------------------- Selection
+// Target number of kanji actually placed on the ladder. The rest stay
+// level = null. ~2,211 kanji carry a JLPT band, so this cap essentially
+// selects "the JLPT-tagged kanji" plus a small frequency-ranked top-up.
+export const KANJI_LADDER_TARGET = KANJI_PER_LEVEL * LEVEL_COUNT; // ~1,980
+
+// Non-JLPT kanji are only eligible to top up a level's quota if their
+// KANJIDIC2 frequency rank is better (numerically lower) than this.
+export const NON_JLPT_FREQUENCY_CEILING = 2500;
+
+// Target number of vocab placed on the ladder; the rest stay level = null.
+export const VOCAB_LADDER_TARGET = VOCAB_PER_LEVEL * LEVEL_COUNT; // ~5,400
 
 export interface LevelInput {
   tempId: string;
   type: SubjectType;
   grade: number | null;
   frequency: number | null;
+  /// KANJIDIC2/JLPT band: 5 = N5 (easiest) .. 1 = N1 (hardest), null if untagged.
+  /// Ignored for RADICAL/VOCAB inputs.
+  jlpt: number | null;
+  /// True for vocab JMdict flags as "common" (or radicals/kanji, where it's
+  /// irrelevant and should just be left false).
+  isCommon: boolean;
   /// tempIds of subjects this one is directly composed of (its children in
   /// SubjectComponent terms) — must be placed at an earlier or equal level.
   dependsOn: string[];
@@ -36,9 +91,34 @@ export interface LevelInput {
 
 const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2 };
 
-/// Kahn's-algorithm topological sort with a deterministic tie-break, so two
-/// runs over the same input always produce the same ordering.
-export function topologicalOrder(inputs: LevelInput[]): string[] {
+/// Curriculum ordering key used both to pick which kanji/vocab make the
+/// ladder and to break ties within a topological wave: JLPT band ascending
+/// from N5 (5) to N1 (1) — expressed here as a rank where lower is earlier —
+/// then frequency ascending (more common first), then grade, then id.
+function jlptBandRank(jlpt: number | null): number {
+  // jlpt is 5 (N5, easiest) down to 1 (N1, hardest). We want N5 first, so
+  // rank = 5 - jlpt gives N5 -> 0, N4 -> 1, ... N1 -> 4. Untagged sorts last.
+  return jlpt === null ? Number.MAX_SAFE_INTEGER : 5 - jlpt;
+}
+
+function curriculumCompare(a: LevelInput, b: LevelInput): number {
+  if (TYPE_RANK[a.type] !== TYPE_RANK[b.type]) return TYPE_RANK[a.type] - TYPE_RANK[b.type];
+  const bandA = jlptBandRank(a.jlpt);
+  const bandB = jlptBandRank(b.jlpt);
+  if (bandA !== bandB) return bandA - bandB;
+  const freqA = a.frequency ?? Number.MAX_SAFE_INTEGER;
+  const freqB = b.frequency ?? Number.MAX_SAFE_INTEGER;
+  if (freqA !== freqB) return freqA - freqB;
+  const gradeA = a.grade ?? Number.MAX_SAFE_INTEGER;
+  const gradeB = b.grade ?? Number.MAX_SAFE_INTEGER;
+  if (gradeA !== gradeB) return gradeA - gradeB;
+  return a.tempId.localeCompare(b.tempId);
+}
+
+/// Kahn's-algorithm topological sort over an arbitrary subset of inputs
+/// (dependencies pointing outside the subset are ignored, same as before),
+/// tie-broken deterministically within each wave by curriculumCompare.
+function topologicalOrder(inputs: LevelInput[]): string[] {
   const byId = new Map(inputs.map((i) => [i.tempId, i]));
   const inDegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
@@ -46,7 +126,7 @@ export function topologicalOrder(inputs: LevelInput[]): string[] {
   for (const item of inputs) {
     if (!inDegree.has(item.tempId)) inDegree.set(item.tempId, 0);
     for (const depId of item.dependsOn) {
-      if (!byId.has(depId)) continue; // dependency outside the seeded set
+      if (!byId.has(depId)) continue; // dependency outside the selected set
       inDegree.set(item.tempId, (inDegree.get(item.tempId) ?? 0) + 1);
       const list = dependents.get(depId) ?? [];
       list.push(item.tempId);
@@ -54,31 +134,18 @@ export function topologicalOrder(inputs: LevelInput[]): string[] {
     }
   }
 
-  const ready = inputs.filter((i) => (inDegree.get(i.tempId) ?? 0) === 0);
   const order: string[] = [];
   const remaining = new Map(inDegree);
-
-  const compare = (a: LevelInput, b: LevelInput) => {
-    if (TYPE_RANK[a.type] !== TYPE_RANK[b.type]) return TYPE_RANK[a.type] - TYPE_RANK[b.type];
-    const gradeA = a.grade ?? Number.MAX_SAFE_INTEGER;
-    const gradeB = b.grade ?? Number.MAX_SAFE_INTEGER;
-    if (gradeA !== gradeB) return gradeA - gradeB;
-    const freqA = a.frequency ?? Number.MAX_SAFE_INTEGER;
-    const freqB = b.frequency ?? Number.MAX_SAFE_INTEGER;
-    if (freqA !== freqB) return freqA - freqB;
-    return a.tempId.localeCompare(b.tempId);
-  };
-
   const placed = new Set<string>();
-  let wave = [...ready];
+  let wave = inputs.filter((i) => (inDegree.get(i.tempId) ?? 0) === 0);
+
   while (wave.length > 0) {
-    wave.sort(compare);
+    wave.sort(curriculumCompare);
     for (const item of wave) {
       order.push(item.tempId);
       placed.add(item.tempId);
       for (const depId of dependents.get(item.tempId) ?? []) {
-        const next = (remaining.get(depId) ?? 0) - 1;
-        remaining.set(depId, next);
+        remaining.set(depId, (remaining.get(depId) ?? 0) - 1);
       }
     }
     wave = inputs.filter((i) => !placed.has(i.tempId) && (remaining.get(i.tempId) ?? 0) === 0);
@@ -94,32 +161,188 @@ export function topologicalOrder(inputs: LevelInput[]): string[] {
   return order;
 }
 
-/// Assigns levels 1..LEVEL_COUNT by chunking the topological order into
-/// equal-size bands, so the actual level count adapts to however many
-/// subjects were seeded rather than assuming a fixed items-per-level.
-export function assignLevels(inputs: LevelInput[]): Map<string, number> {
-  const order = topologicalOrder(inputs);
-  const levels = new Map<string, number>();
-  const perLevel = Math.max(1, Math.ceil(order.length / LEVEL_COUNT));
+/// Recursively collects every dependency (radicals under a kanji, kanji
+/// under a vocab, transitively) of `tempId`, using `byId` to look up
+/// dependsOn edges. Used to pull a laddered kanji's radicals onto the
+/// ladder too, regardless of the radical's own curriculum-order rank.
+function collectDependencies(tempId: string, byId: Map<string, LevelInput>, out: Set<string>): void {
+  const item = byId.get(tempId);
+  if (!item) return;
+  for (const depId of item.dependsOn) {
+    if (out.has(depId)) continue;
+    out.add(depId);
+    collectDependencies(depId, byId, out);
+  }
+}
 
-  order.forEach((tempId, index) => {
-    const level = Math.min(LEVEL_COUNT, Math.floor(index / perLevel) + 1);
-    levels.set(tempId, level);
-  });
-
-  // Guarantee dependency ordering survives the banding: a subject can never
-  // be assigned a level below any of its dependencies (banding is monotonic
-  // with topological order, so this loop is a defensive no-op in practice,
-  // but it's cheap insurance against a future change to the banding math).
+/// Selects which subjects belong on the ladder at all. Returns the tempIds
+/// to place; everything else should get level = null.
+///
+/// Kanji: JLPT-banded kanji first (curriculumCompare order, i.e. N5 then
+/// frequency), then non-JLPT kanji whose frequency rank is better than
+/// NON_JLPT_FREQUENCY_CEILING, until KANJI_LADDER_TARGET is reached.
+/// Radicals: every radical any selected kanji transitively depends on.
+/// Vocab selection happens separately, in assignLevels, once radical/kanji
+/// levels are known (see the comment there for why).
+function selectLadderSet(inputs: LevelInput[]): Set<string> {
   const byId = new Map(inputs.map((i) => [i.tempId, i]));
+  const kanji = inputs.filter((i) => i.type === "KANJI");
+  const radicals = inputs.filter((i) => i.type === "RADICAL");
+
+  const jlptKanji = kanji.filter((k) => k.jlpt !== null).sort(curriculumCompare);
+  const nonJlptKanji = kanji
+    .filter((k) => k.jlpt === null && k.frequency !== null && k.frequency < NON_JLPT_FREQUENCY_CEILING)
+    .sort(curriculumCompare);
+
+  const selected = new Set<string>();
+  for (const k of jlptKanji) {
+    if (selected.size >= KANJI_LADDER_TARGET) break;
+    selected.add(k.tempId);
+  }
+  for (const k of nonJlptKanji) {
+    if (selected.size >= KANJI_LADDER_TARGET) break;
+    selected.add(k.tempId);
+  }
+
+  // Pull in every radical any selected kanji (transitively) needs.
+  const neededRadicals = new Set<string>();
+  for (const tempId of selected) collectDependencies(tempId, byId, neededRadicals);
+  for (const r of radicals) {
+    if (neededRadicals.has(r.tempId)) selected.add(r.tempId);
+  }
+
+  return selected;
+}
+
+function radicalQuotaForLevel(level: number): number {
+  if (level <= RADICAL_EARLY_LEVEL_CUTOFF) return RADICAL_QUOTA_EARLY;
+  if (level <= RADICAL_MID_LEVEL_CUTOFF) return RADICAL_QUOTA_MID;
+  return RADICAL_QUOTA_LATE;
+}
+
+function quotaForType(type: SubjectType, level: number): number {
+  switch (type) {
+    case "RADICAL":
+      return radicalQuotaForLevel(level);
+    case "KANJI":
+      return KANJI_PER_LEVEL;
+    case "VOCAB":
+      return VOCAB_PER_LEVEL;
+  }
+}
+
+/// Places a single already-selected item at the earliest level >= minLevel
+/// with room under its type's base quota; if every level from minLevel to
+/// LEVEL_COUNT is already at base quota, spreads into whichever eligible
+/// level is currently least full relative to its own quota (so overrun is
+/// spent evenly instead of concentrated at level 60).
+function placeAtLevel(
+  item: LevelInput,
+  minLevel: number,
+  levelCounts: Map<string, number>,
+): number {
+  let level = minLevel;
+  while (level < LEVEL_COUNT) {
+    const key = `${level}:${item.type}`;
+    const count = levelCounts.get(key) ?? 0;
+    if (count < quotaForType(item.type, level)) break;
+    level += 1;
+  }
+  const atCapKey = `${level}:${item.type}`;
+  const atCapCount = levelCounts.get(atCapKey) ?? 0;
+  if (atCapCount >= quotaForType(item.type, level)) {
+    let bestLevel = level;
+    let bestRatio = Number.POSITIVE_INFINITY;
+    for (let candidate = minLevel; candidate <= LEVEL_COUNT; candidate += 1) {
+      const candidateKey = `${candidate}:${item.type}`;
+      const candidateCount = levelCounts.get(candidateKey) ?? 0;
+      const quota = quotaForType(item.type, candidate);
+      const ratio = candidateCount / quota;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        bestLevel = candidate;
+      }
+    }
+    level = bestLevel;
+  }
+
+  const key = `${level}:${item.type}`;
+  levelCounts.set(key, (levelCounts.get(key) ?? 0) + 1);
+  return level;
+}
+
+/// Assigns levels 1..LEVEL_COUNT to a curriculum-selected subset of `inputs`
+/// by walking the topological order and filling each level to its type
+/// quota; subjects not selected for the ladder get level = null.
+///
+/// Dependency order is a constraint on placement (an item is never placed
+/// before any of its dependencies), not the sole determinant of level —
+/// within that constraint, items fill the earliest level with quota room.
+///
+/// Vocab is selected and placed in a second pass, level by level, after
+/// radicals and kanji have levels: at each level we look at which vocab is
+/// now eligible (every kanji dependency already placed at or before this
+/// level) and fill up to that level's quota from the eligible pool, ordered
+/// isCommon-first then by curriculum rank. This keeps per-level vocab supply
+/// tied to per-level kanji supply instead of jamming late levels when
+/// common words cluster around late-placed kanji.
+export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
+  const selectedIds = selectLadderSet(inputs);
+  const byId = new Map(inputs.map((i) => [i.tempId, i]));
+  const radicalKanjiInputs = inputs.filter((i) => selectedIds.has(i.tempId) && i.type !== "VOCAB");
+  const order = topologicalOrder(radicalKanjiInputs);
+
+  const levels = new Map<string, number | null>();
+  for (const item of inputs) levels.set(item.tempId, null);
+
+  const levelCounts = new Map<string, number>(); // `${level}:${type}` -> count
+
   for (const tempId of order) {
     const item = byId.get(tempId)!;
-    let level = levels.get(tempId)!;
+    let minLevel = 1;
     for (const depId of item.dependsOn) {
       const depLevel = levels.get(depId);
-      if (depLevel !== undefined && depLevel > level) level = depLevel;
+      if (typeof depLevel === "number" && depLevel > minLevel) minLevel = depLevel;
     }
-    levels.set(tempId, level);
+    levels.set(tempId, placeAtLevel(item, minLevel, levelCounts));
+  }
+
+  // Second pass: vocab, level by level, capped at VOCAB_LADDER_TARGET total.
+  const vocabInputs = inputs.filter((i) => i.type === "VOCAB");
+  const laddered = new Set(radicalKanjiInputs.map((i) => i.tempId));
+  let vocabPlaced = 0;
+  for (let level = 1; level <= LEVEL_COUNT && vocabPlaced < VOCAB_LADDER_TARGET; level += 1) {
+    // Eligible now = every kanji dependency already placed at or before
+    // `level`. Re-derived each level since eligibility grows monotonically
+    // as more kanji get placed, and levels beyond the current one haven't
+    // committed their kanji yet (levels.get returns the already-final level
+    // from the radical/kanji pass above, so this check is stable).
+    const eligibleNow = vocabInputs.filter((v) => {
+      if (laddered.has(v.tempId)) return false; // already placed
+      return v.dependsOn.every((dep) => {
+        const depItem = byId.get(dep);
+        if (!depItem) return false;
+        if (depItem.type !== "KANJI") return true;
+        const depLevel = levels.get(dep);
+        return typeof depLevel === "number" && depLevel <= level;
+      });
+    });
+    eligibleNow.sort((a, b) => {
+      if (a.isCommon !== b.isCommon) return a.isCommon ? -1 : 1;
+      return curriculumCompare(a, b);
+    });
+
+    const quota = quotaForType("VOCAB", level);
+    for (const v of eligibleNow) {
+      if (vocabPlaced >= VOCAB_LADDER_TARGET) break;
+      const key = `${level}:VOCAB`;
+      const count = levelCounts.get(key) ?? 0;
+      if (count >= quota) break;
+      levels.set(v.tempId, level);
+      laddered.add(v.tempId);
+      levelCounts.set(key, count + 1);
+      vocabPlaced += 1;
+    }
   }
 
   return levels;
