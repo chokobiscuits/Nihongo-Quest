@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# seed pipeline: raw downloads and generated JSONL artifacts, both
+# regenerable via `npm run seed:download` / `npm run seed:transform`
+/data/
+
 # next.js
 /.next/
 /out/
