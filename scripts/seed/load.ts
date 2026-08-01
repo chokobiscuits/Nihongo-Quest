@@ -10,6 +10,10 @@
 // so we delete-then-recreate the seeded set instead — safe because
 // DataSource carries no user data and no other table references it by id
 // that would survive a delete+recreate. See findAndReplaceDataSources below.)
+// dotenv must be imported before src/lib/db, which reads DATABASE_URL at
+// module scope. prisma.config.ts loads dotenv for Prisma CLI commands only;
+// this script runs under tsx and gets no env loading for free.
+import "dotenv/config";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { prisma } from "../../src/lib/db";
