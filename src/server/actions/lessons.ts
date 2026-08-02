@@ -6,7 +6,7 @@ import { LESSON_STAGE, intervalForStage } from "@/services/srs/stages";
 import { xpForCorrectAnswer, sessionBonus, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
 import { masteryXpForCorrectAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
-import { applyDailyActivity } from "@/services/xp/streak";
+import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
 import { SubjectType } from "@/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
@@ -48,13 +48,17 @@ export interface CommitLessonSessionResult {
 /// question answered, records the Session/XpEvent/DailyActivity rows, and
 /// updates the profile's XP/level/rank/streak. Nothing is written until the
 /// whole batch is done — an abandoned session leaves no trace.
-export async function commitLessonSession(input: CommitLessonSessionInput): Promise<CommitLessonSessionResult> {
+export async function commitLessonSession(
+  input: CommitLessonSessionInput,
+  userId: string = APP_USER_ID,
+): Promise<CommitLessonSessionResult> {
   const { subjectIds, answers } = input;
-  const userId = APP_USER_ID;
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   const profile = await getOrCreateProfile(userId);
+  // Day boundary observed in the profile's own timezone (default
+  // Asia/Tokyo), not UTC — see dayInTimezone's doc comment.
+  const today = dayInTimezone(now, profile.timezone);
 
   const dueAt = (() => {
     const interval = intervalForStage(1);

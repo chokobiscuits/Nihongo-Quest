@@ -162,7 +162,9 @@ function partsOfSpeechOf(metadata: unknown): string[] {
 /// ladder subjects, ordered radical -> kanji -> vocab, by level, then
 /// frequency, truncated to `UserProfile.settings.lessonBatchSize` (default
 /// 5). Creates the user's profile on first access if missing.
-export async function getLessonBatch(userId: string): Promise<LessonSubject[]> {
+const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+
+export async function getLessonBatch(userId: string = APP_USER_ID): Promise<LessonSubject[]> {
   const profile = await getOrCreateProfile(userId);
   const settings = profile.settings as { lessonBatchSize?: number } | null;
   const batchSize = settings?.lessonBatchSize ?? undefined;

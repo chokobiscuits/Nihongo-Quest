@@ -1,5 +1,24 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/// Date-only "today" (midnight, encoded as a UTC-midnight Date so it
+/// compares cleanly with DailyActivity's @db.Date column and dayDiff below)
+/// as observed in `timeZone` at instant `now`. Used instead of naively
+/// taking `now`'s UTC calendar date, which silently uses UTC's midnight
+/// boundary rather than the user's — a user active just after midnight in
+/// Asia/Tokyo (UTC+9) but still mid-afternoon UTC the previous day would
+/// otherwise be logged against the wrong day, under-counting the streak
+/// near local midnight.
+export function dayInTimezone(now: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return new Date(Date.UTC(Number(get("year")), Number(get("month")) - 1, Number(get("day"))));
+}
+
 export interface StreakInput {
   currentStreak: number;
   longestStreak: number;

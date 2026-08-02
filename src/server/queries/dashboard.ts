@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
+import { getReviewQueue } from "@/server/queries/reviews";
 import { rankForLevel } from "@/services/xp/rank";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
@@ -72,14 +73,16 @@ export interface DashboardData {
 /// Single aggregated read for the whole dashboard. Every panel gets a
 /// fully-populated object with real denominators — zeroed counts render as
 /// designed empty states, not null branches per-panel.
-export async function getDashboard(userId: string): Promise<DashboardData> {
+const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+
+export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
   // radicalTotal (182 laddered) isn't shown as its own Progress Overview
   // legend row per the sheet, but is fetched alongside the other ladder
   // counts for parity and to keep this the one place ladder denominators
   // are read from.
-  const [, kanjiTotal, vocabTotal, learnedCounts, dueCounts, masteryXpAgg] = await Promise.all([
+  const [, kanjiTotal, vocabTotal, learnedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.RADICAL, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
@@ -88,10 +91,9 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
       where: { userId, passedAt: { not: null } },
       _count: true,
     }),
-    prisma.userSubject.findMany({
-      where: { userId, dueAt: { not: null, lte: new Date() } },
-      select: { subject: { select: { type: true } } },
-    }),
+    // No due-date filter: reviewable = started + stage 1-8. dueAt is a
+    // priority weight, not a lock — see src/server/queries/reviews.ts.
+    getReviewQueue(userId),
     // Account mastery is derived, not stored: a single SUM aggregate avoids
     // loading every UserSubject row just to add up masteryXp.
     prisma.userSubject.aggregate({ where: { userId }, _sum: { masteryXp: true } }),
@@ -125,9 +127,8 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
   ];
 
   const dueTypeCounts = new Map<SubjectType, number>();
-  for (const row of dueCounts) {
-    const t = row.subject.type;
-    dueTypeCounts.set(t, (dueTypeCounts.get(t) ?? 0) + 1);
+  for (const row of reviewQueue.dueCounts) {
+    dueTypeCounts.set(row.type, row.count);
   }
   const reviewsByType: DashboardReviewTypeCount[] = [
     SubjectType.RADICAL,

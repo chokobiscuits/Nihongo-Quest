@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDailyActivity } from "./streak";
+import { applyDailyActivity, dayInTimezone } from "./streak";
 
 const day = (n: number) => new Date(Date.UTC(2026, 0, n));
 
@@ -52,5 +52,34 @@ describe("applyDailyActivity", () => {
       today: day(2),
     });
     expect(result.longestStreak).toBe(6);
+  });
+});
+
+describe("dayInTimezone", () => {
+  it("returns the UTC calendar date for the UTC timezone", () => {
+    const now = new Date(Date.UTC(2026, 0, 15, 3, 0, 0));
+    expect(dayInTimezone(now, "UTC")).toEqual(day(15));
+  });
+
+  it("rolls over to the next day in a timezone ahead of UTC (Asia/Tokyo, UTC+9)", () => {
+    // 2026-01-14T15:30:00Z is 2026-01-15T00:30 JST — already the next day
+    // in Tokyo even though it's still the 14th in UTC. This is the case
+    // that was silently mishandled before dayInTimezone existed: naively
+    // taking now.getUTCDate() would log this activity against the 14th.
+    const now = new Date(Date.UTC(2026, 0, 14, 15, 30, 0));
+    expect(dayInTimezone(now, "Asia/Tokyo")).toEqual(day(15));
+    expect(dayInTimezone(now, "UTC")).toEqual(day(14));
+  });
+
+  it("does not yet roll over just before local midnight (Asia/Tokyo)", () => {
+    // 2026-01-14T14:30:00Z is 2026-01-14T23:30 JST — still the 14th.
+    const now = new Date(Date.UTC(2026, 0, 14, 14, 30, 0));
+    expect(dayInTimezone(now, "Asia/Tokyo")).toEqual(day(14));
+  });
+
+  it("handles a timezone behind UTC (America/New_York, UTC-5 in January)", () => {
+    // 2026-01-15T02:00:00Z is 2026-01-14T21:00 EST — still the 14th locally.
+    const now = new Date(Date.UTC(2026, 0, 15, 2, 0, 0));
+    expect(dayInTimezone(now, "America/New_York")).toEqual(day(14));
   });
 });
