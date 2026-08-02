@@ -21,7 +21,7 @@ export default async function HomePage() {
           displayName={dashboard.displayName}
           accountLevel={dashboard.accountLevel}
           currentStreak={dashboard.currentStreak}
-          masteryLabel={dashboard.masteryLabel}
+          masteryTier={dashboard.masteryTier}
           rank={dashboard.rank}
           xpIntoCurrentLevel={dashboard.xpIntoCurrentLevel}
           xpForCurrentLevel={dashboard.xpForCurrentLevel}

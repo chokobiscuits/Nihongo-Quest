@@ -4,6 +4,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { rankForLevel } from "@/services/xp/rank";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
+import { accountMasteryLevel, masteryTier, type MasteryTier } from "@/services/xp/mastery";
 
 // Static denominators for content types that aren't seeded/laddered yet
 // (grammar, sentences, readings have no Subject rows to count). Radical,
@@ -57,7 +58,9 @@ export interface DashboardData {
   xpIntoCurrentLevel: number;
   currentStreak: number;
   rank: ReturnType<typeof rankForLevel>;
-  masteryLabel: string;
+  accountMasteryXp: number;
+  accountMasteryLevel: number;
+  masteryTier: MasteryTier;
   progress: DashboardProgressRow[];
   continueCards: DashboardContinueCard[];
   reviewsDue: number;
@@ -76,7 +79,7 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
   // legend row per the sheet, but is fetched alongside the other ladder
   // counts for parity and to keep this the one place ladder denominators
   // are read from.
-  const [, kanjiTotal, vocabTotal, learnedCounts, dueCounts] = await Promise.all([
+  const [, kanjiTotal, vocabTotal, learnedCounts, dueCounts, masteryXpAgg] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.RADICAL, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
@@ -89,7 +92,14 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
       where: { userId, dueAt: { not: null, lte: new Date() } },
       select: { subject: { select: { type: true } } },
     }),
+    // Account mastery is derived, not stored: a single SUM aggregate avoids
+    // loading every UserSubject row just to add up masteryXp.
+    prisma.userSubject.aggregate({ where: { userId }, _sum: { masteryXp: true } }),
   ]);
+
+  const accountMasteryXp = masteryXpAgg._sum.masteryXp ?? 0;
+  const accountMasteryLevelValue = accountMasteryLevel(accountMasteryXp);
+  const tier = masteryTier(accountMasteryLevelValue);
 
   // groupBy above only tells us which subjectIds passed; join subject type
   // via a second lookup keyed on those ids to bucket learned counts by type.
@@ -139,7 +149,7 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
     { id: "kanji-master", titleJa: "漢字マスター", requirementEn: "Learn 1000 kanji", progress: passedByType.KANJI, target: 1000 },
     { id: "vocab-king", titleJa: "語彙王", requirementEn: "Learn 5000 vocabulary", progress: passedByType.VOCAB, target: 5000 },
     { id: "perseverance", titleJa: "継続は力なり", requirementEn: "365日連続！", progress: profile.currentStreak, target: 365 },
-    { id: "master", titleJa: "日本語の達人", requirementEn: "Reach Mastery ∞", progress: totalLearned, target: Number.POSITIVE_INFINITY },
+    { id: "master", titleJa: "日本語の達人", requirementEn: "Reach Mastery Lv.∞", progress: totalLearned, target: Number.POSITIVE_INFINITY },
   ];
 
   const streakDays = buildStreakDays(profile.currentStreak);
@@ -152,7 +162,9 @@ export async function getDashboard(userId: string): Promise<DashboardData> {
     xpIntoCurrentLevel: Number(profile.totalXp),
     currentStreak: profile.currentStreak,
     rank,
-    masteryLabel: totalLearned > 0 ? `Mastery ${totalLearned}` : "Mastery ∞",
+    accountMasteryXp,
+    accountMasteryLevel: accountMasteryLevelValue,
+    masteryTier: tier,
     progress,
     continueCards,
     reviewsDue,

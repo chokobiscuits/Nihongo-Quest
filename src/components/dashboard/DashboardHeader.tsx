@@ -1,12 +1,14 @@
 import { InsetPanel } from "@/components/panel/Panel";
 import { RankBadge } from "@/components/rank/RankBadge";
 import type { Rank } from "@/services/xp/rank";
+import type { MasteryTier } from "@/services/xp/mastery";
+import { cn } from "@/lib/utils";
 
 export interface DashboardHeaderProps {
   displayName: string;
   accountLevel: number;
   currentStreak: number;
-  masteryLabel: string;
+  masteryTier: MasteryTier;
   rank: Rank;
   xpIntoCurrentLevel: number;
   xpForCurrentLevel: number;
@@ -20,12 +22,13 @@ export function DashboardHeader({
   displayName,
   accountLevel,
   currentStreak,
-  masteryLabel,
+  masteryTier,
   rank,
   xpIntoCurrentLevel,
   xpForCurrentLevel,
 }: DashboardHeaderProps) {
   const isNewAccount = accountLevel <= 1 && xpIntoCurrentLevel === 0;
+  const isMasteryUnstarted = masteryTier.level === 0;
   const greeting = isNewAccount ? `はじめまして、${displayName}!` : `おかえりなさい、${displayName}!`;
   const levelFraction = xpForCurrentLevel > 0 ? Math.min(1, xpIntoCurrentLevel / xpForCurrentLevel) : 0;
 
@@ -66,13 +69,26 @@ export function DashboardHeader({
         </InsetPanel>
 
         <InsetPanel className="flex items-center gap-2 px-3 py-2">
-          <span aria-hidden className="text-h3" style={{ color: `var(--color-rank-${rank.tier.toLowerCase()})` }}>
+          <span
+            aria-hidden
+            className="text-h3"
+            style={{ color: isMasteryUnstarted ? "var(--color-text-faint)" : `var(${masteryTier.colorToken})` }}
+          >
             👑
           </span>
           <div className="flex flex-col leading-tight">
-            <span className="text-h3 font-semibold text-text">{masteryLabel.replace("Mastery ", "")}</span>
+            <span
+              className={cn(
+                "text-h3 font-semibold",
+                isMasteryUnstarted ? "text-text-faint" : "text-text",
+              )}
+              lang="en"
+            >
+              Lv.{masteryTier.level}
+              {!isMasteryUnstarted && ` ${masteryTier.name}`}
+            </span>
             <span className="text-micro text-text-faint" lang="en">
-              Mastery
+              {isMasteryUnstarted ? "Not started" : "Mastery"}
             </span>
           </div>
         </InsetPanel>

@@ -239,6 +239,38 @@ rt:empty {
   line-height: 2.1;
 }
 
+/* XP popup: spawns at the input's top edge and floats up while fading out. */
+.xp-popup {
+  position: absolute;
+  pointer-events: none;
+  color: var(--color-success);
+  text-shadow: 0 0 12px color-mix(in oklch, var(--color-success) 65%, transparent);
+  animation: xp-popup-float 900ms var(--ease-out) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes xp-popup-float {
+  0% {
+    opacity: 1;
+    transform: translate(var(--xp-jitter, 0px), 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--xp-jitter, 0px), -48px) scale(1.15);
+  }
+}
+
+.xp-popup-reduced {
+  animation: xp-popup-fade 400ms ease-out forwards;
+}
+
+@keyframes xp-popup-fade {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .rank-challenger {
@@ -248,6 +280,10 @@ rt:empty {
 
   .particle {
     display: none;
+  }
+
+  .xp-popup {
+    animation: xp-popup-fade 400ms ease-out forwards;
   }
 
   .shake {

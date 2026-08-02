@@ -13,7 +13,7 @@ export interface AppShellProps {
 // that don't pass `user`, or during a loading boundary).
 const PLACEHOLDER_USER: SidebarNavUser = {
   name: "Learner",
-  masteryLabel: "Level 1",
+  masteryTier: { name: "Unranked", level: 0, colorToken: "--color-text-faint" },
   rank: { tier: "IRON", division: 4 },
 };
 

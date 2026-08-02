@@ -6,6 +6,7 @@ import { RankBadge } from "@/components/rank/RankBadge";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { SubjectType } from "@/generated/prisma/enums";
 import type { Rank } from "@/services/xp/rank";
+import type { MasteryTier } from "@/services/xp/mastery";
 import { cn } from "@/lib/utils";
 import {
   DashboardIcon,
@@ -80,7 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
 export interface SidebarNavUser {
   name: string;
   avatarUrl?: string;
-  masteryLabel: string;
+  masteryTier: MasteryTier;
   rank: Rank;
 }
 
@@ -159,7 +160,10 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
           <div className="h-9 w-9 shrink-0 rounded-full bg-surface-3" aria-hidden />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-sub font-medium text-text">{user.name}</span>
-            <span className="truncate text-micro text-text-faint">{user.masteryLabel}</span>
+            <span className="truncate text-micro text-text-faint">
+              Mastery Lv.{user.masteryTier.level}
+              {user.masteryTier.level > 0 && ` ${user.masteryTier.name}`}
+            </span>
             <RankBadge tier={user.rank.tier} division={user.rank.division} size="xs" />
           </div>
         </div>
