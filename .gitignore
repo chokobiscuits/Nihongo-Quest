@@ -49,3 +49,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Design reference material (source mockups, not app assets)
+/Assets/

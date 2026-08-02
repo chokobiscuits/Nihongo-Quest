@@ -20,7 +20,7 @@ export const SUBJECT_THEME: Record<SubjectType, SubjectThemeEntry> = {
     text: "var(--color-radical-text)",
     labelEn: "Radicals",
     labelJa: "部首",
-    icon: "⼀",
+    icon: "部",
   },
   [SubjectType.KANJI]: {
     base: "var(--color-kanji)",
