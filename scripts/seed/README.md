@@ -54,9 +54,10 @@ running it twice produces the same rows, not duplicates.
 | KANJIDIC2 | `http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz` | CC BY-SA 4.0 | Kanji meanings, on/kun readings, grade, stroke count, freq |
 | JMdict_e | `http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz` | CC BY-SA 4.0 | Vocabulary |
 | JmdictFurigana | GitHub release, `Doublevil/JmdictFurigana` | CC BY-SA 4.0 | Per-character furigana alignment |
-| KanjiVG | GitHub release, `KanjiVG/kanjivg` (`*-main.zip`) | CC BY-SA 3.0 | Component decomposition with position |
-| KRADFILE | `http://ftp.edrdg.org/pub/Nihongo/kradzip.zip` | CC BY-SA 4.0 | Flat kanji→component map, used as a coverage cross-check against KanjiVG |
-| Kanji Alive | `kanjialive/kanji-data-media`, `language-data/japanese-radicals.csv` | CC BY 4.0 | 247 radicals with English meanings/romaji readings |
+| KanjiVG | GitHub release, `KanjiVG/kanjivg` (`*-main.zip`) | CC BY-SA 3.0 | Kanji stroke-count metadata only (no longer the radical/component source of truth, see below) |
+| KRADFILE | `http://ftp.edrdg.org/pub/Nihongo/kradzip.zip` | CC BY-SA 4.0 | Flat kanji→component map — the `SubjectComponent` source of truth for radical edges |
+| Kangxi 214 radicals | Hand-encoded in `lib/kangxi-radicals.ts`; canonical forms per Unicode's Kangxi Radicals block (U+2F00-U+2FD5), names/readings the conventional glosses used by every major kanji dictionary, cross-checked against Kanji Alive's CSV | Public domain (300-year-old standard) | The 214-radical `Subject` set: number, name, stroke count, variant forms |
+| Kanji Alive | `kanjialive/kanji-data-media`, `language-data/japanese-radicals.csv` | CC BY 4.0 | Cross-check only for romaji/variant spellings while hand-encoding the Kangxi list; not joined into seeded data (see note below) |
 | davidluzgouveia/kanji-data | GitHub, `kanji.json` | MIT | Modern N5-N1 JLPT levels (`jlpt_new` field) |
 
 Every source above gets a `DataSource` row via `lib/data-sources.ts`, which
@@ -69,7 +70,15 @@ Note on Kanji Alive: the repo has no dedicated radical-data JSON despite its
 `data/` folder naming; the actual English-meaning table lives at
 `language-data/japanese-radicals.csv`. `lib/kanji-alive-parser.ts` parses
 that CSV directly (hand-rolled quote-aware split — the file has no embedded
-newlines and only the `Meaning` column ever needs quoting).
+newlines and only the `Meaning` column ever needs quoting). It is still
+parsed in `transform.ts` (parser stays exercised) but its output is **not**
+joined into the seeded radical set: the CSV's "Radical ID#" column is a
+1-322 row index, not the Kangxi radical number — it interleaves canonical
+forms, `hen`/`kanmuri`/`ashi` position-variant rows, and a few non-radical
+entries (e.g. 々), with no reliable in-file marker distinguishing canonical
+from variant. Joining on it silently produced duplicate/wrong radicals in an
+earlier version of this pipeline. See `lib/kangxi-radicals.ts` for the
+actual source of the 214-radical set.
 
 ## Parsing gotchas (verified against real source files, not just docs)
 
@@ -115,13 +124,11 @@ newlines and only the `Meaning` column ever needs quoting).
 
 ## Mapping to schema
 
-- **Radicals** (`Subject.type = RADICAL`): every distinct component
-  character KanjiVG uses as a *direct child* of some kanji. Left-joined
-  against Kanji Alive's CSV on the literal character for an English meaning
-  and romaji reading; radicals with no Kanji Alive match fall back to the
-  bare character as a placeholder meaning (still `authored: false`,
-  `meaningMnemonic: null` — the user authors real mnemonics by hand later,
-  per the schema's authored/seeded split).
+- **Radicals** (`Subject.type = RADICAL`): the fixed 214 Kangxi radicals from
+  `lib/kangxi-radicals.ts` — number, character, English name, romaji, stroke
+  count, variant forms. Every radical has a real English name; none is a
+  placeholder echo of its own character. Slug is
+  `radical-<number>-<romaji-of-english-name>`, e.g. `radical-85-water`.
 - **Kanji** (`KANJI`): from KANJIDIC2, English-only meanings (`m_lang`
   absent). `jlpt` from kanji-data, `jlptLegacy` from KANJIDIC2's own
   `<jlpt>`. Kanji with zero English meanings are skipped (nothing to seed a
@@ -131,11 +138,21 @@ newlines and only the `Meaning` column ever needs quoting).
   and `metadata.nfRank` come from `ke_pri`/`re_pri` (`news1|ichi1|spec1|
   spec2|gai1` for the boolean flag, the `nfXX` bucket as an int for ranking).
   `metadata.uk` flags any sense whose `misc` contains `uk`.
-- **`SubjectComponent`**: KanjiVG's nested `<g>` tree for radical→kanji
-  edges (`position`, `isRadical` from `kvg:position`/`kvg:radical`).
-  Vocab→kanji edges are derived from the furigana segment array, not a naive
-  character scan — `readingUsed` is set to the segment's own reading, so 生
-  is taught as せい in 学生 and なま in 生物 as genuinely distinct facts.
+- **`SubjectComponent`** (radical→kanji edges): from KRADFILE's flat
+  kanji→component map, not KanjiVG. Each KRADFILE component character is
+  resolved through `lib/kangxi-resolver.ts` to its canonical Kangxi radical
+  (variant forms fold onto the canonical, e.g. 氵/氺 → 水, 忄 → 心, 亻/𠆢 →
+  人); `isRadical` is true when the KRADFILE component *is* the canonical
+  Kangxi character rather than one of its variant forms. Components that
+  don't resolve to any Kangxi radical (KRADFILE decomposes some kanji into
+  visual fragments finer than the 214-radical set) are dropped from the
+  unlock graph — they never become unnamed radical subjects. `position` is
+  not set (KRADFILE, unlike KanjiVG, carries no layout information).
+  KanjiVG's own decomposition is kept parsed only for kanji `strokeCount`
+  metadata. Vocab→kanji edges are derived from the furigana segment array,
+  not a naive character scan — `readingUsed` is set to the segment's own
+  reading, so 生 is taught as せい in 学生 and なま in 生物 as genuinely
+  distinct facts.
 - **`furigana`** on VOCAB subjects is the JmdictFurigana segment array
   verbatim, ready for `<ruby>` rendering via `src/services/furigana/render.ts`.
 - **`DataSource`**: one row per table above, see `lib/data-sources.ts`.
@@ -180,12 +197,10 @@ exceeds the 10,000 target ceiling, it's trimmed by ascending `nfXX` rank
 (most frequent first); entries without an `nfXX` bucket sort last within the
 cap but are never preferentially dropped over less-common `nfXX`-ranked ones.
 
-## Results (last verified transform run, real source files, 2026-08-01)
+## Results (last verified transform run, real source files, 2026-08-02)
 
-- **Radicals**: 1,418 (KanjiVG's full direct-child component inventory, not
-  a curated ~250-item traditional radical list — the schema's mapping spec
-  explicitly asks for KanjiVG's component inventory, with `isRadical`
-  distinguishing traditionally-recognized radicals from other components)
+- **Radicals**: 214 (the fixed Kangxi set; every one has a real English name,
+  none echoes its own character)
 - **Kanji**: 10,384 (of KANJIDIC2's 13,108 total characters; the rest have no
   English `<meaning>` entry and are skipped)
 - **Vocab**: 10,000 (candidate pool before the cap: 29,895 common,
@@ -198,16 +213,10 @@ cap but are never preferentially dropped over less-common `nfXX`-ranked ones.
   total, well short of KANJIDIC2's full character set, so a large share of
   seeded kanji (mostly rarer/non-Jōyō characters) have no
   `SubjectComponent` decomposition edges
-- **KRADFILE cross-check**: 5,789 kanji have at least one component in
-  KRADFILE's flat map that KanjiVG's *direct-child* decomposition does not
-  surface. This is a real, expected gap, not a bug — the two projects
-  decompose differently (KRADFILE is flatter and closer to traditional
-  radical lists; KanjiVG's direct children are its own nested stroke-group
-  structure, which for complex kanji sits a level "deeper" than KRADFILE's
-  single-level list). KanjiVG stays the `SubjectComponent` source of truth
-  per the task's mapping spec; this number is reported so a future
-  radical-inventory pass has an honest starting point rather than silently
-  under-seeding some compositions.
+- **KRADFILE resolution**: KRADFILE covers 6,355 kanji. Components that don't
+  resolve to a Kangxi radical or one of its variant forms are dropped from
+  the unlock graph and logged as coverage gaps (see console output of
+  `npm run seed:transform`) rather than becoming unnamed radical subjects.
 
 Sentences and grammar subjects are out of scope for this task and are not
 seeded.

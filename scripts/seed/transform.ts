@@ -20,6 +20,8 @@ import { buildFuriganaIndex, jmdictFormPairs, lookupFurigana } from "./lib/furig
 import { assignLevels, type LevelInput } from "./lib/level-heuristic";
 import { baseSlug, dedupeSlug } from "./lib/slug";
 import { DATA_SOURCES } from "./lib/data-sources";
+import { KANGXI_RADICALS } from "./lib/kangxi-radicals";
+import { buildKangxiResolver, radicalSlugName } from "./lib/kangxi-resolver";
 import type { ComponentRecord, MeaningEntry, ReadingEntry, SubjectRecord } from "./lib/types";
 
 const RAW_DIR = path.resolve(__dirname, "../../data/raw");
@@ -96,50 +98,52 @@ async function main() {
   const kradByKanji = new Map(kradRows.map((r) => [r.kanji, r.components]));
 
   // -------------------------------------------------------- Kanji Alive
+  // No longer used to source radical names (see kangxi-radicals.ts for why:
+  // Kanji Alive's CSV mixes canonical and variant-position rows under a row
+  // index that is not the Kangxi radical number). Left parsed only so the
+  // parser/fixture stays exercised; not joined into subjects below.
   const kanjiAliveCsv = readFileSync(path.join(RAW_DIR, "kanjialive-radicals.csv"), "utf-8");
-  const kanjiAliveRadicals = parseKanjiAliveRadicals(kanjiAliveCsv);
-  const kanjiAliveByChar = new Map(kanjiAliveRadicals.map((r) => [r.radical, r]));
+  parseKanjiAliveRadicals(kanjiAliveCsv);
 
   // ---------------------------------------------------------------------
-  // Build RADICAL subjects from KanjiVG's component inventory: every
-  // distinct component character KanjiVG uses as a direct child of some
-  // kanji becomes a candidate radical, left-joined against Kanji Alive for
-  // English names.
+  // Build RADICAL subjects from the fixed 214 Kangxi radicals (see
+  // scripts/seed/lib/kangxi-radicals.ts). Unlike KanjiVG's 1,418 arbitrary
+  // component chars, every one of these has an authoritative English name,
+  // a stroke count, and a stable number — no dictionary join required, no
+  // fallback-to-glyph possible.
   // ---------------------------------------------------------------------
-  const radicalChars = new Set<string>();
-  for (const kvg of kanjivgByLiteral.values()) {
-    for (const c of kvg.components) radicalChars.add(c.element);
-  }
+  const kangxiResolver = buildKangxiResolver();
 
   const subjects: SubjectRecord[] = [];
   const components: ComponentRecord[] = [];
   const usedSlugs = new Set<string>();
   const levelInputs: LevelInput[] = [];
 
-  const radicalTempIdByChar = new Map<string, string>();
-  for (const char of radicalChars) {
-    const tempId = `radical-${char}`;
-    radicalTempIdByChar.set(char, tempId);
-    const aliveMatch = kanjiAliveByChar.get(char);
-    const meanings: MeaningEntry[] = aliveMatch
-      ? [{ meaning: capitalize(aliveMatch.meaning.split(",")[0].trim()), primary: true }]
-      : [{ meaning: char, primary: true }]; // fallback: no authored name yet, literal as placeholder
-    const readings: ReadingEntry[] = aliveMatch && aliveMatch.readingRomaji
-      ? [{ reading: aliveMatch.readingRomaji, primary: true, type: "romaji" }]
-      : [];
+  const radicalTempIdByNumber = new Map<number, string>();
+  for (const radical of KANGXI_RADICALS) {
+    const tempId = `radical-${radical.number}`;
+    radicalTempIdByNumber.set(radical.number, tempId);
+
+    const meanings: MeaningEntry[] = [{ meaning: capitalize(radical.name), primary: true }];
+    const readings: ReadingEntry[] = [{ reading: radical.romaji, primary: true, type: "romaji" }];
 
     subjects.push({
       tempId,
       type: "RADICAL",
       level: 0, // placeholder, overwritten by assignLevels below
-      slug: dedupeSlug(baseSlug("radical", char), usedSlugs),
-      characters: char,
+      slug: dedupeSlug(`radical-${radical.number}-${radicalSlugName(radical)}`, usedSlugs),
+      characters: radical.character,
       meanings,
       readings,
       jlpt: null,
       jlptLegacy: null,
       frequency: null,
-      metadata: { source: "kanjivg+kanjialive", hasKanjiAliveMatch: Boolean(aliveMatch) },
+      metadata: {
+        source: "kangxi-214",
+        number: radical.number,
+        strokeCount: radical.strokes,
+        variants: radical.variants,
+      },
       furigana: null,
       furiganaFallback: false,
     });
@@ -185,15 +189,18 @@ async function main() {
     if (kvg) coverage.kanjiWithKvg += 1;
     else coverage.kanjiWithoutKvg += 1;
 
-    // KRADFILE cross-check: report kanji where KRADFILE lists components
-    // KanjiVG's direct-child decomposition did not surface (coverage gap,
-    // not auto-fixed — KanjiVG remains the SubjectComponent source of truth
-    // per the task's mapping spec).
+    // KRADFILE cross-check: report KRADFILE components that don't resolve to
+    // any Kangxi radical (either not a real component of this kanji's own
+    // decomposition, or a sub-Kangxi visual fragment) — informational only,
+    // those components are dropped from the unlock graph below.
     const kradComponents = kradByKanji.get(kanji.literal) ?? [];
-    const kvgComponentChars = new Set((kvg?.components ?? []).map((c) => c.element));
-    const missingFromKvg = kradComponents.filter((c) => !kvgComponentChars.has(c) && c !== kanji.literal);
-    if (missingFromKvg.length > 0) {
-      coverage.kradfileCoverageGaps.push(`${kanji.literal}: KRADFILE has ${missingFromKvg.join("")} not in KanjiVG`);
+    const unresolvedKrad = kradComponents.filter(
+      (c) => c !== kanji.literal && !kangxiResolver.has(c),
+    );
+    if (unresolvedKrad.length > 0) {
+      coverage.kradfileCoverageGaps.push(
+        `${kanji.literal}: KRADFILE component(s) ${unresolvedKrad.join("")} do not resolve to a Kangxi radical`,
+      );
     }
 
     subjects.push({
@@ -216,20 +223,32 @@ async function main() {
       furiganaFallback: false,
     });
 
+    // KRADFILE is the SubjectComponent source of truth for radicals (see
+    // scripts/seed/README.md): it maps kanji to recognizable visual parts
+    // rather than KanjiVG's arbitrary stroke-group decomposition. Each
+    // component resolves through kangxiResolver to its canonical Kangxi
+    // radical (e.g. 氵 -> 水); components that aren't Kangxi radicals or
+    // variants of one (KRADFILE decomposes more finely than 214 radicals)
+    // are dropped from the unlock graph rather than becoming unnamed
+    // radicals. The kanji's own literal is excluded (KRADFILE lists it
+    // when the kanji is itself a radical).
     const dependsOn: string[] = [];
-    if (kvg) {
-      for (const comp of kvg.components) {
-        const compTempId = radicalTempIdByChar.get(comp.element);
-        if (!compTempId) continue;
-        dependsOn.push(compTempId);
-        components.push({
-          parentTempId: tempId,
-          childTempId: compTempId,
-          position: comp.position,
-          isRadical: comp.isRadical,
-          readingUsed: null,
-        });
-      }
+    const seenRadicalNumbers = new Set<number>();
+    for (const comp of kradComponents) {
+      if (comp === kanji.literal) continue;
+      const radical = kangxiResolver.get(comp);
+      if (!radical || seenRadicalNumbers.has(radical.number)) continue;
+      seenRadicalNumbers.add(radical.number);
+      const compTempId = radicalTempIdByNumber.get(radical.number);
+      if (!compTempId) continue;
+      dependsOn.push(compTempId);
+      components.push({
+        parentTempId: tempId,
+        childTempId: compTempId,
+        position: null,
+        isRadical: comp === radical.character,
+        readingUsed: null,
+      });
     }
 
     levelInputs.push({
