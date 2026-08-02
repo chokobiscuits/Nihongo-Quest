@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
 import type { RankTier } from "@/services/xp/rank";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
@@ -164,6 +166,28 @@ export function RankCrest({ tier, division, size = "md", variant = "solid", clas
   const gradientId = `rank-crest-${tier.toLowerCase()}-${variant}`;
   const isChallenger = tier === "CHALLENGER";
   const tierKey = tier.toLowerCase();
+
+  // Prefer a user-supplied crest PNG at /crests/{tier}.png; fall back to the
+  // inline SVG below when it 404s (the art isn't landed yet). `solid` only —
+  // `ghost` silhouettes always use the SVG since there's no locked-crest art.
+  const [pngFailed, setPngFailed] = useState(false);
+  if (variant === "solid" && !pngFailed) {
+    return (
+      <span
+        className={cn("relative inline-block", className)}
+        style={{ width: px, height: px }}
+      >
+        <Image
+          src={`/crests/${tierKey}.png`}
+          alt={`${tier}${division ? ` ${DIVISION_NUMERAL[division]}` : ""} rank crest`}
+          width={px}
+          height={px}
+          unoptimized
+          onError={() => setPngFailed(true)}
+        />
+      </span>
+    );
+  }
 
   const isSimple = size === "xs" || size === "sm";
   const isHero = size === "hero";

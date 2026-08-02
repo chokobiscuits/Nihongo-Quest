@@ -1,13 +1,44 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { RankBadge } from "@/components/rank/RankBadge";
+import { SUBJECT_THEME } from "@/components/subject/theme";
+import { SubjectType } from "@/generated/prisma/enums";
 import type { Rank } from "@/services/xp/rank";
 import { cn } from "@/lib/utils";
+import {
+  DashboardIcon,
+  RadicalIcon,
+  KanjiIcon,
+  VocabIcon,
+  GrammarIcon,
+  SentenceIcon,
+  ReadingIcon,
+  ReviewIcon,
+  ExamIcon,
+  ProgressIcon,
+  AchievementIcon,
+  SettingsIcon,
+} from "./NavIcons";
+
+/// Maps a nav href to the SubjectType whose theme color it should borrow
+/// when active. Non-subject routes (dashboard, reviews, ...) fall back to
+/// the brand color.
+const NAV_THEME_BY_HREF: Partial<Record<string, SubjectType>> = {
+  "/subjects/RADICAL": SubjectType.RADICAL,
+  "/subjects/KANJI": SubjectType.KANJI,
+  "/subjects/VOCAB": SubjectType.VOCAB,
+  "/subjects/GRAMMAR": SubjectType.GRAMMAR,
+  "/subjects/SENTENCE": SubjectType.SENTENCE,
+  "/subjects/READING": SubjectType.READING,
+};
 
 interface NavItem {
   href: string;
   labelEn: string;
   labelJa: string;
-  icon: string;
+  Icon: (props: { className?: string }) => React.ReactElement;
 }
 
 interface NavGroup {
@@ -17,31 +48,31 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    items: [{ href: "/", labelEn: "Dashboard", labelJa: "ダッシュボード", icon: "◆" }],
+    items: [{ href: "/", labelEn: "Dashboard", labelJa: "ダッシュボード", Icon: DashboardIcon }],
   },
   {
     caption: "Learn",
     items: [
-      { href: "/subjects/RADICAL", labelEn: "Radicals", labelJa: "部首", icon: "⼀" },
-      { href: "/subjects/KANJI", labelEn: "Kanji", labelJa: "漢字", icon: "字" },
-      { href: "/subjects/VOCAB", labelEn: "Vocabulary", labelJa: "単語", icon: "語" },
-      { href: "/subjects/GRAMMAR", labelEn: "Grammar", labelJa: "文法", icon: "法" },
-      { href: "/subjects/SENTENCE", labelEn: "Sentences", labelJa: "例文", icon: "文" },
-      { href: "/subjects/READING", labelEn: "Text Readings", labelJa: "読解", icon: "読" },
+      { href: "/subjects/RADICAL", labelEn: "Radicals", labelJa: "部首", Icon: RadicalIcon },
+      { href: "/subjects/KANJI", labelEn: "Kanji", labelJa: "漢字", Icon: KanjiIcon },
+      { href: "/subjects/VOCAB", labelEn: "Vocabulary", labelJa: "語彙", Icon: VocabIcon },
+      { href: "/subjects/GRAMMAR", labelEn: "Grammar", labelJa: "文法", Icon: GrammarIcon },
+      { href: "/subjects/SENTENCE", labelEn: "Sentences", labelJa: "例文", Icon: SentenceIcon },
+      { href: "/subjects/READING", labelEn: "Text Readings", labelJa: "読解", Icon: ReadingIcon },
     ],
   },
   {
     caption: "Practice",
     items: [
-      { href: "/reviews", labelEn: "Reviews", labelJa: "復習", icon: "循" },
-      { href: "/exams", labelEn: "Exams", labelJa: "試験", icon: "験" },
+      { href: "/reviews", labelEn: "Reviews", labelJa: "復習", Icon: ReviewIcon },
+      { href: "/exams", labelEn: "Exams", labelJa: "試験", Icon: ExamIcon },
     ],
   },
   {
     items: [
-      { href: "/progress", labelEn: "Progress", labelJa: "進捗", icon: "growth" },
-      { href: "/achievements", labelEn: "Achievements", labelJa: "実績", icon: "賞" },
-      { href: "/settings", labelEn: "Settings", labelJa: "設定", icon: "設" },
+      { href: "/progress", labelEn: "Progress", labelJa: "進捗", Icon: ProgressIcon },
+      { href: "/achievements", labelEn: "Achievements", labelJa: "実績", Icon: AchievementIcon },
+      { href: "/settings", labelEn: "Settings", labelJa: "設定", Icon: SettingsIcon },
     ],
   },
 ];
@@ -63,6 +94,8 @@ export interface SidebarNavProps {
 /// takes over). The collapsed/expanded states are pure CSS breakpoints so
 /// there is no layout flash on resize.
 export function SidebarNav({ user, className }: SidebarNavProps) {
+  const pathname = usePathname();
+
   return (
     <nav
       className={cn(
@@ -79,29 +112,39 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
                 {group.caption}
               </span>
             )}
-            {group.items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={`${item.labelEn} / ${item.labelJa}`}
-                className={cn(
-                  "group flex items-center gap-3 rounded-[var(--radius-tile)] px-2.5 py-2 text-sub text-text-muted transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
-                  "hover:bg-surface-2 hover:text-text focus-visible:bg-surface-2 focus-visible:text-text",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-                  "justify-center lg:justify-start",
-                )}
-              >
-                <span aria-hidden className="text-h3 leading-none">
-                  {item.icon}
-                </span>
-                <span className="hidden lg:flex flex-col leading-tight">
-                  <span lang="en">{item.labelEn}</span>
-                  <span lang="ja" className="text-micro text-text-faint">
-                    {item.labelJa}
+            {group.items.map((item) => {
+              const active = pathname === item.href;
+              const subjectType = NAV_THEME_BY_HREF[item.href];
+              const activeColor = subjectType ? SUBJECT_THEME[subjectType].base : "var(--color-brand)";
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={`${item.labelEn} / ${item.labelJa}`}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-[var(--radius-tile)] px-2.5 py-2 text-sub transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
+                    active ? "text-text" : "text-text-muted",
+                    "hover:bg-surface-2 hover:text-text focus-visible:bg-surface-2 focus-visible:text-text",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
+                    "justify-center lg:justify-start",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-5 w-5 shrink-0 items-center justify-center leading-none"
+                    style={{ color: active ? activeColor : "var(--color-text-dim)" }}
+                  >
+                    <item.Icon className="h-[18px] w-[18px]" />
                   </span>
-                </span>
-              </Link>
-            ))}
+                  <span className="hidden lg:flex flex-col leading-tight">
+                    <span lang="en">{item.labelEn}</span>
+                    <span lang="ja" className="text-micro text-text-faint">
+                      {item.labelJa}
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         ))}
       </div>
