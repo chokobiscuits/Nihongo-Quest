@@ -87,6 +87,13 @@ export interface LevelInput {
   /// tempIds of subjects this one is directly composed of (its children in
   /// SubjectComponent terms) — must be placed at an earlier or equal level.
   dependsOn: string[];
+  /// Subset of dependsOn that must be placed at a STRICTLY earlier level,
+  /// not merely equal. Used for every kanji-to-radical component edge
+  /// (including identity radical links, where a kanji that is itself a
+  /// Kangxi radical must learn the radical form first) — a radical must be
+  /// learnable ahead of the kanji it composes, not tied with it. Every id
+  /// here must also appear in dependsOn.
+  strictDependsOn?: string[];
 }
 
 const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2 };
@@ -116,8 +123,20 @@ function curriculumCompare(a: LevelInput, b: LevelInput): number {
 }
 
 /// Kahn's-algorithm topological sort over an arbitrary subset of inputs
-/// (dependencies pointing outside the subset are ignored, same as before),
-/// tie-broken deterministically within each wave by curriculumCompare.
+/// (dependencies pointing outside the subset are ignored, same as before).
+///
+/// Uses a single global ready frontier, sorted by curriculumCompare, rather
+/// than processing full dependency "waves" one at a time: an item that
+/// becomes ready a wave later than some unrelated item (e.g. a kanji that
+/// now depends on its identity radical, becoming ready in wave 2 instead of
+/// wave 0) must still be able to outrank lower-curriculum-priority items
+/// that happened to have zero dependencies from the start. Wave-at-a-time
+/// processing would let every zero-dependency item claim its level-quota
+/// slot before any item with a dependency is even considered, regardless of
+/// curriculum rank — starving e.g. 一/日/生 behind obscure zero-component
+/// kanji. A global frontier picks the single best-ranked ready item at each
+/// step, so priority is compared across the whole remaining pool, not just
+/// within one wave.
 function topologicalOrder(inputs: LevelInput[]): string[] {
   const byId = new Map(inputs.map((i) => [i.tempId, i]));
   const inDegree = new Map<string, number>();
@@ -137,18 +156,26 @@ function topologicalOrder(inputs: LevelInput[]): string[] {
   const order: string[] = [];
   const remaining = new Map(inDegree);
   const placed = new Set<string>();
-  let wave = inputs.filter((i) => (inDegree.get(i.tempId) ?? 0) === 0);
+  const ready = inputs.filter((i) => (inDegree.get(i.tempId) ?? 0) === 0);
+  ready.sort(curriculumCompare);
 
-  while (wave.length > 0) {
-    wave.sort(curriculumCompare);
-    for (const item of wave) {
-      order.push(item.tempId);
-      placed.add(item.tempId);
-      for (const depId of dependents.get(item.tempId) ?? []) {
-        remaining.set(depId, (remaining.get(depId) ?? 0) - 1);
-      }
+  while (ready.length > 0) {
+    const item = ready.shift()!;
+    order.push(item.tempId);
+    placed.add(item.tempId);
+    const newlyReady: LevelInput[] = [];
+    for (const depId of dependents.get(item.tempId) ?? []) {
+      const left = (remaining.get(depId) ?? 0) - 1;
+      remaining.set(depId, left);
+      if (left === 0) newlyReady.push(byId.get(depId)!);
     }
-    wave = inputs.filter((i) => !placed.has(i.tempId) && (remaining.get(i.tempId) ?? 0) === 0);
+    if (newlyReady.length > 0) {
+      // Merge newly-ready items into the sorted frontier and re-sort — the
+      // frontier stays small relative to total input size in practice, so
+      // a full re-sort per batch is cheap enough for a one-off seed script.
+      ready.push(...newlyReady);
+      ready.sort(curriculumCompare);
+    }
   }
 
   if (order.length !== inputs.length) {
@@ -300,11 +327,23 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
   for (const tempId of order) {
     const item = byId.get(tempId)!;
     let minLevel = 1;
+    const strict = new Set(item.strictDependsOn ?? []);
     for (const depId of item.dependsOn) {
       const depLevel = levels.get(depId);
-      if (typeof depLevel === "number" && depLevel > minLevel) minLevel = depLevel;
+      if (typeof depLevel !== "number") continue;
+      const required = strict.has(depId) ? depLevel + 1 : depLevel;
+      if (required > minLevel) minLevel = required;
     }
-    levels.set(tempId, placeAtLevel(item, minLevel, levelCounts));
+    const assigned = placeAtLevel(item, minLevel, levelCounts);
+    for (const depId of strict) {
+      const depLevel = levels.get(depId);
+      if (typeof depLevel === "number" && !(depLevel < assigned)) {
+        throw new Error(
+          `level-heuristic: strict dependency invariant violated — ${tempId} (level ${assigned}) must be strictly after ${depId} (level ${depLevel})`,
+        );
+      }
+    }
+    levels.set(tempId, assigned);
   }
 
   // Second pass: vocab, level by level, capped at VOCAB_LADDER_TARGET total.

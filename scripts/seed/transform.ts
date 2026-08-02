@@ -152,7 +152,16 @@ async function main() {
       tempId,
       type: "RADICAL",
       grade: null,
-      frequency: null,
+      // Radicals have no JLPT band or dictionary frequency of their own, so
+      // curriculumCompare would otherwise fall back to tempId string
+      // comparison ("radical-100-..." sorts before "radical-9-..."),
+      // scrambling the natural Kangxi ordering. Use the radical's Kangxi
+      // number as its frequency-equivalent tiebreak: lower number = more
+      // fundamental/simpler radical = earlier in the curriculum. This
+      // matters once identity radicals must land before their kanji —
+      // without it, low-numbered radicals needed by level-1 kanji could
+      // lose the level-1 radical quota to arbitrarily higher-numbered ones.
+      frequency: radical.number,
       jlpt: null,
       isCommon: false,
       dependsOn: [],
@@ -232,7 +241,13 @@ async function main() {
     // are dropped from the unlock graph rather than becoming unnamed
     // radicals. The kanji's own literal is excluded (KRADFILE lists it
     // when the kanji is itself a radical).
+    // Every kanji-to-radical component edge is a STRICT prerequisite: a
+    // radical must be learnable (Guru-able) before its kanji unlocks, so it
+    // must sit at a level strictly less than the kanji's, never tied. (Two
+    // radicals under the same kanji, or a radical and an unrelated kanji,
+    // may still share a level — only a direct component edge is strict.)
     const dependsOn: string[] = [];
+    const strictDependsOn: string[] = [];
     const seenRadicalNumbers = new Set<number>();
     for (const comp of kradComponents) {
       if (comp === kanji.literal) continue;
@@ -242,6 +257,7 @@ async function main() {
       const compTempId = radicalTempIdByNumber.get(radical.number);
       if (!compTempId) continue;
       dependsOn.push(compTempId);
+      strictDependsOn.push(compTempId);
       components.push({
         parentTempId: tempId,
         childTempId: compTempId,
@@ -249,6 +265,31 @@ async function main() {
         isRadical: comp === radical.character,
         readingUsed: null,
       });
+    }
+
+    // Identity radical link: if this kanji's own character IS a Kangxi
+    // radical (e.g. 一, 人, 十, 日, 月, 大, 生 — the simplest, highest-
+    // frequency kanji, which KRADFILE never decomposes into anything since
+    // there's nothing smaller to decompose into), wire the radical form as
+    // an explicit prerequisite. Without this, levels 1-2 (dominated by
+    // these radical-kanji) end up with zero SubjectComponent rows and
+    // unlock vacuously — see task write-up. This mirrors WaniKani's
+    // treatment of e.g. the "one" radical preceding the 一 kanji.
+    const identityRadical = kangxiResolver.get(kanji.literal);
+    if (identityRadical && !seenRadicalNumbers.has(identityRadical.number)) {
+      const compTempId = radicalTempIdByNumber.get(identityRadical.number);
+      if (compTempId) {
+        seenRadicalNumbers.add(identityRadical.number);
+        dependsOn.push(compTempId);
+        strictDependsOn.push(compTempId);
+        components.push({
+          parentTempId: tempId,
+          childTempId: compTempId,
+          position: null,
+          isRadical: true,
+          readingUsed: null,
+        });
+      }
     }
 
     levelInputs.push({
@@ -259,6 +300,7 @@ async function main() {
       jlpt: jlptByKanji.get(kanji.literal) ?? null,
       isCommon: false,
       dependsOn,
+      strictDependsOn,
     });
   }
 
