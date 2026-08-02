@@ -347,15 +347,21 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
   }
 
   // Second pass: vocab, level by level, capped at VOCAB_LADDER_TARGET total.
+  // Every kanji dependency is strict (see strictDependsOn on the VOCAB
+  // input): a vocab item must land at a level strictly after the max level
+  // of every kanji it contains, never the same level, so the runtime unlock
+  // (which gates on the kanji being Guru'd) is never offered a lesson ahead
+  // of its own prerequisite.
   const vocabInputs = inputs.filter((i) => i.type === "VOCAB");
   const laddered = new Set(radicalKanjiInputs.map((i) => i.tempId));
   let vocabPlaced = 0;
   for (let level = 1; level <= LEVEL_COUNT && vocabPlaced < VOCAB_LADDER_TARGET; level += 1) {
-    // Eligible now = every kanji dependency already placed at or before
-    // `level`. Re-derived each level since eligibility grows monotonically
-    // as more kanji get placed, and levels beyond the current one haven't
-    // committed their kanji yet (levels.get returns the already-final level
-    // from the radical/kanji pass above, so this check is stable).
+    // Eligible now = every kanji dependency already placed at a STRICTLY
+    // earlier level than `level`. Re-derived each level since eligibility
+    // grows monotonically as more kanji get placed, and levels beyond the
+    // current one haven't committed their kanji yet (levels.get returns the
+    // already-final level from the radical/kanji pass above, so this check
+    // is stable).
     const eligibleNow = vocabInputs.filter((v) => {
       if (laddered.has(v.tempId)) return false; // already placed
       return v.dependsOn.every((dep) => {
@@ -363,7 +369,7 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
         if (!depItem) return false;
         if (depItem.type !== "KANJI") return true;
         const depLevel = levels.get(dep);
-        return typeof depLevel === "number" && depLevel <= level;
+        return typeof depLevel === "number" && depLevel < level;
       });
     });
     eligibleNow.sort((a, b) => {

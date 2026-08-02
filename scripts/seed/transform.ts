@@ -424,6 +424,7 @@ async function main() {
       jlpt: null,
       isCommon,
       dependsOn,
+      strictDependsOn: dependsOn,
     });
   }
 
