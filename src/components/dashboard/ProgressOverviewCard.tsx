@@ -1,6 +1,9 @@
+"use client";
+
 import { Panel, InsetPanel } from "@/components/panel/Panel";
 import { ProgressRing } from "@/components/stats/ProgressRing";
 import type { DashboardProgressRow } from "@/server/queries/dashboard";
+import { useCountUp } from "@/hooks/useCountUp";
 
 export interface ProgressOverviewCardProps {
   rows: DashboardProgressRow[];
@@ -15,6 +18,7 @@ export function ProgressOverviewCard({ rows, className }: ProgressOverviewCardPr
   const totalLearned = rows.reduce((acc, r) => acc + r.learned, 0);
   const totalOverall = rows.reduce((acc, r) => acc + r.total, 0);
   const overallPct = totalOverall > 0 ? Math.round((totalLearned / totalOverall) * 100) : 0;
+  const displayedPct = useCountUp(overallPct);
 
   const segments = rows.map((row) => ({
     value: row.learned,
@@ -30,8 +34,9 @@ export function ProgressOverviewCard({ rows, className }: ProgressOverviewCardPr
           total={totalOverall}
           size={128}
           strokeWidth={14}
-          centerLabel={`${overallPct}%`}
+          centerLabel={`${displayedPct}%`}
           centerSubLabel="総合進捗"
+          sweepDelayMs={0}
         />
 
         <InsetPanel className="flex w-full flex-col gap-2">

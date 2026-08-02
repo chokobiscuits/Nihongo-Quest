@@ -271,6 +271,138 @@ rt:empty {
   100% { opacity: 0; }
 }
 
+/* Progress bar / ring "sweep on mount" fill. Consumers render at 0 width/
+   dasharray on first paint, then flip to the target value once
+   `useMountedFraction` returns non-zero — this transition is what makes
+   that flip read as a sweep instead of a snap. */
+.progress-sweep {
+  transition: width 900ms var(--ease-out);
+}
+
+.progress-sweep-ring {
+  transition: stroke-dasharray 900ms var(--ease-out), stroke-dashoffset 900ms var(--ease-out);
+}
+
+/* Continue Learning CTA glow: brand-colored breathing bloom behind the card
+   when lessons are available. Opacity-only per spec so it never shifts
+   layout. */
+.cta-glow-layer {
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--radius-card);
+  pointer-events: none;
+  background: radial-gradient(120% 140% at 50% 0%, color-mix(in oklch, var(--color-brand) 55%, transparent), transparent 70%);
+  opacity: 0.25;
+  animation: cta-glow-breathe 3s ease-in-out infinite;
+}
+
+@keyframes cta-glow-breathe {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.5; }
+}
+
+/* Infinite Mastery card: staggered star twinkle. */
+.mastery-star {
+  animation: mastery-star-twinkle 4s ease-in-out infinite;
+}
+
+@keyframes mastery-star-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* Sidebar active-item accent bar: slides between nav items on navigation. */
+.sidebar-active-bar {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  border-radius: var(--radius-chip);
+  background: var(--accent, var(--color-brand));
+  transition: transform 200ms var(--ease-out), top 200ms var(--ease-out), background-color 200ms var(--ease-out);
+}
+
+/* Celebration modal choreography */
+.celebration-overlay {
+  animation: celebration-overlay-in 180ms var(--ease-out) forwards;
+}
+
+@keyframes celebration-overlay-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.celebration-glow {
+  animation: celebration-glow-in 520ms var(--ease-out) 60ms forwards;
+  opacity: 0;
+}
+
+@keyframes celebration-glow-in {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 0.85; }
+}
+
+.celebration-hero {
+  animation: celebration-hero-in 520ms var(--ease-spring) 120ms forwards;
+  opacity: 0;
+}
+
+@keyframes celebration-hero-in {
+  0% { transform: scale(0.72); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.celebration-hero-fade-out {
+  animation: celebration-hero-out 200ms var(--ease-in-out) forwards;
+}
+
+@keyframes celebration-hero-out {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.92); }
+}
+
+.celebration-body-line {
+  animation: celebration-body-line-in 240ms var(--ease-out) forwards;
+  opacity: 0;
+}
+
+@keyframes celebration-body-line-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.celebration-dismiss {
+  animation: celebration-dismiss-in 200ms var(--ease-out) forwards;
+  opacity: 0;
+}
+
+@keyframes celebration-dismiss-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.celebration-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+  width: var(--particle-size, 5px);
+  height: var(--particle-size, 5px);
+  background: var(--particle-color, var(--color-brand));
+  animation: celebration-particle-burst var(--particle-duration, 1200ms) ease-out forwards;
+  animation-delay: var(--particle-delay, 0ms);
+}
+
+@keyframes celebration-particle-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--particle-x, 120px), var(--particle-y, 120px)) scale(0.4);
+  }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .rank-challenger {
@@ -299,5 +431,33 @@ rt:empty {
   .entrance {
     transform: none !important;
     transition: opacity 120ms ease-out !important;
+  }
+
+  .cta-glow-layer {
+    animation: none;
+    opacity: 0.35;
+  }
+
+  .mastery-star {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .progress-sweep,
+  .progress-sweep-ring {
+    transition: none;
+  }
+
+  .celebration-glow,
+  .celebration-hero,
+  .celebration-hero-fade-out,
+  .celebration-body-line,
+  .celebration-dismiss {
+    animation-duration: 120ms !important;
+    transform: none !important;
+  }
+
+  .celebration-particle {
+    display: none;
   }
 }

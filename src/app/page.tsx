@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getDashboard } from "@/server/queries/dashboard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DayStreakCard } from "@/components/dashboard/DayStreakCard";
@@ -7,6 +8,8 @@ import { JlptProgressCard } from "@/components/dashboard/JlptProgressCard";
 import { ReviewsCard } from "@/components/dashboard/ReviewsCard";
 import { AchievementsCard } from "@/components/dashboard/AchievementsCard";
 import { RankLevelCard } from "@/components/rank/RankLevelCard";
+import { InfiniteMasteryCard } from "@/components/dashboard/InfiniteMasteryCard";
+import { CelebrationDevTrigger } from "@/components/celebration/CelebrationDevTrigger";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -37,6 +40,8 @@ export default async function HomePage() {
 
         <ContinueLearningSection cards={dashboard.continueCards} />
 
+        <InfiniteMasteryCard />
+
         <ReviewsCard reviewsDue={dashboard.reviewsDue} byType={dashboard.reviewsByType} />
 
         <AchievementsCard achievements={dashboard.achievements} />
@@ -49,6 +54,13 @@ export default async function HomePage() {
         <ProgressOverviewCard rows={dashboard.progress} />
         <JlptProgressCard currentLevel="N5" progressFraction={0} />
       </div>
+
+      {/* DEV-ONLY SCAFFOLDING — remove before ship. Lets reviewers preview
+          celebration modals via ?celebrate=levelup|promotion|newrank since a
+          real level-1 account can't reach any of these events organically. */}
+      <Suspense fallback={null}>
+        <CelebrationDevTrigger />
+      </Suspense>
     </div>
   );
 }

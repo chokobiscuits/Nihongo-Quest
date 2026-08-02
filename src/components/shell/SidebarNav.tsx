@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { RankBadge } from "@/components/rank/RankBadge";
 import { SUBJECT_THEME } from "@/components/subject/theme";
@@ -96,6 +97,38 @@ export interface SidebarNavProps {
 /// there is no layout flash on resize.
 export function SidebarNav({ user, className }: SidebarNavProps) {
   const pathname = usePathname();
+  const listRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Map<string, HTMLAnchorElement>>(new Map());
+  const [barStyle, setBarStyle] = useState<{ top: number; height: number; visible: boolean }>({
+    top: 0,
+    height: 0,
+    visible: false,
+  });
+
+  // Slide the accent bar to whichever nav item is active. Recomputed on
+  // pathname change (navigation) and on mount; positions are measured
+  // against the scrollable list container so `top` stays correct even if
+  // the list scrolls.
+  useEffect(() => {
+    const list = listRef.current;
+    const activeEl = itemRefs.current.get(pathname);
+    if (!list || !activeEl) {
+      setBarStyle((prev) => ({ ...prev, visible: false }));
+      return;
+    }
+    const listRect = list.getBoundingClientRect();
+    const itemRect = activeEl.getBoundingClientRect();
+    setBarStyle({
+      top: itemRect.top - listRect.top + list.scrollTop,
+      height: itemRect.height,
+      visible: true,
+    });
+  }, [pathname]);
+
+  const activeAccent = (() => {
+    const subjectType = NAV_THEME_BY_HREF[pathname];
+    return subjectType ? SUBJECT_THEME[subjectType].base : "var(--color-brand)";
+  })();
 
   return (
     <nav
@@ -105,7 +138,14 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
       )}
       aria-label="Primary"
     >
-      <div className="flex flex-col gap-4 overflow-y-auto py-4">
+      <div ref={listRef} className="relative flex flex-col gap-4 overflow-y-auto py-4">
+        {barStyle.visible && (
+          <div
+            aria-hidden
+            className="sidebar-active-bar"
+            style={{ top: barStyle.top, height: barStyle.height, "--accent": activeAccent } as React.CSSProperties}
+          />
+        )}
         {NAV_GROUPS.map((group, index) => (
           <div key={index} className="flex flex-col gap-1 px-2">
             {group.caption && (
@@ -121,6 +161,10 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(item.href, el);
+                    else itemRefs.current.delete(item.href);
+                  }}
                   title={`${item.labelEn} / ${item.labelJa}`}
                   className={cn(
                     "group flex items-center gap-3 rounded-[var(--radius-tile)] px-2.5 py-2 text-sub transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",

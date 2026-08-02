@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
-import { Panel, InsetPanel } from "@/components/panel/Panel";
+import { Panel, InsetPanel, PanelGlow } from "@/components/panel/Panel";
 import { ProgressRing } from "@/components/stats/ProgressRing";
 import type { DashboardReviewTypeCount } from "@/server/queries/dashboard";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { SubjectType } from "@/generated/prisma/enums";
+import { useCountUp } from "@/hooks/useCountUp";
 
 export interface ReviewsCardProps {
   reviewsDue: number;
@@ -16,8 +19,9 @@ export interface ReviewsCardProps {
 /// the button becomes "Start Lessons" routing to /lessons instead.
 export function ReviewsCard({ reviewsDue, byType, className }: ReviewsCardProps) {
   const hasReviews = reviewsDue > 0;
+  const displayedDue = useCountUp(reviewsDue);
 
-  return (
+  const panel = (
     <Panel accent="var(--color-success)" title="Reviews" titleJa="復習" className={className}>
       <div className="flex flex-col items-center gap-4">
         {hasReviews ? (
@@ -29,8 +33,9 @@ export function ReviewsCard({ reviewsDue, byType, className }: ReviewsCardProps)
             }))}
             size={120}
             strokeWidth={12}
-            centerLabel={String(reviewsDue)}
+            centerLabel={String(displayedDue)}
             centerSubLabel="items due"
+            sweepDelayMs={80}
           />
         ) : (
           <div className="flex flex-col items-center gap-2 py-4">
@@ -80,6 +85,9 @@ export function ReviewsCard({ reviewsDue, byType, className }: ReviewsCardProps)
       </div>
     </Panel>
   );
+
+  // §-driven glow rule: the Reviews card glows when items are actually due.
+  return hasReviews ? <PanelGlow accent="var(--color-success)">{panel}</PanelGlow> : panel;
 }
 
 function accentKeyFor(type: SubjectType): string {

@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { DashboardContinueCard } from "@/server/queries/dashboard";
 import { cn } from "@/lib/utils";
+import { useCountUp } from "@/hooks/useCountUp";
+import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface ContinueLearningSectionProps {
   cards: DashboardContinueCard[];
@@ -43,7 +47,15 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
 
       <div className="flex gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-visible xl:grid-cols-5">
         {cards.map((card, index) => (
-          <ContinueLearningCard key={card.type} card={card} accent={CARD_ACCENTS[index % CARD_ACCENTS.length]} />
+          <ContinueLearningCard
+            key={card.type}
+            card={card}
+            accent={CARD_ACCENTS[index % CARD_ACCENTS.length]}
+            // The first seeded card is the primary CTA — it's the one that
+            // gets the breathing glow, since it's the most likely next
+            // action for an account with lessons available.
+            isPrimaryCta={index === cards.findIndex((c) => c.seeded)}
+          />
         ))}
       </div>
     </section>
@@ -53,10 +65,18 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
 function ContinueLearningCard({
   card,
   accent,
+  isPrimaryCta,
 }: {
   card: DashboardContinueCard;
   accent: string;
+  isPrimaryCta: boolean;
 }) {
+  // Hooks run unconditionally regardless of `card.seeded` — the unseeded
+  // early-return branch below just never reads their output.
+  const percent = card.percent ?? 0;
+  const displayedPercent = useCountUp(percent);
+  const sweptFraction = useMountedFraction(percent / 100, 80);
+
   if (!card.seeded) {
     return (
       <div
@@ -76,8 +96,6 @@ function ContinueLearningCard({
     );
   }
 
-  const percent = card.percent ?? 0;
-
   return (
     <Link
       href={`/subjects/${card.type}`}
@@ -86,7 +104,12 @@ function ContinueLearningCard({
         background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
       }}
     >
-      <div className="flex items-start justify-between">
+      {/* Ambient CTA glow: this is the most reachable "next action" card for
+          a level-1 account with unlearned items, so it gets the breathing
+          brand glow that the rank-gated glow rule otherwise never triggers. */}
+      {isPrimaryCta && <div className="cta-glow-layer" aria-hidden />}
+
+      <div className="relative flex items-start justify-between">
         <div className="flex flex-col leading-tight">
           <span className="text-caption font-semibold text-text" lang="ja">
             {card.labelJa}
@@ -97,27 +120,27 @@ function ContinueLearningCard({
         </span>
       </div>
 
-      <div className="flex flex-1 items-center justify-center">
+      <div className="relative flex flex-1 items-center justify-center">
         <span className="text-glyph-sm" aria-hidden style={{ color: accent }}>
           {card.glyph}
         </span>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="relative flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-micro text-text-faint" lang="en">
             {card.lessonNumber ? `Lesson ${card.lessonNumber}` : "はじめる"}
           </span>
           {card.percent !== null && (
-            <span className="text-caption font-semibold text-text" lang="en">
-              {percent}%
+            <span className="text-caption font-semibold tabular-nums text-text" lang="en">
+              {displayedPercent}%
             </span>
           )}
         </div>
         <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
           <div
-            className={cn("h-full rounded-full transition-[width] duration-[var(--duration-base)]")}
-            style={{ width: `${percent}%`, background: accent }}
+            className={cn("progress-sweep h-full rounded-full")}
+            style={{ width: `${Math.max(sweptFraction * 100, sweptFraction > 0 ? 0 : 1.5)}%`, background: accent }}
           />
         </div>
       </div>

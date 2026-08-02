@@ -36,8 +36,8 @@ export function Panel({
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface",
         "shadow-[0_1px_0_0_oklch(1_0_0/0.045)_inset,0_8px_24px_-12px_oklch(0_0_0/0.7)]",
-        "transition-[border-color,box-shadow] duration-[var(--duration-fast)]",
-        "hover:border-line-strong hover:shadow-[0_1px_0_0_oklch(1_0_0/0.045)_inset,0_10px_28px_-12px_oklch(0_0_0/0.7)]",
+        "transition-[border-color,box-shadow,transform] duration-[var(--duration-fast)]",
+        "hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_1px_0_0_oklch(1_0_0/0.045)_inset,0_14px_32px_-12px_oklch(0_0_0/0.7)]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
         className,
       )}

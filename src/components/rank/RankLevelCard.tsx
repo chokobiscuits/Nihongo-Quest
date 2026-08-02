@@ -1,8 +1,12 @@
+"use client";
+
 import { Panel, InsetPanel } from "@/components/panel/Panel";
 import { RankCrest } from "@/components/rank/RankCrest";
 import { RANK_BANDS, rankForLevel, type Rank, type RankTier } from "@/services/xp/rank";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
 import { cn } from "@/lib/utils";
+import { useCountUp } from "@/hooks/useCountUp";
+import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface RankLevelCardProps {
   accountLevel: number;
@@ -32,7 +36,7 @@ const DIVISION_NUMERAL: Record<number, string> = { 1: "I", 2: "II", 3: "III", 4:
 // to a 0-25 LP bar.
 const LP_PER_LEVEL = 25;
 
-function lpProgress(accountLevel: number, totalXp: number) {
+export function lpProgress(accountLevel: number, totalXp: number) {
   const xpAtLevelStart = totalXpToReach(accountLevel);
   const xpForThisLevel = xpForLevel(accountLevel);
   const xpIntoLevel = Math.max(0, totalXp - xpAtLevelStart);
@@ -64,6 +68,8 @@ export function RankLevelCard({ accountLevel, totalXp, className }: RankLevelCar
   const accentToken = `var(--color-rank-${rank.tier.toLowerCase()})`;
   const lp = lpProgress(accountLevel, totalXp);
   const lpFraction = lp / LP_PER_LEVEL;
+  const sweptLpFraction = useMountedFraction(lpFraction, 160);
+  const displayedLp = useCountUp(lp);
   const nextLabel = nextRankLabel(rank);
   const tierIndex = TIER_ORDER.indexOf(rank.tier);
 
@@ -84,15 +90,15 @@ export function RankLevelCard({ accountLevel, totalXp, className }: RankLevelCar
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-h2 font-semibold text-text" lang="en">
             {tierLine}
-            {rank.division !== null && <span className="text-h3 text-text-muted"> · {lp} LP</span>}
+            {rank.division !== null && <span className="text-h3 tabular-nums text-text-muted"> · {displayedLp} LP</span>}
           </span>
         </div>
 
         <div className="w-full max-w-[220px]">
           <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-3">
             <div
-              className="h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)] transition-[width] duration-[var(--duration-base)]"
-              style={{ width: `${Math.max(lpFraction * 100, 0)}%` }}
+              className="progress-sweep h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)]"
+              style={{ width: `${Math.max(sweptLpFraction * 100, sweptLpFraction > 0 ? 0 : 1.5)}%` }}
             />
             {lp === 0 && (
               <div

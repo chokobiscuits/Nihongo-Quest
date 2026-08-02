@@ -1,5 +1,8 @@
+"use client";
+
 import { Panel } from "@/components/panel/Panel";
 import { JlptStepper, type JlptLevel } from "@/components/stats/JlptStepper";
+import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface JlptProgressCardProps {
   currentLevel: JlptLevel;
@@ -20,6 +23,7 @@ export function JlptProgressCard({
 }: JlptProgressCardProps) {
   const currentIndex = LEVELS.indexOf(currentLevel);
   const nextLevel = LEVELS[currentIndex + 1];
+  const sweptFraction = useMountedFraction(progressFraction, 240);
 
   return (
     <Panel accent="var(--color-vocab)" title="JLPT Progress" titleJa="JLPT進捗" className={className}>
@@ -32,8 +36,8 @@ export function JlptProgressCard({
           </span>
           <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
             <div
-              className="h-full rounded-full bg-vocab"
-              style={{ width: `${Math.max(progressFraction * 100, 0)}%` }}
+              className="progress-sweep h-full rounded-full bg-vocab"
+              style={{ width: `${Math.max(sweptFraction * 100, sweptFraction > 0 ? 0 : 1.5)}%` }}
             />
           </div>
         </div>

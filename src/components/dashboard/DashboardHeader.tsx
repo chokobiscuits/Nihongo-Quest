@@ -1,8 +1,12 @@
+"use client";
+
 import { InsetPanel } from "@/components/panel/Panel";
 import { RankBadge } from "@/components/rank/RankBadge";
 import type { Rank } from "@/services/xp/rank";
 import type { MasteryTier } from "@/services/xp/mastery";
 import { cn } from "@/lib/utils";
+import { useCountUp } from "@/hooks/useCountUp";
+import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface DashboardHeaderProps {
   displayName: string;
@@ -31,6 +35,9 @@ export function DashboardHeader({
   const isMasteryUnstarted = masteryTier.level === 0;
   const greeting = isNewAccount ? `はじめまして、${displayName}!` : `おかえりなさい、${displayName}!`;
   const levelFraction = xpForCurrentLevel > 0 ? Math.min(1, xpIntoCurrentLevel / xpForCurrentLevel) : 0;
+  const sweptLevelFraction = useMountedFraction(levelFraction, 0);
+  const displayedStreak = useCountUp(currentStreak);
+  const displayedXpIntoLevel = useCountUp(xpIntoCurrentLevel);
 
   return (
     <div
@@ -61,7 +68,7 @@ export function DashboardHeader({
             🔥
           </span>
           <div className="flex flex-col leading-tight">
-            <span className="text-h3 font-semibold text-text">{currentStreak}</span>
+            <span className="text-h3 font-semibold tabular-nums text-text">{displayedStreak}</span>
             <span className="text-micro text-text-faint" lang="en">
               Day Streak
             </span>
@@ -102,12 +109,12 @@ export function DashboardHeader({
           </div>
           <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
             <div
-              className="h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)]"
-              style={{ width: `${Math.max(levelFraction * 100, isNewAccount ? 0 : 2)}%` }}
+              className="progress-sweep h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)]"
+              style={{ width: `${Math.max(sweptLevelFraction * 100, sweptLevelFraction > 0 ? 0 : 1.5)}%` }}
             />
           </div>
-          <span className="text-micro text-text-faint" lang="en">
-            {xpIntoCurrentLevel.toLocaleString()} / {xpForCurrentLevel.toLocaleString()} XP
+          <span className="text-micro tabular-nums text-text-faint" lang="en">
+            {displayedXpIntoLevel.toLocaleString()} / {xpForCurrentLevel.toLocaleString()} XP
           </span>
         </InsetPanel>
       </div>

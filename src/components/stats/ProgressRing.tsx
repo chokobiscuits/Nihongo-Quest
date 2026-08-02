@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface ProgressRingSegment {
   value: number;
@@ -16,10 +19,14 @@ export interface ProgressRingProps {
   centerLabel?: string;
   centerSubLabel?: string;
   className?: string;
+  /// Stagger delay (ms) before the ring sweeps from empty to its value —
+  /// lets a page stagger multiple rings/bars 80ms apart.
+  sweepDelayMs?: number;
 }
 
 /// Multi-segment donut, e.g. SRS stage breakdown. Segments are drawn as
-/// stacked stroke-dasharray arcs around a shared circle.
+/// stacked stroke-dasharray arcs around a shared circle. Sweeps from an
+/// empty track to the real value on mount via `useMountedFraction`.
 export function ProgressRing({
   segments,
   total,
@@ -28,11 +35,13 @@ export function ProgressRing({
   centerLabel,
   centerSubLabel,
   className,
+  sweepDelayMs = 0,
 }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const sum = segments.reduce((acc, s) => acc + s.value, 0);
   const denominator = total ?? sum;
+  const sweep = useMountedFraction(1, sweepDelayMs);
 
   let offsetAccum = 0;
 
@@ -50,7 +59,7 @@ export function ProgressRing({
         {denominator > 0 &&
           segments.map((segment, index) => {
             if (segment.value <= 0) return null;
-            const fraction = segment.value / denominator;
+            const fraction = (segment.value / denominator) * sweep;
             const dash = fraction * circumference;
             const gap = circumference - dash;
             const dashoffset = -offsetAccum * circumference;
@@ -67,13 +76,14 @@ export function ProgressRing({
                 strokeDasharray={`${dash} ${gap}`}
                 strokeDashoffset={dashoffset}
                 strokeLinecap="butt"
+                className="progress-sweep-ring"
               />
             );
           })}
       </svg>
       {(centerLabel || centerSubLabel) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          {centerLabel && <span className="text-h2 font-semibold text-text">{centerLabel}</span>}
+          {centerLabel && <span className="text-h2 font-semibold tabular-nums text-text">{centerLabel}</span>}
           {centerSubLabel && <span className="text-caption text-text-dim">{centerSubLabel}</span>}
         </div>
       )}

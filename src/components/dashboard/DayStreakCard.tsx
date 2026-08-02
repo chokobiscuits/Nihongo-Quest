@@ -1,5 +1,8 @@
+"use client";
+
 import { Panel, InsetPanel } from "@/components/panel/Panel";
 import { cn } from "@/lib/utils";
+import { useCountUp } from "@/hooks/useCountUp";
 
 export interface DayStreakCardProps {
   currentStreak: number;
@@ -14,6 +17,7 @@ const WEEKDAY_FORMAT = new Intl.DateTimeFormat("ja-JP", { day: "numeric" });
 /// flames for the upcoming window, with today's slot dashed.
 export function DayStreakCard({ currentStreak, days, className }: DayStreakCardProps) {
   const hasStreak = currentStreak > 0;
+  const displayedStreak = useCountUp(currentStreak);
 
   return (
     <Panel
@@ -25,7 +29,7 @@ export function DayStreakCard({ currentStreak, days, className }: DayStreakCardP
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col items-center gap-1 py-2">
-          <span className="text-glyph-sm font-semibold text-text">{currentStreak}</span>
+          <span className="text-glyph-sm font-semibold tabular-nums text-text">{displayedStreak}</span>
           <span lang="ja" className="text-sub text-text-dim">
             {hasStreak ? `${currentStreak} 日連続！` : "今日から始めよう"}
           </span>

@@ -7,6 +7,8 @@ import { LessonQuiz } from "./LessonQuiz";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { commitLessonSession, type CommitLessonSessionResult, type LessonQuizAnswerRecord } from "@/server/actions/lessons";
 import type { LessonSubject } from "@/server/queries/lessons";
+import { CelebrationModal } from "@/components/celebration/CelebrationModal";
+import { useCelebrationQueue, celebrationEventsFromCommit } from "@/components/celebration/useCelebrationQueue";
 
 export interface LessonRunnerProps {
   batch: LessonSubject[];
@@ -25,6 +27,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
   const [result, setResult] = useState<CommitLessonSessionResult | null>(null);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const celebration = useCelebrationQueue();
 
   const allViewed = viewed.size >= batch.length;
 
@@ -44,6 +47,9 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
       });
       setResult(res);
       setPhase("done");
+      // Fire celebrations only now — after the session has actually
+      // committed, never mid-session.
+      celebration.enqueue(celebrationEventsFromCommit(res));
     } catch {
       setError("Something went wrong saving this lesson. Your progress in this session is safe to retry.");
     } finally {
@@ -66,6 +72,9 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
   if (phase === "done" && result) {
     return (
       <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+        {celebration.active && (
+          <CelebrationModal events={celebration.events} onDismissAll={celebration.dismiss} />
+        )}
         <h2 className="text-h2 font-semibold text-text">Lesson complete</h2>
         <p className="text-body text-text-muted">
           Learned {batch.length} item{batch.length === 1 ? "" : "s"}, earned {result.xpAwarded} XP.
