@@ -52,6 +52,16 @@ export interface ComponentRecord {
   position: string | null;
   isRadical: boolean;
   readingUsed: string | null;
+  /// True when this edge should gate its parent's runtime unlock — see
+  /// src/services/srs/unlock.ts's componentsSatisfied, which only considers
+  /// gating components. Every RADICAL/KANJI/VOCAB component edge is gating.
+  /// SENTENCE -> VOCAB edges are gating only for the sentence's CONTENT-word
+  /// vocab (nouns, verbs, adjectives, adverbs); function-word vocab
+  /// (particles, copula, auxiliaries, conjunctions, pronouns, counters,
+  /// interjections — see scripts/seed/lib/pos-classifier.ts) still gets an
+  /// edge, for UI highlighting/linking, but must not block unlock. Loaded
+  /// into SubjectComponent.isGating by load.ts.
+  isGating: boolean;
 }
 
 export interface DataSourceRecord {

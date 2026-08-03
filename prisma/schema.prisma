@@ -116,6 +116,14 @@ model SubjectComponent {
   /// composition, when relevant (e.g. the on'yomi that gives a phonetic
   /// component its sound in the parent kanji).
   readingUsed String?
+  /// True when this edge should gate its parent's runtime unlock — see
+  /// src/services/srs/unlock.ts's componentsSatisfied, which only considers
+  /// gating components. Every RADICAL/KANJI/VOCAB component edge is gating.
+  /// SENTENCE -> VOCAB edges are gating only for the sentence's content-word
+  /// vocab (nouns, verbs, adjectives, adverbs); function-word vocab
+  /// (particles, copula, auxiliaries, ...) still gets an edge for
+  /// UI highlighting/linking, but must not block unlock.
+  isGating Boolean @default(true)
 
   parent Subject @relation("SubjectAsParent", fields: [parentId], references: [id], onDelete: Cascade)
   child  Subject @relation("SubjectAsChild", fields: [childId], references: [id], onDelete: Cascade)

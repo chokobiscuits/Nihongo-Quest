@@ -25,6 +25,44 @@ describe("componentsSatisfied", () => {
   it("treats a missing UserSubject (null stage) as not satisfied", () => {
     expect(componentsSatisfied([{ childId: "a", srsStage: null }])).toBe(false);
   });
+
+  it("ignores non-gating components entirely, regardless of their stage", () => {
+    expect(
+      componentsSatisfied([
+        { childId: "a", srsStage: 5 },
+        { childId: "b", srsStage: 0, isGating: false },
+      ]),
+    ).toBe(true);
+
+    expect(
+      componentsSatisfied([
+        { childId: "a", srsStage: 5 },
+        { childId: "b", srsStage: null, isGating: false },
+      ]),
+    ).toBe(true);
+  });
+
+  it("still requires gating components to be Guru'd even when non-gating ones are present", () => {
+    expect(
+      componentsSatisfied([
+        { childId: "a", srsStage: 3 },
+        { childId: "b", srsStage: 9, isGating: false },
+      ]),
+    ).toBe(false);
+  });
+
+  it("unlocks freely when every component is non-gating", () => {
+    expect(
+      componentsSatisfied([
+        { childId: "a", srsStage: null, isGating: false },
+        { childId: "b", srsStage: 0, isGating: false },
+      ]),
+    ).toBe(true);
+  });
+
+  it("defaults an omitted isGating to gating (true), matching @default(true)", () => {
+    expect(componentsSatisfied([{ childId: "a", srsStage: 4 }])).toBe(false);
+  });
 });
 
 describe("isSubjectUnlocked", () => {

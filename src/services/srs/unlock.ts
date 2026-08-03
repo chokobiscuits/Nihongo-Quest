@@ -3,6 +3,11 @@ import { GURU_STAGE } from "./stages";
 export interface ComponentProgress {
   childId: string;
   srsStage: number | null; // null = no UserSubject row yet, i.e. not started
+  /// Whether this component edge gates its parent's unlock. Non-gating
+  /// edges (e.g. a sentence's function-word vocab) are carried for
+  /// UI purposes only and never block unlock. Defaults to true for callers
+  /// that don't distinguish (radical/kanji/vocab edges are always gating).
+  isGating?: boolean;
 }
 
 export interface SubjectWithComponents {
@@ -12,12 +17,14 @@ export interface SubjectWithComponents {
   components: ComponentProgress[];
 }
 
-/// A Subject unlocks once every one of its components has been Guru'd
-/// (srsStage >= 5). An item with no components (most radicals) is
-/// vacuously unlocked by this rule alone — radicals are additionally gated
-/// by user level below.
+/// A Subject unlocks once every one of its *gating* components has been
+/// Guru'd (srsStage >= 5). Non-gating components (isGating === false, e.g. a
+/// sentence's function-word vocab) are ignored entirely — they never block
+/// unlock. An item with no gating components (most radicals, or a subject
+/// whose only components are non-gating) is vacuously unlocked by this rule
+/// alone — radicals are additionally gated by user level below.
 export function componentsSatisfied(components: ComponentProgress[]): boolean {
-  return components.every((c) => (c.srsStage ?? 0) >= GURU_STAGE);
+  return components.filter((c) => c.isGating ?? true).every((c) => (c.srsStage ?? 0) >= GURU_STAGE);
 }
 
 /// Whether `subject` should be unlocked for a user at `userLevel` given the

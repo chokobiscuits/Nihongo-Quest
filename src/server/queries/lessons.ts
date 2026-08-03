@@ -97,6 +97,7 @@ async function fetchUnstartedLadderSubjects(userId: string, userLevel: number) {
       parentLinks: {
         select: {
           readingUsed: true,
+          isGating: true,
           child: {
             select: { id: true, slug: true, characters: true, meanings: true, type: true },
           },
@@ -185,6 +186,7 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
       components: c.parentLinks.map((link) => ({
         childId: link.child.id,
         srsStage: stageByChild.get(link.child.id) ?? null,
+        isGating: link.isGating,
       })),
     };
     return isSubjectUnlocked(subject, profile.accountLevel);

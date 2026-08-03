@@ -227,7 +227,7 @@ async function findNewlyUnlockedSubjects(
       id: true,
       type: true,
       level: true,
-      childLinks: { select: { child: { select: { id: true } } } },
+      childLinks: { select: { isGating: true, child: { select: { id: true } } } },
     },
     take: 200,
   });
@@ -250,7 +250,11 @@ async function findNewlyUnlockedSubjects(
           id: c.id,
           type: c.type,
           level: c.level!,
-          components: c.childLinks.map((l) => ({ childId: l.child.id, srsStage: stageMap.get(l.child.id) ?? null })),
+          components: c.childLinks.map((l) => ({
+            childId: l.child.id,
+            srsStage: stageMap.get(l.child.id) ?? null,
+            isGating: l.isGating,
+          })),
         },
         newLevel,
       ),

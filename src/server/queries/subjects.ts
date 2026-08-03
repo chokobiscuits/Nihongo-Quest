@@ -157,6 +157,7 @@ export async function getSubjectsForLevel(
       jlpt: true,
       parentLinks: {
         select: {
+          isGating: true,
           child: { select: { id: true, slug: true, characters: true, meanings: true } },
         },
       },
@@ -201,13 +202,14 @@ export async function getSubjectsForLevel(
         components: s.parentLinks.map((l) => ({
           childId: l.child.id,
           srsStage: componentStages.get(l.child.id) ?? null,
+          isGating: l.isGating,
         })),
       };
       const unlocked = isSubjectUnlocked(subjectForUnlock, profile.accountLevel);
       state = unlocked ? "not-started" : "locked";
       if (!unlocked) {
         lockedOn = s.parentLinks
-          .filter((l) => (componentStages.get(l.child.id) ?? 0) < 5)
+          .filter((l) => l.isGating && (componentStages.get(l.child.id) ?? 0) < 5)
           .map((l) => ({
             slug: l.child.slug,
             characters: l.child.characters,

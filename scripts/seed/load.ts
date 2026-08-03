@@ -114,7 +114,14 @@ async function upsertComponents(components: ComponentRecord[], tempIdToRealId: M
         skipped += 1;
         return null;
       }
-      return { parentId, childId, position: c.position, isRadical: c.isRadical, readingUsed: c.readingUsed };
+      return {
+        parentId,
+        childId,
+        position: c.position,
+        isRadical: c.isRadical,
+        readingUsed: c.readingUsed,
+        isGating: c.isGating,
+      };
     })
     .filter((c): c is NonNullable<typeof c> => c !== null);
 
@@ -124,7 +131,12 @@ async function upsertComponents(components: ComponentRecord[], tempIdToRealId: M
         prisma.subjectComponent.upsert({
           where: { parentId_childId: { parentId: c.parentId, childId: c.childId } },
           create: c,
-          update: { position: c.position, isRadical: c.isRadical, readingUsed: c.readingUsed },
+          update: {
+            position: c.position,
+            isRadical: c.isRadical,
+            readingUsed: c.readingUsed,
+            isGating: c.isGating,
+          },
         }),
       ),
     );
