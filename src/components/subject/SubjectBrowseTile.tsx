@@ -5,6 +5,24 @@ import { SrsStageChip } from "@/components/srs/SrsStageChip";
 import type { SubjectListItem } from "@/server/queries/subjects";
 import { cn } from "@/lib/utils";
 
+/// Sentences are long strings — the shared `subject-glyph` size (6rem) is
+/// sized for a single radical/kanji/vocab glyph and would badly overflow a
+/// whole sentence, so tiles clamp sentence text to a small caption instead.
+function TileGlyph({ type, characters, color }: { type: SubjectListItem["type"]; characters: string; color: string }) {
+  if (type === "SENTENCE") {
+    return (
+      <span lang="ja" className="line-clamp-2 text-center text-caption" style={{ color }}>
+        {characters}
+      </span>
+    );
+  }
+  return (
+    <span lang="ja" className="subject-glyph text-h2" style={{ color }}>
+      {characters}
+    </span>
+  );
+}
+
 export interface SubjectBrowseTileProps {
   item: SubjectListItem;
   className?: string;
@@ -37,9 +55,7 @@ export function SubjectBrowseTile({ item, className }: SubjectBrowseTileProps) {
         <span aria-hidden className="absolute right-1.5 top-1.5 text-micro text-text-faint">
           🔒
         </span>
-        <span lang="ja" className="subject-glyph text-h2 text-text-faint">
-          {item.characters ?? item.slug}
-        </span>
+        <TileGlyph type={item.type} characters={item.characters ?? item.slug} color="var(--color-text-faint)" />
         <span className="line-clamp-1 text-micro text-text-faint">{item.meaning ?? item.slug}</span>
         <span
           role="tooltip"
@@ -65,9 +81,7 @@ export function SubjectBrowseTile({ item, className }: SubjectBrowseTileProps) {
         <span aria-hidden className="text-micro" style={{ color: "var(--color-rank-gold)" }}>
           ✓ Burned
         </span>
-        <span lang="ja" className="subject-glyph text-h2" style={{ color: theme.text }}>
-          {item.characters ?? item.slug}
-        </span>
+        <TileGlyph type={item.type} characters={item.characters ?? item.slug} color={theme.text} />
         <span className="line-clamp-1 text-micro text-text-dim">{item.meaning ?? item.slug}</span>
       </Link>
     );
@@ -83,9 +97,7 @@ export function SubjectBrowseTile({ item, className }: SubjectBrowseTileProps) {
           className,
         )}
       >
-        <span lang="ja" className="subject-glyph text-h2" style={{ color: theme.text }}>
-          {item.characters ?? item.slug}
-        </span>
+        <TileGlyph type={item.type} characters={item.characters ?? item.slug} color={theme.text} />
         <span className="line-clamp-1 text-micro text-text-dim">{item.meaning ?? item.slug}</span>
         {item.srsStage !== null && <SrsStageChip stage={item.srsStage} className="h-5 px-1.5 text-[10px]" />}
       </Link>
@@ -108,9 +120,7 @@ export function SubjectBrowseTile({ item, className }: SubjectBrowseTileProps) {
         style={{ background: theme.base }}
         title="Ready to learn"
       />
-      <span lang="ja" className="subject-glyph text-h2" style={{ color: theme.text }}>
-        {item.characters ?? item.slug}
-      </span>
+      <TileGlyph type={item.type} characters={item.characters ?? item.slug} color={theme.text} />
       <span className="line-clamp-1 text-micro text-text-dim">{item.meaning ?? item.slug}</span>
     </Link>
   );

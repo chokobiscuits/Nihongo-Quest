@@ -3,12 +3,14 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
+import { sentenceWordBreakdown, tatoebaSentenceIdOf } from "@/server/queries/sentenceWordBreakdown";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
 // Ladder types have a curriculum level and are gated by unlock rules.
-// Grammar/Sentence/Reading have no seeded rows yet (see dashboard.ts).
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB];
+// Grammar/Reading have no seeded rows yet (see dashboard.ts); Sentence is
+// seeded and laddered as of seed phase 1-3.
+const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
 
 export type SubjectListState = "burned" | "learning" | "not-started" | "locked";
 
@@ -41,15 +43,18 @@ export interface SubjectTypeSummary {
 }
 
 /// Overview counts for all six SubjectTypes, for the `/subjects` index.
-/// Grammar/Sentence/Reading have no Subject rows, so they report 0/0 with
+/// Grammar/Reading have no Subject rows, so they report 0/0 with
 /// `seeded: false` — the page renders those as "Coming soon" placeholders.
 export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Promise<SubjectTypeSummary[]> {
-  const seededTypes: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB];
+  const seededTypes: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
 
   const [totals, passedCounts] = await Promise.all([
+    // level: not null — the laddered curriculum denominator, not the whole
+    // seeded set (sentences in particular have thousands of off-ladder rows
+    // sourced from Tatoeba that are never reachable as lessons/reviews).
     prisma.subject.groupBy({
       by: ["type"],
-      where: { type: { in: seededTypes } },
+      where: { type: { in: seededTypes }, level: { not: null } },
       _count: true,
     }),
     prisma.userSubject.groupBy({
@@ -70,14 +75,19 @@ export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Pro
     return {
       type,
       seeded,
-      learned: seeded ? (passedByType[type as unknown as "RADICAL" | "KANJI" | "VOCAB"] ?? 0) : 0,
+      learned: seeded ? (passedByType[type as unknown as "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE"] ?? 0) : 0,
       total: seeded ? (totalByType.get(type) ?? 0) : 0,
     };
   });
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB", number> = { RADICAL: 0, KANJI: 0, VOCAB: 0 };
+  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE", number> = {
+    RADICAL: 0,
+    KANJI: 0,
+    VOCAB: 0,
+    SENTENCE: 0,
+  };
   if (subjectIds.length === 0) return result;
 
   const rows = await prisma.subject.findMany({
@@ -88,6 +98,7 @@ async function bucketByType(subjectIds: string[]) {
     if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
+    else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
   }
   return result;
 }
@@ -329,6 +340,9 @@ export interface SubjectDetail {
   componentsOf: LessonComponentSummary[];
   usedIn: LessonComponentSummary[];
   usedInTotal: number;
+  /// SENTENCE only: the source Tatoeba sentence id, for attribution linking
+  /// to https://tatoeba.org/en/sentences/show/<id>.
+  tatoebaSentenceId: string | null;
   /// Null when the user has no UserSubject row for this item yet (unlocked
   /// but not started, or still locked).
   srs: {
@@ -376,7 +390,8 @@ export async function getSubjectDetail(
       parentLinks: {
         select: {
           readingUsed: true,
-          child: { select: { id: true, slug: true, characters: true, meanings: true, type: true } },
+          isGating: true,
+          child: { select: { id: true, slug: true, characters: true, meanings: true, readings: true, type: true } },
         },
       },
       childLinks: {
@@ -435,16 +450,20 @@ export async function getSubjectDetail(
     furigana: subject.furigana as { ruby: string; rt?: string }[] | null,
     furiganaFallback: subject.furiganaFallback,
     partsOfSpeech: subject.type === SubjectType.VOCAB ? partsOfSpeechOf(subject.metadata) : [],
-    componentsOf: subject.parentLinks.map((link) => ({
-      id: link.child.id,
-      type: link.child.type as LessonComponentSummary["type"],
-      slug: link.child.slug,
-      characters: link.child.characters,
-      meaning: firstMeaning(link.child.meanings),
-      readingUsed: link.readingUsed,
-    })),
+    componentsOf:
+      subject.type === SubjectType.SENTENCE
+        ? sentenceWordBreakdown(subject.metadata, subject.parentLinks)
+        : subject.parentLinks.map((link) => ({
+            id: link.child.id,
+            type: link.child.type as LessonComponentSummary["type"],
+            slug: link.child.slug,
+            characters: link.child.characters,
+            meaning: firstMeaning(link.child.meanings),
+            readingUsed: link.readingUsed,
+          })),
     usedIn: rankUsedIn(subject.type, subject.childLinks).slice(0, 20),
     usedInTotal: subject.childLinks.length,
+    tatoebaSentenceId: subject.type === SubjectType.SENTENCE ? tatoebaSentenceIdOf(subject.metadata) : null,
     srs: userSubject
       ? {
           stage: userSubject.srsStage,
@@ -471,6 +490,7 @@ function vocabIsCommon(metadata: unknown): boolean {
   const meta = metadata as { isCommon?: boolean } | null | undefined;
   return Boolean(meta?.isCommon);
 }
+
 
 /// Same ordering rule as `getLessonBatch`'s `rankUsedIn`: radicals -> kanji
 /// by frequency, kanji -> common/low-frequency vocab first.

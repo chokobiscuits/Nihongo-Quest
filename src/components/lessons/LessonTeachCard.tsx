@@ -46,6 +46,29 @@ function ComponentChip({ component }: { component: LessonComponentSummary }) {
   );
 }
 
+/// One word in a sentence's breakdown: shows the word as it actually
+/// appears in the sentence (its `surface` form, which may be inflected),
+/// its gloss, and dims non-gating words (function words, or off-ladder
+/// content words) so the words that actually unlocked the sentence stand
+/// out without hiding the rest of the sentence's vocabulary.
+function SentenceWordChip({ component }: { component: LessonComponentSummary }) {
+  const childTheme = SUBJECT_THEME[component.type];
+  return (
+    <Link
+      href={subjectHref(component.type, component.slug)}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-chip)] border border-line bg-surface px-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
+        component.isGating === false && "opacity-50",
+      )}
+    >
+      <span lang="ja" className="text-body" style={{ color: childTheme.text }}>
+        {component.surface ?? component.characters}
+      </span>
+      <span className="text-caption text-text-muted">{component.meaning ?? component.slug}</span>
+    </Link>
+  );
+}
+
 /// Glyph-only square chip for a radical's "found in kanji" list — dozens of
 /// these can appear per radical, so no gloss, small footprint.
 function GlyphOnlyChip({ component }: { component: LessonComponentSummary }) {
@@ -91,7 +114,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
   const kana = readingsByType(subject.readings, "kana");
 
   const furiganaRender =
-    subject.type === "VOCAB" && subject.furigana
+    (subject.type === "VOCAB" || subject.type === "SENTENCE") && subject.furigana
       ? renderFurigana(subject.furigana, true)
       : null;
 
@@ -103,7 +126,9 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
       ? "Radicals in this kanji"
       : subject.type === "RADICAL"
         ? "Found in kanji"
-        : "Kanji used";
+        : subject.type === "SENTENCE"
+          ? "Words in this sentence"
+          : "Kanji used";
 
   const radicalFoundInKanji = subject.type === "RADICAL" ? subject.usedIn : [];
   const exampleVocab = subject.type === "KANJI" ? subject.usedIn : [];
@@ -136,17 +161,33 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
         )}
 
         <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-8">
-          <span
-            lang="ja"
-            className="subject-glyph flex min-h-[140px] items-center justify-center text-glyph"
-            style={{ color: theme.text }}
-          >
-            {subject.characters}
-          </span>
-          {furiganaRender && (
-            <div className="flex flex-col items-center gap-3">
-              <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
-            </div>
+          {subject.type === "SENTENCE" ? (
+            <span
+              lang="ja"
+              className="flex min-h-[140px] max-w-[560px] items-center justify-center text-center text-h1 leading-loose"
+              style={{ color: theme.text }}
+            >
+              {furiganaRender ? (
+                <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
+              ) : (
+                subject.characters
+              )}
+            </span>
+          ) : (
+            <>
+              <span
+                lang="ja"
+                className="subject-glyph flex min-h-[140px] items-center justify-center text-glyph"
+                style={{ color: theme.text }}
+              >
+                {subject.characters}
+              </span>
+              {furiganaRender && (
+                <div className="flex flex-col items-center gap-3">
+                  <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
+                </div>
+              )}
+            </>
           )}
           {subject.type === "RADICAL" && primaryMeaning && (
             <span className="text-h1 text-text" lang="en">
@@ -223,11 +264,30 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
         {subject.componentsOf.length > 0 && (
           <SectionPanel label={componentsLabel} count={subject.componentsOf.length} labelColor={theme.base}>
             <ChipTray>
-              {subject.componentsOf.map((c) => (
-                <ComponentChip key={c.id} component={c} />
-              ))}
+              {subject.componentsOf.map((c) =>
+                subject.type === "SENTENCE" ? (
+                  <SentenceWordChip key={c.id} component={c} />
+                ) : (
+                  <ComponentChip key={c.id} component={c} />
+                ),
+              )}
             </ChipTray>
           </SectionPanel>
+        )}
+
+        {subject.type === "SENTENCE" && subject.tatoebaSentenceId && (
+          <p className="text-micro text-text-faint" lang="en">
+            Example sentence #{subject.tatoebaSentenceId} from{" "}
+            <a
+              href={`https://tatoeba.org/en/sentences/show/${subject.tatoebaSentenceId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-text-dim"
+            >
+              the Tatoeba Project
+            </a>
+            , CC BY 2.0 FR.
+          </p>
         )}
 
         {radicalFoundInKanji.length > 0 && (
@@ -270,7 +330,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
             characters={subject.characters}
             accentColor={theme.base}
           />
-          {subject.type !== "RADICAL" && (
+          {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && (
             <MnemonicEditor
               subjectId={subject.id}
               field="readingMnemonic"

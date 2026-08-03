@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { grade } from "@/services/answer/grade";
 import { acceptMeaningAnswer } from "@/server/actions/mnemonics";
+import { FuriganaText } from "@/components/furigana/FuriganaText";
+import { renderFurigana } from "@/services/furigana/render";
 import { xpForCorrectAnswer, xpForIncorrectAnswer } from "@/services/xp/curve";
 import { SrsStageChip } from "@/components/srs/SrsStageChip";
 import { XpPopupLayer, type XpPopupLayerHandle } from "@/components/lessons/XpPopupLayer";
@@ -174,9 +176,19 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
 
       <div className="flex flex-col items-center gap-3 py-4">
         <SrsStageChip stage={current.subject.srsStage} />
-        <span lang="ja" className="subject-glyph text-glyph-sm" style={{ color: theme?.text }}>
-          {current.subject.characters}
-        </span>
+        {current.subject.type === "SENTENCE" ? (
+          <span lang="ja" className="max-w-[560px] text-center text-h1 leading-loose" style={{ color: theme?.text }}>
+            {current.subject.furigana ? (
+              <FuriganaText render={renderFurigana(current.subject.furigana, true)} fallback={current.subject.furiganaFallback} />
+            ) : (
+              current.subject.characters
+            )}
+          </span>
+        ) : (
+          <span lang="ja" className="subject-glyph text-glyph-sm" style={{ color: theme?.text }}>
+            {current.subject.characters}
+          </span>
+        )}
       </div>
 
       <form

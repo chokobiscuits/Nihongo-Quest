@@ -10,6 +10,10 @@ describe("questionKindsFor", () => {
     expect(questionKindsFor("KANJI")).toEqual(["MEANING", "READING"]);
     expect(questionKindsFor("VOCAB")).toEqual(["MEANING", "READING"]);
   });
+
+  it("sentences are meaning-only — furigana is already shown on the question card", () => {
+    expect(questionKindsFor("SENTENCE")).toEqual(["MEANING"]);
+  });
 });
 
 describe("buildReviewQueue", () => {

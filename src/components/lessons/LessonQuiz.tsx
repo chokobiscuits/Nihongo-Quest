@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { grade, type QuestionKind } from "@/services/answer/grade";
 import { acceptMeaningAnswer } from "@/server/actions/mnemonics";
+import { questionKindsFor } from "@/services/reviews/queue";
+import { FuriganaText } from "@/components/furigana/FuriganaText";
+import { renderFurigana } from "@/services/furigana/render";
 import type { LessonSubject } from "@/server/queries/lessons";
 import type { LessonQuizAnswerRecord } from "@/server/actions/lessons";
 import { xpForLesson } from "@/services/xp/curve";
@@ -24,9 +27,8 @@ interface QuizQuestion {
 function buildQuestions(subjects: LessonSubject[]): QuizQuestion[] {
   const questions: QuizQuestion[] = [];
   for (const subject of subjects) {
-    questions.push({ subject, kind: "MEANING", incorrectCount: 0 });
-    if (subject.type !== "RADICAL") {
-      questions.push({ subject, kind: "READING", incorrectCount: 0 });
+    for (const kind of questionKindsFor(subject.type)) {
+      questions.push({ subject, kind, incorrectCount: 0 });
     }
   }
   // Simple shuffle so meaning/reading pairs for the same item aren't always
@@ -57,7 +59,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
   const current = queue[0];
   const theme = current ? SUBJECT_THEME[current.subject.type] : null;
   const totalQuestions = useMemo(
-    () => subjects.reduce((n, s) => n + (s.type === "RADICAL" ? 1 : 2), 0),
+    () => subjects.reduce((n, s) => n + questionKindsFor(s.type).length, 0),
     [subjects],
   );
 
@@ -155,9 +157,19 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
       </div>
 
       <div className="flex flex-col items-center gap-2 py-4">
-        <span lang="ja" className="subject-glyph text-glyph-sm" style={{ color: theme?.text }}>
-          {current.subject.characters}
-        </span>
+        {current.subject.type === "SENTENCE" ? (
+          <span lang="ja" className="max-w-[560px] text-center text-h1 leading-loose" style={{ color: theme?.text }}>
+            {current.subject.furigana ? (
+              <FuriganaText render={renderFurigana(current.subject.furigana, true)} fallback={current.subject.furiganaFallback} />
+            ) : (
+              current.subject.characters
+            )}
+          </span>
+        ) : (
+          <span lang="ja" className="subject-glyph text-glyph-sm" style={{ color: theme?.text }}>
+            {current.subject.characters}
+          </span>
+        )}
       </div>
 
       <form

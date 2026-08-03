@@ -49,7 +49,7 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
       <div className="flex gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-visible xl:grid-cols-5">
         {cards.map((card, index) => (
           <ContinueLearningCard
-            key={card.type}
+            key={`${card.type}-${index}`}
             card={card}
             accent={CARD_ACCENTS[index % CARD_ACCENTS.length]}
             // The first seeded card is the primary CTA — it's the one that

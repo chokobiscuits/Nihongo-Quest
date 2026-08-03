@@ -17,11 +17,15 @@ export interface ReviewQuestion {
   kind: ReviewQuestionKind;
 }
 
-/// Which question kinds an item needs: RADICAL is meaning-only; everything
+/// Which question kinds an item needs: RADICAL and SENTENCE are
+/// meaning-only. A sentence already displays its furigana on the question
+/// card (see ReviewQuiz/LessonTeachCard), so a reading recall question would
+/// just be re-typing text that's visibly annotated on screen — the useful
+/// recall check for a sentence is translating it to English. Everything
 /// else (KANJI, VOCAB, and off-ladder types that reach a review queue) needs
 /// both meaning and reading before it can resolve.
 export function questionKindsFor(subjectType: ReviewCandidate["subjectType"]): ReviewQuestionKind[] {
-  return subjectType === "RADICAL" ? ["MEANING"] : ["MEANING", "READING"];
+  return subjectType === "RADICAL" || subjectType === "SENTENCE" ? ["MEANING"] : ["MEANING", "READING"];
 }
 
 /// Builds the full question list for a batch of reviewable items, one entry

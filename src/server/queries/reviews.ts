@@ -16,6 +16,8 @@ export interface ReviewSubject {
   srsStage: number;
   dueAt: Date | null;
   lastPromotedAt: Date | null;
+  furigana: { ruby: string; rt?: string }[] | null;
+  furiganaFallback: boolean;
 }
 
 export interface ReviewDueCount {
@@ -59,6 +61,8 @@ export async function getReviewQueue(userId: string = APP_USER_ID): Promise<Revi
           acceptedMeanings: true,
           meaningMnemonic: true,
           readingMnemonic: true,
+          furigana: true,
+          furiganaFallback: true,
         },
       },
     },
@@ -78,6 +82,8 @@ export async function getReviewQueue(userId: string = APP_USER_ID): Promise<Revi
     srsStage: row.srsStage,
     dueAt: row.dueAt,
     lastPromotedAt: row.lastPromotedAt,
+    furigana: row.subject.furigana as { ruby: string; rt?: string }[] | null,
+    furiganaFallback: row.subject.furiganaFallback,
   }));
 
   const countsByType = new Map<SubjectType, number>();

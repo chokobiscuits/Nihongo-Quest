@@ -3,11 +3,12 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { selectLessonBatch, type LessonCandidate, type LessonSubjectType } from "@/services/lessons/batch";
 import { getOrCreateProfile } from "@/server/queries/profile";
+import { sentenceWordBreakdown, tatoebaSentenceIdOf } from "@/server/queries/sentenceWordBreakdown";
 
 // Lessons only ever schedule the 60-level curriculum ladder (level != null).
-// Off-ladder subjects (jlpt/frequency reference material) are seeded but
-// never surface as lessons.
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB];
+// Off-ladder subjects (jlpt/frequency reference material, and the ~5,900
+// off-ladder sentences) are seeded but never surface as lessons.
+const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
 
 export interface LessonSubjectMeaning {
   meaning: string;
@@ -27,6 +28,15 @@ export interface LessonComponentSummary {
   characters: string | null;
   meaning: string | null;
   readingUsed: string | null;
+  /// SENTENCE word breakdown only: whether this component edge gates the
+  /// sentence's unlock (content word, laddered) vs. is shown for context
+  /// only (function word, or off-ladder content word). Undefined for
+  /// radical/kanji/vocab component edges, which are always gating.
+  isGating?: boolean;
+  /// SENTENCE word breakdown only: the word's surface form as it appears in
+  /// the sentence (may be inflected, e.g. "出た" for the dictionary form
+  /// "出る"), sourced from `Subject.metadata.tokens[].surface`.
+  surface?: string;
 }
 
 export interface LessonSubject {
@@ -58,6 +68,8 @@ export interface LessonSubject {
   usedInTotal: number;
   /// VOCAB only: parts of speech from `Subject.metadata.pos`.
   partsOfSpeech: string[];
+  /// SENTENCE only: the source Tatoeba sentence id, for attribution.
+  tatoebaSentenceId: string | null;
 }
 
 /// Candidate subject shape pulled for the unlock check: every ladder subject
@@ -99,7 +111,7 @@ async function fetchUnstartedLadderSubjects(userId: string, userLevel: number) {
           readingUsed: true,
           isGating: true,
           child: {
-            select: { id: true, slug: true, characters: true, meanings: true, type: true },
+            select: { id: true, slug: true, characters: true, meanings: true, readings: true, type: true },
           },
         },
       },
@@ -219,17 +231,21 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
     frequency: source.frequency,
     furigana: source.furigana as { ruby: string; rt?: string }[] | null,
     furiganaFallback: source.furiganaFallback,
-    componentsOf: source.parentLinks.map((link) => ({
-      id: link.child.id,
-      type: link.child.type as LessonSubjectType,
-      slug: link.child.slug,
-      characters: link.child.characters,
-      meaning: firstMeaning(link.child.meanings),
-      readingUsed: link.readingUsed,
-    })),
+    componentsOf:
+      source.type === "SENTENCE"
+        ? sentenceWordBreakdown(source.metadata, source.parentLinks)
+        : source.parentLinks.map((link) => ({
+            id: link.child.id,
+            type: link.child.type as LessonSubjectType,
+            slug: link.child.slug,
+            characters: link.child.characters,
+            meaning: firstMeaning(link.child.meanings),
+            readingUsed: link.readingUsed,
+          })),
     usedIn: rankUsedIn(source.type, source.childLinks),
     usedInTotal: source.childLinks.length,
     partsOfSpeech: source.type === "VOCAB" ? partsOfSpeechOf(source.metadata) : [],
+    tatoebaSentenceId: source.type === "SENTENCE" ? tatoebaSentenceIdOf(source.metadata) : null,
   }));
 }
 

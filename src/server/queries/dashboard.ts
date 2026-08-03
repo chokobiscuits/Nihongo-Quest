@@ -8,12 +8,11 @@ import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, type MasteryTier } from "@/services/xp/mastery";
 
 // Static denominators for content types that aren't seeded/laddered yet
-// (grammar, sentences, readings have no Subject rows to count). Radical,
-// Kanji, and Vocab denominators come from the DB instead, since those are
-// laddered content already loaded by the seed scripts.
-const UNSEEDED_DENOMINATORS: Record<"GRAMMAR" | "SENTENCE" | "READING", number> = {
+// (grammar and readings have no Subject rows to count). Sentences are now
+// real (seed phase 1-3) and count live from the DB alongside radical/kanji/
+// vocab — see `sentenceTotal` below.
+const UNSEEDED_DENOMINATORS: Record<"GRAMMAR" | "READING", number> = {
   GRAMMAR: 856,
-  SENTENCE: 2500,
   READING: 320,
 };
 
@@ -97,9 +96,10 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
-  const [kanjiTotal, vocabTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
+  const [kanjiTotal, vocabTotal, sentenceTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
+    prisma.subject.count({ where: { type: SubjectType.SENTENCE, level: { not: null } } }),
     prisma.userSubject.groupBy({
       by: ["subjectId"],
       where: { userId, passedAt: { not: null } },
@@ -138,14 +138,15 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     { type: SubjectType.RADICAL, labelEn: "Radicals", labelJa: "部首", learned: passedByType.RADICAL, started: startedByType.RADICAL, total: RADICAL_TOTAL },
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", learned: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", learned: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
+    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", learned: passedByType.SENTENCE, started: startedByType.SENTENCE, total: sentenceTotal },
     { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.GRAMMAR },
-    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.SENTENCE },
     { type: SubjectType.READING, labelEn: "Readings", labelJa: "読解", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.READING },
   ];
 
   const continueCards: DashboardContinueCard[] = [
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal) },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal) },
+    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal) },
     { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: false, lessonNumber: null, percent: null },
     { type: SubjectType.READING, labelEn: "Text Reading", labelJa: "ぶんしょうどっかい", glyph: "読解", seeded: false, lessonNumber: null, percent: null },
     // Reviews is not a content type — it is the review queue, and it works.
@@ -215,7 +216,12 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB", number> = { RADICAL: 0, KANJI: 0, VOCAB: 0 };
+  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE", number> = {
+    RADICAL: 0,
+    KANJI: 0,
+    VOCAB: 0,
+    SENTENCE: 0,
+  };
   if (subjectIds.length === 0) return result;
 
   const rows = await prisma.subject.findMany({
@@ -226,6 +232,7 @@ async function bucketByType(subjectIds: string[]) {
     if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
+    else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
   }
   return result;
 }

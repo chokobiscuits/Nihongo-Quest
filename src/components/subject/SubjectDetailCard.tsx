@@ -41,6 +41,26 @@ function ComponentChip({ component }: { component: LessonComponentSummary }) {
   );
 }
 
+/// One word in a sentence's breakdown — see LessonTeachCard's
+/// SentenceWordChip for the same treatment on the teach screen.
+function SentenceWordChip({ component }: { component: LessonComponentSummary }) {
+  const childTheme = SUBJECT_THEME[component.type];
+  return (
+    <Link
+      href={`/subjects/${typeToSlug(component.type)}/${component.slug}`}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-chip)] border border-line bg-surface px-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
+        component.isGating === false && "opacity-50",
+      )}
+    >
+      <span lang="ja" className="text-body" style={{ color: childTheme.text }}>
+        {component.surface ?? component.characters}
+      </span>
+      <span className="text-caption text-text-muted">{component.meaning ?? component.slug}</span>
+    </Link>
+  );
+}
+
 function formatDueAt(dueAt: Date | null): string {
   if (!dueAt) return "—";
   const diffMs = dueAt.getTime() - Date.now();
@@ -60,13 +80,21 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
   const kana = readingsByType(subject.readings, "kana");
 
   const furiganaRender =
-    subject.type === "VOCAB" && subject.furigana ? renderFurigana(subject.furigana, true) : null;
+    (subject.type === "VOCAB" || subject.type === "SENTENCE") && subject.furigana
+      ? renderFurigana(subject.furigana, true)
+      : null;
 
   const primaryMeaning = subject.meanings.find((m) => m.primary) ?? subject.meanings[0];
   const alternateMeanings = subject.meanings.filter((m) => m !== primaryMeaning).map((m) => m.meaning);
 
   const componentsLabel =
-    subject.type === "KANJI" ? "Radicals in this kanji" : subject.type === "RADICAL" ? "Found in kanji" : "Kanji used";
+    subject.type === "KANJI"
+      ? "Radicals in this kanji"
+      : subject.type === "RADICAL"
+        ? "Found in kanji"
+        : subject.type === "SENTENCE"
+          ? "Words in this sentence"
+          : "Kanji used";
 
   const radicalFoundInKanji = subject.type === "RADICAL" ? subject.usedIn : [];
   const exampleVocab = subject.type === "KANJI" ? subject.usedIn : [];
@@ -97,17 +125,33 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
         )}
 
         <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-8">
-          <span
-            lang="ja"
-            className="subject-glyph flex min-h-[140px] items-center justify-center text-glyph"
-            style={{ color: theme.text }}
-          >
-            {subject.characters}
-          </span>
-          {furiganaRender && (
-            <div className="flex flex-col items-center gap-3">
-              <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
-            </div>
+          {subject.type === "SENTENCE" ? (
+            <span
+              lang="ja"
+              className="flex min-h-[140px] max-w-[560px] items-center justify-center text-center text-h1 leading-loose"
+              style={{ color: theme.text }}
+            >
+              {furiganaRender ? (
+                <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
+              ) : (
+                subject.characters
+              )}
+            </span>
+          ) : (
+            <>
+              <span
+                lang="ja"
+                className="subject-glyph flex min-h-[140px] items-center justify-center text-glyph"
+                style={{ color: theme.text }}
+              >
+                {subject.characters}
+              </span>
+              {furiganaRender && (
+                <div className="flex flex-col items-center gap-3">
+                  <FuriganaText render={furiganaRender} fallback={subject.furiganaFallback} />
+                </div>
+              )}
+            </>
           )}
           {subject.type === "RADICAL" && primaryMeaning && (
             <span className="text-h1 text-text" lang="en">
@@ -179,11 +223,30 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
         {subject.componentsOf.length > 0 && (
           <SectionPanel label={componentsLabel} count={subject.componentsOf.length} labelColor={theme.base}>
             <div className="flex flex-wrap gap-2">
-              {subject.componentsOf.map((c) => (
-                <ComponentChip key={c.id} component={c} />
-              ))}
+              {subject.componentsOf.map((c) =>
+                subject.type === "SENTENCE" ? (
+                  <SentenceWordChip key={c.id} component={c} />
+                ) : (
+                  <ComponentChip key={c.id} component={c} />
+                ),
+              )}
             </div>
           </SectionPanel>
+        )}
+
+        {subject.type === "SENTENCE" && subject.tatoebaSentenceId && (
+          <p className="text-micro text-text-faint" lang="en">
+            Example sentence #{subject.tatoebaSentenceId} from{" "}
+            <a
+              href={`https://tatoeba.org/en/sentences/show/${subject.tatoebaSentenceId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-text-dim"
+            >
+              the Tatoeba Project
+            </a>
+            , CC BY 2.0 FR.
+          </p>
         )}
 
         {radicalFoundInKanji.length > 0 && (
@@ -219,7 +282,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
                 label="Meaning"
                 value={`${subject.srs.meaningCorrect} / ${subject.srs.meaningCorrect + subject.srs.meaningIncorrect}`}
               />
-              {subject.type !== "RADICAL" && (
+              {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && (
                 <Stat
                   label="Reading"
                   value={`${subject.srs.readingCorrect} / ${subject.srs.readingCorrect + subject.srs.readingIncorrect}`}
@@ -245,7 +308,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
             characters={subject.characters}
             accentColor={theme.base}
           />
-          {subject.type !== "RADICAL" && (
+          {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && (
             <MnemonicEditor
               subjectId={subject.id}
               field="readingMnemonic"
