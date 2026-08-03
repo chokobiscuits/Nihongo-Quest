@@ -407,20 +407,27 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
 
 export interface SentenceLevelInput {
   tempId: string;
-  /// tempIds of every VOCAB subject the sentence's tokens resolved to. The
-  /// sentence's level must be STRICTLY greater than the max level of these
-  /// (same strict-dependency convention as every other component edge in
-  /// this pipeline — see strictDependsOn above) so a sentence is never
-  /// offered before every word it exemplifies has already unlocked.
+  /// tempIds of every CONTENT VOCAB subject the sentence's tokens resolved
+  /// to. A sentence's level is gated only by the subset of these that are
+  /// themselves laddered (level !== null) — an off-ladder content word is
+  /// still a real, seeded, browsable subject (see the seeding pool vs.
+  /// ladder distinction: VOCAB_TARGET_MAX controls what's seeded at all,
+  /// VOCAB_LADDER_TARGET controls what gets a curriculum level), so it must
+  /// not block the sentence from ever being placed. The sentence's level
+  /// must be STRICTLY greater than the max level among its LADDERED content
+  /// vocab (same strict-dependency convention as every other component edge
+  /// in this pipeline — see strictDependsOn above). A sentence whose content
+  /// vocab is entirely off-ladder has no laddered dependency to be strictly
+  /// after, so it defaults to level 1 eligibility.
   vocabTempIds: string[];
 }
 
 /// Assigns levels to SENTENCE subjects in a third pass, after `assignLevels`
 /// has settled every RADICAL/KANJI/VOCAB level. A sentence becomes eligible
-/// for level N once every vocab it depends on already has a level strictly
-/// less than N; sentences whose vocab is entirely off-ladder (any dependency
-/// missing a level) get level = null, same as any other subject that falls
-/// outside the 60-level curriculum. Quota-filled per level like every other
+/// for level N once every LADDERED vocab it depends on already has a level
+/// strictly less than N (off-ladder content vocab is ignored for gating
+/// purposes, not treated as blocking — see the doc comment on
+/// SentenceLevelInput.vocabTempIds). Quota-filled per level like every other
 /// type, via SENTENCE_PER_LEVEL through quotaForType.
 export function assignSentenceLevels(
   inputs: SentenceLevelInput[],
@@ -429,21 +436,19 @@ export function assignSentenceLevels(
   const levels = new Map<string, number | null>();
   const levelCounts = new Map<number, number>();
 
-  // Precompute each sentence's minimum eligible level (max vocab level + 1);
-  // sentences with any off-ladder vocab dependency never become eligible.
+  // Precompute each sentence's minimum eligible level (max LADDERED vocab
+  // level + 1, or level 1 if it has no laddered content vocab at all).
+  // Off-ladder content vocab dependencies are simply skipped — they never
+  // prevent a sentence from being placed on the ladder.
   const minLevelByTempId = new Map<string, number | null>();
   for (const input of inputs) {
     let maxVocabLevel = 0;
-    let allLaddered = true;
     for (const vocabTempId of input.vocabTempIds) {
       const level = vocabLevels.get(vocabTempId);
-      if (typeof level !== "number") {
-        allLaddered = false;
-        break;
-      }
+      if (typeof level !== "number") continue; // off-ladder: not a gating dependency
       if (level > maxVocabLevel) maxVocabLevel = level;
     }
-    minLevelByTempId.set(input.tempId, allLaddered ? maxVocabLevel + 1 : null);
+    minLevelByTempId.set(input.tempId, maxVocabLevel + 1);
     levels.set(input.tempId, null);
   }
 

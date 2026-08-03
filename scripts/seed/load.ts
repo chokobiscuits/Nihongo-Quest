@@ -145,6 +145,53 @@ async function upsertComponents(components: ComponentRecord[], tempIdToRealId: M
   console.log(`[components] upserted ${resolved.length}, skipped ${skipped} (unresolved tempId, likely a filtered-out subject)`);
 }
 
+/// Deletes Subject rows whose slug is no longer present in the current
+/// artifact (e.g. an earlier load seeded a vocab entry that a later
+/// transform run no longer selects — JMdict re-parses, cap changes, etc.
+/// upsertSubjects only ever creates/updates by slug, it never removes rows
+/// the current artifact dropped). A subject is only ever pruned when no
+/// UserSubject row references it — real user progress against a subject
+/// must never be destroyed by a reseed, even if that subject fell out of
+/// the current artifact; such rows are logged and left in place instead.
+async function pruneStaleSubjects(subjects: SubjectRecord[]) {
+  const artifactSlugs = new Set(subjects.map((s) => s.slug));
+  const existing = await prisma.subject.findMany({
+    select: { id: true, slug: true, type: true, characters: true },
+  });
+  const stale = existing.filter((s) => !artifactSlugs.has(s.slug));
+  if (stale.length === 0) {
+    console.log("[prune] no stale subjects found");
+    return;
+  }
+
+  const staleIds = stale.map((s) => s.id);
+  const referenced = await prisma.userSubject.findMany({
+    where: { subjectId: { in: staleIds } },
+    select: { subjectId: true },
+  });
+  const referencedIds = new Set(referenced.map((r) => r.subjectId));
+
+  const deletable = stale.filter((s) => !referencedIds.has(s.id));
+  const skipped = stale.filter((s) => referencedIds.has(s.id));
+
+  if (skipped.length > 0) {
+    console.log(
+      `[prune] skipping ${skipped.length} stale subject(s) with existing UserSubject rows (never deleted):`,
+      skipped.map((s) => s.slug),
+    );
+  }
+
+  if (deletable.length > 0) {
+    await prisma.subject.deleteMany({ where: { id: { in: deletable.map((s) => s.id) } } });
+    console.log(
+      `[prune] deleted ${deletable.length} stale subject(s) absent from the current artifact:`,
+      deletable.map((s) => s.slug),
+    );
+  } else {
+    console.log("[prune] no stale subjects were safe to delete");
+  }
+}
+
 async function replaceDataSources(sources: DataSourceRecord[]) {
   // DataSource has no unique key besides its cuid `id`, so re-running the
   // load safely replaces the whole seeded set rather than upserting rows
@@ -174,6 +221,7 @@ async function main() {
 
   const tempIdToRealId = await upsertSubjects(subjects);
   await upsertComponents(components, tempIdToRealId);
+  await pruneStaleSubjects(subjects);
   await replaceDataSources(dataSources);
 
   console.log("\nLoad complete.");

@@ -26,6 +26,7 @@ import { parseTatoebaSentences } from "./lib/tatoeba-sentences";
 import { parseTatoebaIndices } from "./lib/tatoeba-indices";
 import { parseTatoebaLinks } from "./lib/tatoeba-links";
 import { locateTokens, spliceSentenceFurigana } from "./lib/sentence-transform";
+import { classifyVocabPos } from "./lib/pos-classifier";
 import type { ComponentRecord, FuriganaSegment, MeaningEntry, ReadingEntry, SubjectRecord } from "./lib/types";
 
 const RAW_DIR = path.resolve(__dirname, "../../data/raw");
@@ -35,7 +36,7 @@ const OUT_DIR = path.resolve(__dirname, "../../data/processed");
 // the seeded kanji set, per the task's scope directive. This keeps the
 // seeded vocab in the low thousands rather than JMdict's full ~200k.
 const VOCAB_TARGET_MIN = 6000;
-const VOCAB_TARGET_MAX = 10000;
+const VOCAB_TARGET_MAX = 40000;
 
 // Sentence selection target. We do not seed all ~150k Tatoeba sentences —
 // only good-example sentences whose every token resolves to a seeded VOCAB
@@ -276,6 +277,7 @@ async function main() {
         position: null,
         isRadical: comp === radical.character,
         readingUsed: null,
+        isGating: true,
       });
     }
 
@@ -300,6 +302,7 @@ async function main() {
           position: null,
           isRadical: true,
           readingUsed: null,
+          isGating: true,
         });
       }
     }
@@ -467,6 +470,7 @@ async function main() {
           position: null,
           isRadical: false,
           readingUsed: segment.rt ?? null,
+          isGating: true,
         });
       }
     }
@@ -501,6 +505,27 @@ async function main() {
     allTokensResolved: 0,
     selected: 0,
   };
+
+  // Full-JMdict (not just seeded vocab) headword -> pos-code lookup, used
+  // only to classify a Tatoeba index token as content or function when it
+  // fails to resolve to a seeded VOCAB subject (see the sentence loop
+  // below). An unresolved token still has a real JMdict entry almost
+  // always — it's simply not in our ~10k-entry seeded scope — and that
+  // entry's own pos tags are enough to tell "this was a particle" from
+  // "this was an off-ladder noun" without needing the word to be seeded.
+  const posByHeadword = new Map<string, string[]>();
+  for (const entry of jmdictEntries) {
+    const pos = [...new Set(entry.senses.flatMap((s) => s.pos))];
+    if (pos.length === 0) continue;
+    for (const k of entry.kanji) {
+      const existing = posByHeadword.get(k.text);
+      posByHeadword.set(k.text, existing ? [...new Set([...existing, ...pos])] : pos);
+    }
+    for (const r of entry.readings) {
+      const existing = posByHeadword.get(r.text);
+      posByHeadword.set(r.text, existing ? [...new Set([...existing, ...pos])] : pos);
+    }
+  }
 
   // Vocab lookup: headword or reading -> candidate vocab tempIds, so a
   // token's `headword` (kanji or kana form) and optional disambiguating
@@ -604,6 +629,7 @@ async function main() {
       start: number;
       end: number;
       vocabTempId: string;
+      isContent: boolean;
     }[];
     furiganaFallback: boolean;
     isGoodExample: boolean;
@@ -611,7 +637,23 @@ async function main() {
 
   const sentenceCandidates: SentenceCandidate[] = [];
   const usedSentenceSlugs = new Set<string>();
+  // Diagnostics only: how many content words a good-example+translated
+  // sentence is missing (unresolved to seeded vocab), bucketed 0-6+, over
+  // every candidate that reaches the content-resolution check (i.e. has at
+  // least one content word at all).
+  const missingContentHistogram = new Map<number, number>();
 
+  // Content-word gating (see scripts/seed/lib/pos-classifier.ts): a
+  // sentence's unlock requirement and level placement depend only on its
+  // CONTENT vocab (nouns, verbs, adjectives, adverbs). Function words
+  // (particles, copula, auxiliaries, conjunctions, pronouns, counters,
+  // interjections) may appear unresolved or off-ladder without disqualifying
+  // the sentence — they still render with furigana as context, they just
+  // don't gate. A token that fails to locate/resolve at all is only fatal
+  // when it would have been a content word; an unresolved function-word
+  // token still breaks the substring cursor (see locateTokens), so it's
+  // dropped from resolvedTokens and rendered as a plain gap by
+  // spliceSentenceFurigana instead of aborting the sentence.
   for (const [sentenceId, lines] of indexLinesBySentenceId) {
     const characters = jpnTextById.get(sentenceId);
     if (!characters) continue;
@@ -631,22 +673,45 @@ async function main() {
 
     const located = locateTokens(characters, primaryLine.tokens);
     const resolvedTokens: SentenceCandidate["resolvedTokens"] = [];
-    let allResolved = primaryLine.tokens.length > 0;
+    let contentTokenCount = 0;
+    let allContentResolved = true;
     for (let i = 0; i < primaryLine.tokens.length; i += 1) {
       const loc = located[i];
       const token = primaryLine.tokens[i];
-      if (!loc) {
-        allResolved = false;
-        continue;
-      }
+      if (!loc) continue; // can't locate in the sentence text at all — dropped, not gating
+
       const vocabTempId = resolveToken(token);
-      if (!vocabTempId) {
-        allResolved = false;
+      if (vocabTempId) {
+        const vocabSubject = vocabSubjectByTempId.get(vocabTempId)!;
+        const pos = Array.isArray(vocabSubject.metadata.pos) ? (vocabSubject.metadata.pos as string[]) : [];
+        const isContent = classifyVocabPos(pos) === "content";
+        if (isContent) contentTokenCount += 1;
+        resolvedTokens.push({ surface: loc.text, start: loc.start, end: loc.end, vocabTempId, isContent });
         continue;
       }
-      resolvedTokens.push({ surface: loc.text, start: loc.start, end: loc.end, vocabTempId });
+
+      // Token didn't resolve to a seeded VOCAB subject. Classify it against
+      // the FULL JMdict pos set (not just seeded scope) so a content word
+      // that's simply outside our ~10k-entry vocab cap correctly fails
+      // eligibility, while a function word that's outside the cap for the
+      // same reason does not — see posByHeadword above.
+      const pos = posByHeadword.get(token.headword) ?? (token.reading ? posByHeadword.get(token.reading) : undefined);
+      const isContent = classifyVocabPos(pos ?? []) === "content";
+      if (isContent) {
+        contentTokenCount += 1;
+        allContentResolved = false; // a content token that never resolved to seeded vocab
+      }
+      // Unresolved function-word tokens are simply dropped — no
+      // resolvedTokens entry, no SubjectComponent edge, no gating impact.
     }
-    if (!allResolved) continue;
+    if (contentTokenCount === 0) continue; // nothing to gate on: not a useful example sentence
+    const resolvedContentCount = resolvedTokens.filter((t) => t.isContent).length;
+    const missingContentCount = contentTokenCount - resolvedContentCount;
+    missingContentHistogram.set(
+      Math.min(missingContentCount, 6),
+      (missingContentHistogram.get(Math.min(missingContentCount, 6)) ?? 0) + 1,
+    );
+    if (!allContentResolved) continue;
     sentenceFunnel.allTokensResolved += 1;
 
     const meanings: MeaningEntry[] = translations.map((t, i) => ({ meaning: t, primary: i === 0 }));
@@ -657,7 +722,7 @@ async function main() {
       characters,
       meanings,
       resolvedTokens,
-      furiganaFallback: false, // every token resolved, per the allResolved filter above
+      furiganaFallback: false,
       isGoodExample,
     });
   }
@@ -678,14 +743,35 @@ async function main() {
       })),
     );
 
-    const dedupedVocabTempIds = [...new Set(candidate.resolvedTokens.map((t) => t.vocabTempId))];
+    // Emit a SubjectComponent edge for every resolved vocab, content and
+    // function alike, so the UI can highlight/link every word in the
+    // sentence — but only content-word edges that are ALSO laddered (level
+    // !== null) are gating (see isGating's doc comment on ComponentRecord).
+    // A content word seeded but off-ladder (never taught, no way to Guru it)
+    // would otherwise be a permanent lock on the sentence, so it is treated
+    // like a function word for gating purposes: still linked/highlighted,
+    // just not required to unlock. isContent is deduped per vocabTempId by
+    // OR: if a headword resolves to a content sense anywhere in the
+    // sentence, its edge is content (subject to the laddered check above).
+    // `levels` (vocab tempId -> assigned level) is already fully populated
+    // by assignLevels before this sentence loop runs, so this reads final
+    // levels, not a pre-assignment view.
+    const isContentByVocabTempId = new Map<string, boolean>();
+    for (const t of candidate.resolvedTokens) {
+      isContentByVocabTempId.set(t.vocabTempId, (isContentByVocabTempId.get(t.vocabTempId) ?? false) || t.isContent);
+    }
+    const dedupedVocabTempIds = [...isContentByVocabTempId.keys()];
+    const contentVocabTempIds = dedupedVocabTempIds.filter((id) => isContentByVocabTempId.get(id));
     for (const vocabTempId of dedupedVocabTempIds) {
+      const isContent = isContentByVocabTempId.get(vocabTempId) ?? false;
+      const isLaddered = levels.get(vocabTempId) !== null && levels.get(vocabTempId) !== undefined;
       components.push({
         parentTempId: candidate.tempId,
         childTempId: vocabTempId,
         position: null,
         isRadical: false,
         readingUsed: null,
+        isGating: isContent && isLaddered,
       });
     }
 
@@ -708,13 +794,23 @@ async function main() {
           start: t.start,
           end: t.end,
           vocabTempId: t.vocabTempId,
+          isContent: t.isContent,
         })),
       },
       furigana: spliced,
       furiganaFallback: false,
     });
 
-    sentenceLevelInputs.push({ tempId: candidate.tempId, vocabTempIds: dedupedVocabTempIds });
+    // Level eligibility depends only on CONTENT vocab: assignSentenceLevels
+    // gates on whichever of these are LADDERED (level !== null) — a
+    // sentence's level must be strictly greater than the max level among
+    // its laddered content vocab, while off-ladder content vocab (seeded
+    // but outside the ~5,400-item curriculum ladder) is simply skipped, not
+    // treated as blocking (see SentenceLevelInput's doc comment in
+    // level-heuristic.ts). Function words are excluded here entirely — they
+    // still get a rendering edge above, but must never block or delay a
+    // sentence's unlock/level.
+    sentenceLevelInputs.push({ tempId: candidate.tempId, vocabTempIds: contentVocabTempIds });
   }
 
   // Per-level quota cap: if selection overshoots the target band, still seed
@@ -783,11 +879,11 @@ async function main() {
   console.log(`  Distinct sentences with an index line: ${sentenceFunnel.totalIndexed}`);
   console.log(`  ...flagged good-example (~): ${sentenceFunnel.goodExample}`);
   console.log(`  ...with an English translation: ${sentenceFunnel.hasTranslation}`);
-  console.log(`  ...every token located+resolved to seeded vocab: ${sentenceFunnel.allTokensResolved}`);
+  console.log(`  ...every CONTENT token located+resolved to seeded vocab: ${sentenceFunnel.allTokensResolved}`);
   console.log(`  Selected: ${sentenceFunnel.selected}`);
 
   console.log(
-    `Selected sentences resolve 100% of their tokens by construction (the "every token resolves" filter above is the token resolution rate over candidate sentences: ${sentenceFunnel.allTokensResolved}/${sentenceFunnel.hasTranslation} good-example+translated sentences had every token resolve).`,
+    `Selected sentences resolve 100% of their CONTENT tokens by construction (function-word tokens — particles, copula, auxiliaries, conjunctions, pronouns, counters, interjections — are excluded from this gate; see scripts/seed/lib/pos-classifier.ts): ${sentenceFunnel.allTokensResolved}/${sentenceFunnel.hasTranslation} good-example+translated sentences had every content token resolve.`,
   );
 
   const sentenceSubjects = subjects.filter((s) => s.type === "SENTENCE");
@@ -798,19 +894,41 @@ async function main() {
   );
 
   // Strict invariant check: every SENTENCE's level must be strictly greater
-  // than the max level of every vocab it contains.
+  // than the max level of every CONTENT vocab it contains (function-word
+  // vocab is excluded from gating entirely, per the content/function POS
+  // split — see sentenceLevelInputs above).
   let invariantViolations = 0;
   for (const s of sentenceSubjects) {
     if (s.level === null) continue;
-    const tokens = s.metadata.tokens as { vocabTempId: string }[];
+    const tokens = s.metadata.tokens as { vocabTempId: string; isContent: boolean }[];
     for (const t of tokens) {
+      if (!t.isContent) continue;
       const vocabLevel = levels.get(t.vocabTempId);
       if (typeof vocabLevel === "number" && !(s.level > vocabLevel)) {
         invariantViolations += 1;
       }
     }
   }
-  console.log(`Strict level invariant violations (sentence level > max vocab level): ${invariantViolations}`);
+  console.log(`Strict level invariant violations (sentence level > max CONTENT vocab level): ${invariantViolations}`);
+
+  // Content-word distribution diagnostics, per the task's reporting
+  // requirement: how many content words per candidate sentence, and how
+  // many candidate (good-example + translated) sentences fail selection on
+  // exactly N missing/unladdered content words.
+  console.log("\n--- Content-word diagnostics ---");
+  const contentCounts = sentenceCandidates.map(
+    (c) => c.resolvedTokens.filter((t) => t.isContent).length,
+  );
+  if (contentCounts.length > 0) {
+    const sorted = [...contentCounts].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    console.log(`Median content words per selected sentence: ${median}`);
+  }
+  console.log("Missing-content-word histogram (over all good-example+translated candidates with >=1 content word):");
+  for (let n = 0; n <= 6; n += 1) {
+    const label = n === 6 ? "6+" : String(n);
+    console.log(`  ${label} missing: ${missingContentHistogram.get(n) ?? 0}`);
+  }
 
   console.log("\n--- Sample sentence records ---");
   for (const s of sentenceSubjects.slice(0, 5)) {

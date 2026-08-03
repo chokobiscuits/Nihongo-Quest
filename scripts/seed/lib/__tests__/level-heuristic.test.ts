@@ -206,7 +206,7 @@ describe("assignSentenceLevels", () => {
     expect(levels.get("s1")).toBe(6);
   });
 
-  it("gives level = null to a sentence with any off-ladder (unlevelled) vocab dependency", () => {
+  it("ignores off-ladder (unlevelled) vocab dependencies and gates only on laddered ones", () => {
     const vocabLevels = new Map<string, number | null>([
       ["v1", 3],
       ["v2", null],
@@ -215,7 +215,16 @@ describe("assignSentenceLevels", () => {
       [{ tempId: "s1", vocabTempIds: ["v1", "v2"] }],
       vocabLevels,
     );
-    expect(levels.get("s1")).toBeNull();
+    expect(levels.get("s1")).toBe(4);
+  });
+
+  it("places a sentence whose content vocab is entirely off-ladder at level 1", () => {
+    const vocabLevels = new Map<string, number | null>([["v1", null]]);
+    const levels = assignSentenceLevels(
+      [{ tempId: "s1", vocabTempIds: ["v1"] }],
+      vocabLevels,
+    );
+    expect(levels.get("s1")).toBe(1);
   });
 
   it("places a sentence with no vocab dependencies at level 1", () => {

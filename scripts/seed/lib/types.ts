@@ -56,11 +56,14 @@ export interface ComponentRecord {
   /// src/services/srs/unlock.ts's componentsSatisfied, which only considers
   /// gating components. Every RADICAL/KANJI/VOCAB component edge is gating.
   /// SENTENCE -> VOCAB edges are gating only for the sentence's CONTENT-word
-  /// vocab (nouns, verbs, adjectives, adverbs); function-word vocab
-  /// (particles, copula, auxiliaries, conjunctions, pronouns, counters,
-  /// interjections — see scripts/seed/lib/pos-classifier.ts) still gets an
-  /// edge, for UI highlighting/linking, but must not block unlock. Loaded
-  /// into SubjectComponent.isGating by load.ts.
+  /// vocab (nouns, verbs, adjectives, adverbs) that is ALSO laddered (has a
+  /// non-null level, i.e. actually taught); function-word vocab (particles,
+  /// copula, auxiliaries, conjunctions, pronouns, counters, interjections —
+  /// see scripts/seed/lib/pos-classifier.ts) and off-ladder content vocab
+  /// (seeded but outside the curriculum ladder, so never learnable) both
+  /// still get an edge, for UI highlighting/linking, but must not block
+  /// unlock — a gating edge to an off-ladder subject would be a permanent
+  /// lock. Loaded into SubjectComponent.isGating by load.ts.
   isGating: boolean;
 }
 
