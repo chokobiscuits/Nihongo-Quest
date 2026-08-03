@@ -17,11 +17,25 @@ const UNSEEDED_DENOMINATORS: Record<"GRAMMAR" | "SENTENCE" | "READING", number> 
   READING: 320,
 };
 
+// Radicals aren't seeded via Subject rows with the other ladder content's
+// denominator source in this query, but the ladder is fixed at 190 laddered
+// radicals — kept alongside the other unseeded denominators for the one row
+// that has no `passed`/`started` distinction worth a live count against a
+// changing total.
+const RADICAL_TOTAL = 190;
+
 export interface DashboardProgressRow {
   type: SubjectType;
   labelEn: string;
   labelJa: string;
+  /// Reached Guru (or beyond) — the "mastered" count. Kept as `learned` for
+  /// backward compat with existing callers; this is what the ring's center
+  /// percentage is based on.
   learned: number;
+  /// In the user's SRS at any stage (startedAt IS NOT NULL) — includes
+  /// `learned`. Rendered as a lighter/translucent ring segment behind the
+  /// solid `learned` fill so partial progress is never invisible.
+  started: number;
   total: number;
 }
 
@@ -78,17 +92,20 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
-  // radicalTotal (182 laddered) isn't shown as its own Progress Overview
-  // legend row per the sheet, but is fetched alongside the other ladder
-  // counts for parity and to keep this the one place ladder denominators
-  // are read from.
-  const [, kanjiTotal, vocabTotal, learnedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
-    prisma.subject.count({ where: { type: SubjectType.RADICAL, level: { not: null } } }),
+  const [kanjiTotal, vocabTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
     prisma.userSubject.groupBy({
       by: ["subjectId"],
       where: { userId, passedAt: { not: null } },
+      _count: true,
+    }),
+    // startedAt IS NOT NULL: in the user's SRS at any stage. Superset of
+    // passedAt — everything Guru+ was started first — so `started` is
+    // always >= `learned` per type.
+    prisma.userSubject.groupBy({
+      by: ["subjectId"],
+      where: { userId, startedAt: { not: null } },
       _count: true,
     }),
     // No due-date filter: reviewable = started + stage 1-8. dueAt is a
@@ -103,19 +120,22 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   const accountMasteryLevelValue = accountMasteryLevel(accountMasteryXp);
   const tier = masteryTier(accountMasteryLevelValue);
 
-  // groupBy above only tells us which subjectIds passed; join subject type
-  // via a second lookup keyed on those ids to bucket learned counts by type.
-  const passedSubjectIds = learnedCounts.map((r) => r.subjectId);
+  // groupBy above only tells us which subjectIds passed/started; join
+  // subject type via a second lookup keyed on those ids to bucket counts.
+  const passedSubjectIds = passedCounts.map((r) => r.subjectId);
+  const startedSubjectIds = startedCounts.map((r) => r.subjectId);
   const passedByType = await bucketByType(passedSubjectIds);
+  const startedByType = await bucketByType(startedSubjectIds);
 
   const rank = rankForLevel(profile.accountLevel);
 
   const progress: DashboardProgressRow[] = [
-    { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", learned: passedByType.KANJI, total: kanjiTotal },
-    { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", learned: passedByType.VOCAB, total: vocabTotal },
-    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", learned: 0, total: UNSEEDED_DENOMINATORS.GRAMMAR },
-    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", learned: 0, total: UNSEEDED_DENOMINATORS.SENTENCE },
-    { type: SubjectType.READING, labelEn: "Readings", labelJa: "読解", learned: 0, total: UNSEEDED_DENOMINATORS.READING },
+    { type: SubjectType.RADICAL, labelEn: "Radicals", labelJa: "部首", learned: passedByType.RADICAL, started: startedByType.RADICAL, total: RADICAL_TOTAL },
+    { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", learned: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
+    { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", learned: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
+    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.GRAMMAR },
+    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.SENTENCE },
+    { type: SubjectType.READING, labelEn: "Readings", labelJa: "読解", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.READING },
   ];
 
   const continueCards: DashboardContinueCard[] = [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { grade, type QuestionKind } from "@/services/answer/grade";
 import { acceptMeaningAnswer } from "@/server/actions/mnemonics";
@@ -51,6 +51,9 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
   const [justWrong, setJustWrong] = useState(false);
   const [lastWrongAnswer, setLastWrongAnswer] = useState("");
   const xpPopupRef = useRef<XpPopupLayerHandle>(null);
+  // Guards against onComplete firing twice (e.g. a re-render racing the
+  // effect below, or StrictMode double-invoking) — commit exactly once.
+  const completedRef = useRef(false);
 
   const current = queue[0];
   const theme = current ? SUBJECT_THEME[current.subject.type] : null;
@@ -58,6 +61,14 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     () => subjects.reduce((n, s) => n + (s.type === "RADICAL" ? 1 : 2), 0),
     [subjects],
   );
+
+  useEffect(() => {
+    if (queue.length === 0 && !completedRef.current) {
+      completedRef.current = true;
+      onComplete(completed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue.length]);
 
   if (!current) {
     return null;
@@ -83,16 +94,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
       setInput("");
       setFeedback(null);
       setJustWrong(false);
-      setQueue((prev) => {
-        const rest = prev.slice(1);
-        if (rest.length === 0) {
-          onComplete([
-            ...completed,
-            { subjectId: current.subject.id, questionType: current.kind, incorrectCount: current.incorrectCount },
-          ]);
-        }
-        return rest;
-      });
+      setQueue((prev) => prev.slice(1));
       return;
     }
 
@@ -137,13 +139,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     setInput("");
     setFeedback(null);
     setJustWrong(false);
-    setQueue((prev) => {
-      const rest = prev.slice(1);
-      if (rest.length === 0) {
-        onComplete([...completed, finished]);
-      }
-      return rest;
-    });
+    setQueue((prev) => prev.slice(1));
   }
 
   const answeredCount = totalQuestions - queue.length;

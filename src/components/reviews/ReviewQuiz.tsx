@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { grade } from "@/services/answer/grade";
 import { acceptMeaningAnswer } from "@/server/actions/mnemonics";
@@ -46,9 +46,20 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
   const [justWrong, setJustWrong] = useState(false);
   const [lastWrongAnswer, setLastWrongAnswer] = useState("");
   const xpPopupRef = useRef<XpPopupLayerHandle>(null);
+  // Guards against onComplete firing twice (e.g. a re-render racing the
+  // effect below, or StrictMode double-invoking) — commit exactly once.
+  const completedRef = useRef(false);
 
   const current = queue[0];
   const theme = current ? SUBJECT_THEME[current.subject.type] : null;
+
+  useEffect(() => {
+    if (queue.length === 0 && !completedRef.current) {
+      completedRef.current = true;
+      onComplete(answers);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue.length]);
 
   if (!current) {
     return null;
@@ -60,13 +71,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
     setInput("");
     setFeedback(null);
     setJustWrong(false);
-    setQueue((prev) => {
-      const rest = prev.slice(1);
-      if (rest.length === 0) {
-        onComplete(nextAnswers);
-      }
-      return rest;
-    });
+    setQueue((prev) => prev.slice(1));
   }
 
   function submit() {
