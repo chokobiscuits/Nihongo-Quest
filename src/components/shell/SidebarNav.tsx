@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { RankBadge } from "@/components/rank/RankBadge";
 import { SUBJECT_THEME } from "@/components/subject/theme";
+import { typeToSlug } from "@/components/subject/typeSlug";
 import { SubjectType } from "@/generated/prisma/enums";
 import type { Rank } from "@/services/xp/rank";
 import type { MasteryTier } from "@/services/xp/mastery";
@@ -27,14 +28,20 @@ import {
 /// Maps a nav href to the SubjectType whose theme color it should borrow
 /// when active. Non-subject routes (dashboard, reviews, ...) fall back to
 /// the brand color.
-const NAV_THEME_BY_HREF: Partial<Record<string, SubjectType>> = {
-  "/subjects/RADICAL": SubjectType.RADICAL,
-  "/subjects/KANJI": SubjectType.KANJI,
-  "/subjects/VOCAB": SubjectType.VOCAB,
-  "/subjects/GRAMMAR": SubjectType.GRAMMAR,
-  "/subjects/SENTENCE": SubjectType.SENTENCE,
-  "/subjects/READING": SubjectType.READING,
-};
+/// Derived from typeToSlug rather than written out, so nav hrefs cannot
+/// drift from the routes again — they previously used the raw enum name
+/// ("/subjects/RADICAL") while the route expects a slug, 404ing every
+/// Learn link.
+const NAV_THEME_BY_HREF: Partial<Record<string, SubjectType>> = Object.fromEntries(
+  [
+    SubjectType.RADICAL,
+    SubjectType.KANJI,
+    SubjectType.VOCAB,
+    SubjectType.GRAMMAR,
+    SubjectType.SENTENCE,
+    SubjectType.READING,
+  ].map((t) => [`/subjects/${typeToSlug(t)}`, t]),
+);
 
 interface NavItem {
   href: string;
@@ -55,12 +62,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     caption: "Learn",
     items: [
-      { href: "/subjects/RADICAL", labelEn: "Radicals", labelJa: "部首", Icon: RadicalIcon },
-      { href: "/subjects/KANJI", labelEn: "Kanji", labelJa: "漢字", Icon: KanjiIcon },
-      { href: "/subjects/VOCAB", labelEn: "Vocabulary", labelJa: "語彙", Icon: VocabIcon },
-      { href: "/subjects/GRAMMAR", labelEn: "Grammar", labelJa: "文法", Icon: GrammarIcon },
-      { href: "/subjects/SENTENCE", labelEn: "Sentences", labelJa: "例文", Icon: SentenceIcon },
-      { href: "/subjects/READING", labelEn: "Text Readings", labelJa: "読解", Icon: ReadingIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.RADICAL)}`, labelEn: "Radicals", labelJa: "部首", Icon: RadicalIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.KANJI)}`, labelEn: "Kanji", labelJa: "漢字", Icon: KanjiIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.VOCAB)}`, labelEn: "Vocabulary", labelJa: "語彙", Icon: VocabIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.GRAMMAR)}`, labelEn: "Grammar", labelJa: "文法", Icon: GrammarIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.SENTENCE)}`, labelEn: "Sentences", labelJa: "例文", Icon: SentenceIcon },
+      { href: `/subjects/${typeToSlug(SubjectType.READING)}`, labelEn: "Text Readings", labelJa: "読解", Icon: ReadingIcon },
     ],
   },
   {
