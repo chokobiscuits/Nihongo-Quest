@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { DashboardContinueCard } from "@/server/queries/dashboard";
+import { typeToSlug } from "@/components/subject/typeSlug";
 import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useMountedFraction } from "@/hooks/useMountedFraction";
@@ -98,7 +99,7 @@ function ContinueLearningCard({
 
   return (
     <Link
-      href={`/subjects/${card.type}`}
+      href={`/subjects/${typeToSlug(card.type)}`}
       className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
       style={{
         background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,

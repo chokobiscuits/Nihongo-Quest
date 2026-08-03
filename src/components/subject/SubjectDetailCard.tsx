@@ -1,36 +1,31 @@
 import Link from "next/link";
-import { SUBJECT_THEME } from "@/components/subject/theme";
+import { SUBJECT_THEME } from "./theme";
+import { typeToSlug } from "./typeSlug";
 import { FuriganaText } from "@/components/furigana/FuriganaText";
 import { renderFurigana } from "@/services/furigana/render";
 import { MnemonicEditor } from "@/components/mnemonic/MnemonicEditor";
-import { SectionPanel } from "./SectionPanel";
-import type { LessonComponentSummary, LessonSubject } from "@/server/queries/lessons";
-import { typeToSlug } from "@/components/subject/typeSlug";
+import { AcceptedMeaningsEditor } from "@/components/mnemonic/AcceptedMeaningsEditor";
+import { SectionPanel } from "@/components/lessons/SectionPanel";
+import { SrsStageChip } from "@/components/srs/SrsStageChip";
+import { stageInfo } from "@/services/srs/stages";
+import type { SubjectDetail } from "@/server/queries/subjects";
+import type { LessonComponentSummary } from "@/server/queries/lessons";
 import { cn } from "@/lib/utils";
 
-export interface LessonTeachCardProps {
-  subject: LessonSubject;
-  /// 1-indexed position within the current lesson batch.
-  position?: number;
-  batchSize?: number;
+export interface SubjectDetailCardProps {
+  subject: SubjectDetail;
   className?: string;
 }
 
-function readingsByType(readings: LessonSubject["readings"], type: string) {
+function readingsByType(readings: SubjectDetail["readings"], type: string) {
   return readings.filter((r) => r.type === type);
 }
 
-function subjectHref(type: LessonComponentSummary["type"], slug: string) {
-  return `/subjects/${typeToSlug(type)}/${slug}`;
-}
-
-/// Kanji glyph chip: glyph + gloss, used for a KANJI's radicals, a VOCAB's
-/// kanji, and a KANJI's example vocab.
 function ComponentChip({ component }: { component: LessonComponentSummary }) {
   const childTheme = SUBJECT_THEME[component.type];
   return (
     <Link
-      href={subjectHref(component.type, component.slug)}
+      href={`/subjects/${typeToSlug(component.type)}/${component.slug}`}
       className="flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-chip)] border border-line bg-surface px-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
     >
       <span lang="ja" className="subject-glyph text-h2" style={{ color: childTheme.text }}>
@@ -46,64 +41,32 @@ function ComponentChip({ component }: { component: LessonComponentSummary }) {
   );
 }
 
-/// Glyph-only square chip for a radical's "found in kanji" list — dozens of
-/// these can appear per radical, so no gloss, small footprint.
-function GlyphOnlyChip({ component }: { component: LessonComponentSummary }) {
-  const childTheme = SUBJECT_THEME[component.type];
-  return (
-    <Link
-      href={subjectHref(component.type, component.slug)}
-      title={component.meaning ?? component.slug}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-tile)] border border-line bg-surface hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-    >
-      <span lang="ja" className="subject-glyph text-h2" style={{ color: childTheme.text }}>
-        {component.characters}
-      </span>
-    </Link>
-  );
+function formatDueAt(dueAt: Date | null): string {
+  if (!dueAt) return "—";
+  const diffMs = dueAt.getTime() - Date.now();
+  if (diffMs <= 0) return "Due now";
+  const hours = Math.round(diffMs / (60 * 60 * 1000));
+  if (hours < 24) return `In ${hours}h`;
+  return `In ${Math.round(hours / 24)}d`;
 }
 
-/// Scrollable chip tray capped at ~4 rows tall, with a bottom fade mask that
-/// only shows while there's more to scroll to.
-function ChipTray({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative">
-      <div className="flex max-h-[168px] flex-wrap gap-2 overflow-y-auto overscroll-contain pr-1">
-        {children}
-      </div>
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-6"
-        style={{
-          background: "linear-gradient(to top, var(--color-surface-2), transparent)",
-        }}
-      />
-    </div>
-  );
-}
-
-/// Teach screen for one lesson item: glyph header, meanings/readings,
-/// component breakdown, and mnemonic slots.
-export function LessonTeachCard({ subject, position, batchSize, className }: LessonTeachCardProps) {
+/// Full detail view for one subject: glyph header, meanings/readings,
+/// component relations, SRS state, and the mnemonic + synonym editors.
+/// Reuses `LessonTeachCard`'s presentation patterns.
+export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps) {
   const theme = SUBJECT_THEME[subject.type];
   const onyomi = readingsByType(subject.readings, "onyomi");
   const kunyomi = readingsByType(subject.readings, "kunyomi");
   const kana = readingsByType(subject.readings, "kana");
 
   const furiganaRender =
-    subject.type === "VOCAB" && subject.furigana
-      ? renderFurigana(subject.furigana, true)
-      : null;
+    subject.type === "VOCAB" && subject.furigana ? renderFurigana(subject.furigana, true) : null;
 
   const primaryMeaning = subject.meanings.find((m) => m.primary) ?? subject.meanings[0];
   const alternateMeanings = subject.meanings.filter((m) => m !== primaryMeaning).map((m) => m.meaning);
 
   const componentsLabel =
-    subject.type === "KANJI"
-      ? "Radicals in this kanji"
-      : subject.type === "RADICAL"
-        ? "Found in kanji"
-        : "Kanji used";
+    subject.type === "KANJI" ? "Radicals in this kanji" : subject.type === "RADICAL" ? "Found in kanji" : "Kanji used";
 
   const radicalFoundInKanji = subject.type === "RADICAL" ? subject.usedIn : [];
   const exampleVocab = subject.type === "KANJI" ? subject.usedIn : [];
@@ -124,14 +87,12 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
           lang="en"
         >
           {theme.labelEn}
+          {subject.level !== null && ` · Level ${subject.level}`}
         </span>
 
-        {position !== undefined && batchSize !== undefined && (
-          <span
-            className="absolute right-4 top-3 text-micro"
-            style={{ color: "var(--color-text-dim)" }}
-          >
-            {position} / {batchSize}
+        {subject.srs && (
+          <span className="absolute right-4 top-3">
+            <SrsStageChip stage={subject.srs.stage} />
           </span>
         )}
 
@@ -160,9 +121,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
         {primaryMeaning && subject.type !== "RADICAL" && (
           <section className="flex flex-col gap-1">
             <p className="text-h2 font-semibold text-text">{primaryMeaning.meaning}</p>
-            {alternateMeanings.length > 0 && (
-              <p className="text-sub text-text-dim">{alternateMeanings.join(", ")}</p>
-            )}
+            {alternateMeanings.length > 0 && <p className="text-sub text-text-dim">{alternateMeanings.join(", ")}</p>}
           </section>
         )}
 
@@ -210,10 +169,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
         {subject.type === "VOCAB" && subject.partsOfSpeech.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {subject.partsOfSpeech.map((pos) => (
-              <span
-                key={pos}
-                className="rounded-[var(--radius-chip)] bg-surface-3 px-2.5 py-1 text-caption text-text-muted"
-              >
+              <span key={pos} className="rounded-[var(--radius-chip)] bg-surface-3 px-2.5 py-1 text-caption text-text-muted">
                 {pos}
               </span>
             ))}
@@ -222,41 +178,60 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
 
         {subject.componentsOf.length > 0 && (
           <SectionPanel label={componentsLabel} count={subject.componentsOf.length} labelColor={theme.base}>
-            <ChipTray>
+            <div className="flex flex-wrap gap-2">
               {subject.componentsOf.map((c) => (
                 <ComponentChip key={c.id} component={c} />
               ))}
-            </ChipTray>
+            </div>
           </SectionPanel>
         )}
 
         {radicalFoundInKanji.length > 0 && (
           <SectionPanel
             label={componentsLabel}
-            countLabel={
-              subject.usedInTotal > radicalFoundInKanji.length
-                ? `${radicalFoundInKanji.length} of ${subject.usedInTotal}`
-                : `${radicalFoundInKanji.length}`
-            }
+            countLabel={subject.usedInTotal > radicalFoundInKanji.length ? `${radicalFoundInKanji.length} of ${subject.usedInTotal}` : `${radicalFoundInKanji.length}`}
             labelColor={theme.base}
           >
-            <ChipTray>
+            <div className="flex flex-wrap gap-2">
               {radicalFoundInKanji.map((c) => (
-                <GlyphOnlyChip key={c.id} component={c} />
+                <ComponentChip key={c.id} component={c} />
               ))}
-            </ChipTray>
+            </div>
           </SectionPanel>
         )}
 
         {exampleVocab.length > 0 && (
           <SectionPanel label="Example vocab" count={exampleVocab.length} labelColor={theme.base}>
-            <ChipTray>
+            <div className="flex flex-wrap gap-2">
               {exampleVocab.map((c) => (
                 <ComponentChip key={c.id} component={c} />
               ))}
-            </ChipTray>
+            </div>
           </SectionPanel>
         )}
+
+        <SectionPanel label="Your progress" labelColor={theme.base}>
+          {subject.srs ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Stage" value={stageInfo(subject.srs.stage).name} />
+              <Stat label="Next review" value={formatDueAt(subject.srs.dueAt)} />
+              <Stat
+                label="Meaning"
+                value={`${subject.srs.meaningCorrect} / ${subject.srs.meaningCorrect + subject.srs.meaningIncorrect}`}
+              />
+              {subject.type !== "RADICAL" && (
+                <Stat
+                  label="Reading"
+                  value={`${subject.srs.readingCorrect} / ${subject.srs.readingCorrect + subject.srs.readingIncorrect}`}
+                />
+              )}
+              <Stat label="Mastery level" value={String(subject.srs.masteryLevel)} />
+              <Stat label="Mastery XP" value={String(subject.srs.masteryXp)} />
+            </div>
+          ) : (
+            <p className="text-caption text-text-dim">Not yet in your SRS.</p>
+          )}
+        </SectionPanel>
 
         <div className="flex flex-col gap-3 border-t border-line pt-4">
           <span className="text-micro text-text-faint" lang="en">
@@ -280,8 +255,20 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
               accentColor={theme.base}
             />
           )}
+          <AcceptedMeaningsEditor subjectId={subject.id} value={subject.acceptedMeanings} accentColor={theme.base} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-micro text-text-faint" lang="en">
+        {label}
+      </span>
+      <span className="text-body font-medium text-text tabular-nums">{value}</span>
     </div>
   );
 }
