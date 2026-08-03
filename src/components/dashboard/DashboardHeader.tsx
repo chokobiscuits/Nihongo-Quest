@@ -10,6 +10,7 @@ import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface DashboardHeaderProps {
   displayName: string;
+  avatarUrl?: string | null;
   accountLevel: number;
   currentStreak: number;
   masteryTier: MasteryTier;
@@ -24,6 +25,7 @@ export interface DashboardHeaderProps {
 /// actually made progress.
 export function DashboardHeader({
   displayName,
+  avatarUrl,
   accountLevel,
   currentStreak,
   masteryTier,
@@ -50,6 +52,7 @@ export function DashboardHeader({
       <div className="flex items-center gap-3">
         <div
           className="h-14 w-14 shrink-0 rounded-full border-2 border-line-strong bg-surface-3 bg-cover bg-center"
+          style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
           aria-hidden
         />
         <div className="flex flex-col gap-0.5">

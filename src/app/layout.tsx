@@ -60,6 +60,7 @@ export default async function RootLayout({
         <AppShell
           user={{
             name: profile.displayName,
+            avatarUrl: profile.avatarPath ? `/uploads/${profile.avatarPath}` : null,
             masteryTier: tier,
             rank,
           }}

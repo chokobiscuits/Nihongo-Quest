@@ -67,6 +67,7 @@ export interface DashboardAchievement {
 
 export interface DashboardData {
   displayName: string;
+  avatarUrl: string | null;
   accountLevel: number;
   totalXp: number;
   xpForCurrentLevel: number;
@@ -177,6 +178,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 
   return {
     displayName: profile.displayName,
+    avatarUrl: profile.avatarPath ? `/uploads/${profile.avatarPath}` : null,
     accountLevel: profile.accountLevel,
     totalXp: Number(profile.totalXp),
     xpForCurrentLevel: totalXpToReach(profile.accountLevel + 1),

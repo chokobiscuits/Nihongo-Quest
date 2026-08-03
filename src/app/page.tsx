@@ -22,6 +22,7 @@ export default async function HomePage() {
       <div className="flex min-w-0 flex-col gap-4">
         <DashboardHeader
           displayName={dashboard.displayName}
+          avatarUrl={dashboard.avatarUrl}
           accountLevel={dashboard.accountLevel}
           currentStreak={dashboard.currentStreak}
           masteryTier={dashboard.masteryTier}

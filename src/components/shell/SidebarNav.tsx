@@ -81,7 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 export interface SidebarNavUser {
   name: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   masteryTier: MasteryTier;
   rank: Rank;
 }
@@ -196,12 +196,17 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
 
       <div className="border-t border-line p-3 flex justify-center lg:block">
         <div
-          className="h-9 w-9 rounded-full bg-surface-3 lg:hidden"
+          className="h-9 w-9 rounded-full bg-surface-3 bg-cover bg-center lg:hidden"
+          style={user.avatarUrl ? { backgroundImage: `url(${user.avatarUrl})` } : undefined}
           title={user.name}
           aria-label={user.name}
         />
         <div className="hidden lg:flex items-center gap-3 rounded-[var(--radius-tile)] bg-surface-2 p-2.5">
-          <div className="h-9 w-9 shrink-0 rounded-full bg-surface-3" aria-hidden />
+          <div
+            className="h-9 w-9 shrink-0 rounded-full bg-surface-3 bg-cover bg-center"
+            style={user.avatarUrl ? { backgroundImage: `url(${user.avatarUrl})` } : undefined}
+            aria-hidden
+          />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-sub font-medium text-text">{user.name}</span>
             <span className="truncate text-micro text-text-faint">
