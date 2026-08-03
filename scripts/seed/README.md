@@ -22,7 +22,15 @@ committed.
 is not re-downloaded, so re-running after an interruption doesn't re-pull the
 ~13MB+ of gzip/zip. JmdictFurigana and KanjiVG ship as versioned GitHub
 release assets, so those two are resolved via the GitHub Releases API rather
-than a fixed URL.
+than a fixed URL. The three Tatoeba sources ship bz2 (and one tar.bz2);
+`download.ts` decompresses them in-process via `unbzip2-stream` and
+`tar-stream` (both pure JS, no shell-out to a `bzip2` binary, so this runs on
+Windows) and writes the already-decompressed `.tsv`/extracted files to
+`data/raw/` — `jpn_sentences.tsv`, `jpn-eng_links.tsv`, and `jpn_indices`
+(the tarball's single entry, `jpn_indices.csv`, written without the `.csv`
+extension to match the upstream filename convention used elsewhere in this
+pipeline). Checksums are recorded against the decompressed content, same as
+every other source.
 
 **transform.ts** reads `data/raw/`, calls the pure parsers in `lib/`, joins
 them, assigns curriculum levels, and writes:
@@ -59,6 +67,9 @@ running it twice produces the same rows, not duplicates.
 | Kangxi 214 radicals | Hand-encoded in `lib/kangxi-radicals.ts`; canonical forms per Unicode's Kangxi Radicals block (U+2F00-U+2FD5), names/readings the conventional glosses used by every major kanji dictionary, cross-checked against Kanji Alive's CSV | Public domain (300-year-old standard) | The 214-radical `Subject` set: number, name, stroke count, variant forms |
 | Kanji Alive | `kanjialive/kanji-data-media`, `language-data/japanese-radicals.csv` | CC BY 4.0 | Cross-check only for romaji/variant spellings while hand-encoding the Kangxi list; not joined into seeded data (see note below) |
 | davidluzgouveia/kanji-data | GitHub, `kanji.json` | MIT | Modern N5-N1 JLPT levels (`jlpt_new` field) |
+| Tatoeba sentences | `https://downloads.tatoeba.org/exports/per_language/jpn/jpn_sentences.tsv.bz2` | CC BY 2.0 FR | Example sentences (id, lang, text) — parsed by `lib/tatoeba-sentences.ts`, not yet joined into seeded data (sentence subjects are a later phase) |
+| Tatoeba jpn-eng links | `https://downloads.tatoeba.org/exports/per_language/jpn/jpn-eng_links.tsv.bz2` | CC BY 2.0 FR | Japanese-to-English sentence pair links |
+| Tatoeba indices (Tanaka Corpus) | `https://downloads.tatoeba.org/exports/jpn_indices.tar.bz2` | CC BY 2.0 FR | Per-sentence word index tying sentences to the words they exemplify — parsed by `lib/tatoeba-indices.ts` |
 
 Every source above gets a `DataSource` row via `lib/data-sources.ts`, which
 powers the required `/about` attribution screen. `versionDate` records when
@@ -220,6 +231,63 @@ cap but are never preferentially dropped over less-common `nfXX`-ranked ones.
 
 Sentences and grammar subjects are out of scope for this task and are not
 seeded.
+
+**Tatoeba parsers, verified against the real downloaded files (not just unit
+fixtures), 2026-08-02:**
+
+- `jpn_sentences.tsv`: 248,837 rows parsed, all `lang = jpn` (this export is
+  already Japanese-only, unlike JMdict/KANJIDIC2's multi-language shape)
+- `jpn_indices`: 149,857 index lines parsed, 1,178,493 tokens total, **0
+  skipped as malformed**
+- 32,264 tokens (2.7%) carry the `~` good-example marker
+- 148,608 distinct sentence ids appear across the indices (fewer than the
+  149,857 lines, since not all lines have equal sentence/meaning ids, and not
+  all indexed sentences are 1:1 with meanings)
+
+Sample parsed sentences:
+```
+[1297] きみにちょっとしたものをもってきたよ。
+[4702] 何かしてみましょう。
+[4703] 私は眠らなければなりません。
+```
+
+Sample fully parsed real token lines (eyeballed against the grammar above):
+```json
+{"sentenceId":"4707","meaningId":"1282","tokens":[{"headword":"は","isGoodExample":false},{"headword":"二十歳","reading":"はたち","surface":"２０歳","isGoodExample":false},{"headword":"になる","senseIndex":1,"surface":"になりました","isGoodExample":false}]}
+{"sentenceId":"4858","meaningId":"1442","tokens":[{"headword":"ログアウト","isGoodExample":true},{"headword":"為る","reading":"する","surface":"する","isGoodExample":false},{"headword":"ん","senseIndex":3,"isGoodExample":false},{"headword":"だ","surface":"じゃなかった","isGoodExample":false},{"headword":"よ","senseIndex":1,"isGoodExample":false}]}
+```
+
+## Tatoeba sentence parsers (`lib/tatoeba-sentences.ts`, `lib/tatoeba-indices.ts`)
+
+Sentences and grammar subjects are still out of scope for seeding (see
+Results below) — these two parsers exist as a standalone, de-risked phase so
+the Tanaka Corpus index format is proven against the real file before any
+transform/load code depends on it.
+
+**`jpn_sentences.tsv`** — `id \t lang \t text` per line. Split on tab only;
+this must never go through a CSV reader, since `text` can itself contain
+quote characters that a quote-aware reader would misinterpret.
+
+**`jpn_indices`** — `sentence_id \t meaning_id \t tokens` per line, tokens
+space-separated. Each token is a headword with every part after it optional:
+
+```
+彼(かれ)[01]{彼の}~
+```
+
+- `headword` — always present; joins to JMdict by kanji or kana form
+- `(reading)` — optional disambiguating reading
+- `[NN]` — optional JMdict sense number
+- `{surface}` — optional inflected form as it literally appears in the sentence
+- trailing `~` — optional marker meaning the original annotators considered
+  this sentence a good example of the word
+
+Malformed tokens (i.e. not matching this grammar, or with a non-numeric sense
+index) are skipped and counted rather than thrown or silently dropped —
+`parseTatoebaIndices` returns `{ lines, skippedTokens }`. Verified against the
+real downloaded file: `skippedTokens` was 0 across 1,178,493 real tokens (see
+Results below), so the grammar as documented above matches the live corpus
+with no observed exceptions.
 
 ## Testing
 

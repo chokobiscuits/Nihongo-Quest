@@ -9,6 +9,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { finished } from "node:stream/promises";
+import * as tar from "tar-stream";
+import unbzip2Stream from "unbzip2-stream";
 
 const RAW_DIR = path.resolve(__dirname, "../../data/raw");
 const CHECKSUM_FILE = path.join(RAW_DIR, ".checksums.json");
@@ -33,6 +37,30 @@ const DIRECT_SOURCES: Source[] = [
     filename: "kanji-data.json",
   },
 ];
+
+// Tatoeba example-sentence sources. Unlike DIRECT_SOURCES these ship bz2 (and
+// one tar.bz2), which download.ts decompresses itself (see
+// downloadBz2/downloadTarBz2 below) so data/raw/ always holds plain files the
+// parsers can read directly, matching the gz/zip sources transform.ts already
+// unwraps.
+const TATOEBA_SOURCES: Source[] = [
+  {
+    key: "tatoeba_sentences",
+    url: "https://downloads.tatoeba.org/exports/per_language/jpn/jpn_sentences.tsv.bz2",
+    filename: "jpn_sentences.tsv",
+  },
+  {
+    key: "tatoeba_jpn_eng_links",
+    url: "https://downloads.tatoeba.org/exports/per_language/jpn/jpn-eng_links.tsv.bz2",
+    filename: "jpn-eng_links.tsv",
+  },
+];
+
+const TATOEBA_INDICES: Source = {
+  key: "tatoeba_indices",
+  url: "https://downloads.tatoeba.org/exports/jpn_indices.tar.bz2",
+  filename: "jpn_indices.tar.bz2",
+};
 
 type ChecksumMap = Record<string, string>;
 
@@ -94,6 +122,93 @@ async function downloadOne(key: string, url: string, filename: string, checksums
   console.log(`[done] ${key}: wrote ${filename} (${buffer.length} bytes, sha256 ${checksum.slice(0, 12)}...)`);
 }
 
+/// Decompresses a bz2 buffer in-process via `unbzip2-stream` — no shell-out
+/// to an external `bzip2` binary, so this works on Windows too.
+async function bunzip2(buffer: Buffer): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  const decompressor = unbzip2Stream();
+  decompressor.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const source = Readable.from(buffer);
+  source.pipe(decompressor);
+  await finished(decompressor);
+  return Buffer.concat(chunks);
+}
+
+/// Downloads a bz2-compressed source and writes the decompressed bytes to
+/// `filename`, cached by the checksum of the decompressed content (same
+/// scheme as downloadOne, just with a decompression step in between).
+async function downloadBz2(key: string, url: string, filename: string, checksums: ChecksumMap): Promise<void> {
+  const dest = path.join(RAW_DIR, filename);
+  const existingChecksum = checksums[key];
+
+  if (existingChecksum && existsSync(dest)) {
+    console.log(`[skip] ${key}: ${filename} already downloaded (sha256 ${existingChecksum.slice(0, 12)}...)`);
+    return;
+  }
+
+  console.log(`[fetch] ${key}: ${url}`);
+  const compressed = await downloadFile(url);
+  const buffer = await bunzip2(compressed);
+  const checksum = sha256(buffer);
+  writeFileSync(dest, buffer);
+  checksums[key] = checksum;
+  console.log(`[done] ${key}: wrote ${filename} (${buffer.length} bytes, sha256 ${checksum.slice(0, 12)}...)`);
+}
+
+/// Downloads jpn_indices.tar.bz2 and extracts its single entry (jpn_indices)
+/// to data/raw/jpn_indices, cached by the checksum of the extracted content.
+async function downloadTarBz2Entry(
+  key: string,
+  url: string,
+  outputFilename: string,
+  checksums: ChecksumMap,
+): Promise<void> {
+  const dest = path.join(RAW_DIR, outputFilename);
+  const existingChecksum = checksums[key];
+
+  if (existingChecksum && existsSync(dest)) {
+    console.log(`[skip] ${key}: ${outputFilename} already downloaded (sha256 ${existingChecksum.slice(0, 12)}...)`);
+    return;
+  }
+
+  console.log(`[fetch] ${key}: ${url}`);
+  const compressed = await downloadFile(url);
+  const tarball = await bunzip2(compressed);
+
+  const extract = tar.extract();
+  const entries: { name: string; data: Buffer }[] = [];
+
+  extract.on("entry", (header, stream, next) => {
+    const chunks: Buffer[] = [];
+    stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    stream.on("end", () => {
+      if (header.type === "file") {
+        entries.push({ name: header.name, data: Buffer.concat(chunks) });
+      }
+      next();
+    });
+    stream.resume();
+  });
+
+  const extractDone = finished(extract);
+  Readable.from(tarball).pipe(extract);
+  await extractDone;
+
+  if (entries.length === 0) {
+    throw new Error(`${key}: tarball at ${url} contained no file entries`);
+  }
+  // jpn_indices.tar.bz2 packs exactly one file; take the first (only) entry
+  // rather than matching on a specific name, since Tatoeba doesn't document
+  // one.
+  const buffer = entries[0].data;
+  const checksum = sha256(buffer);
+  writeFileSync(dest, buffer);
+  checksums[key] = checksum;
+  console.log(
+    `[done] ${key}: wrote ${outputFilename} from tar entry "${entries[0].name}" (${buffer.length} bytes, sha256 ${checksum.slice(0, 12)}...)`,
+  );
+}
+
 async function main() {
   mkdirSync(RAW_DIR, { recursive: true });
   const checksums = loadChecksums();
@@ -123,6 +238,13 @@ async function main() {
     "kanjialive-radicals.csv",
     checksums,
   );
+  saveChecksums(checksums);
+
+  for (const source of TATOEBA_SOURCES) {
+    await downloadBz2(source.key, source.url, source.filename, checksums);
+    saveChecksums(checksums);
+  }
+  await downloadTarBz2Entry(TATOEBA_INDICES.key, TATOEBA_INDICES.url, "jpn_indices", checksums);
   saveChecksums(checksums);
 
   console.log("\nAll sources downloaded to data/raw/. Run `npm run seed:transform` next.");
