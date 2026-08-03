@@ -17,12 +17,16 @@ import { parseJlptSource } from "./lib/jlpt-source";
 import { parseKanjiAliveRadicals } from "./lib/kanji-alive-parser";
 import { parseJmdictFuriganaJson } from "./lib/jmdict-furigana-parser";
 import { buildFuriganaIndex, jmdictFormPairs, lookupFurigana } from "./lib/furigana-join";
-import { assignLevels, type LevelInput } from "./lib/level-heuristic";
+import { assignLevels, assignSentenceLevels, type LevelInput, type SentenceLevelInput } from "./lib/level-heuristic";
 import { baseSlug, dedupeSlug } from "./lib/slug";
 import { DATA_SOURCES } from "./lib/data-sources";
 import { KANGXI_RADICALS } from "./lib/kangxi-radicals";
 import { buildKangxiResolver, radicalSlugName } from "./lib/kangxi-resolver";
-import type { ComponentRecord, MeaningEntry, ReadingEntry, SubjectRecord } from "./lib/types";
+import { parseTatoebaSentences } from "./lib/tatoeba-sentences";
+import { parseTatoebaIndices } from "./lib/tatoeba-indices";
+import { parseTatoebaLinks } from "./lib/tatoeba-links";
+import { locateTokens, spliceSentenceFurigana } from "./lib/sentence-transform";
+import type { ComponentRecord, FuriganaSegment, MeaningEntry, ReadingEntry, SubjectRecord } from "./lib/types";
 
 const RAW_DIR = path.resolve(__dirname, "../../data/raw");
 const OUT_DIR = path.resolve(__dirname, "../../data/processed");
@@ -32,6 +36,14 @@ const OUT_DIR = path.resolve(__dirname, "../../data/processed");
 // seeded vocab in the low thousands rather than JMdict's full ~200k.
 const VOCAB_TARGET_MIN = 6000;
 const VOCAB_TARGET_MAX = 10000;
+
+// Sentence selection target. We do not seed all ~150k Tatoeba sentences —
+// only good-example sentences whose every token resolves to a seeded VOCAB
+// subject and that carry an English translation. This band is a target for
+// reporting only (selection is a hard filter, not trimmed to fit); see the
+// funnel logged at the end of main().
+const SENTENCE_TARGET_MIN = 3000;
+const SENTENCE_TARGET_MAX = 5000;
 
 function readGz(filename: string): string {
   return gunzipSync(readFileSync(path.join(RAW_DIR, filename))).toString("utf-8");
@@ -323,13 +335,23 @@ async function main() {
     );
   }
 
+  // Kanji forms with zero priority tags (no ke_pri at all) are JMdict's rare/
+  // search-only variant spellings (e.g. の's 乃/之 — real but essentially
+  // never written), not forms this pipeline should treat as "the" kanji form
+  // of the entry. Restricting to prioritized forms keeps particles like の
+  // correctly recognized as kana-primary instead of being excluded entirely
+  // because an obscure variant kanji isn't in the seeded kanji set.
+  function primaryEligibleKanjiForms(entry: JMdictEntry): JMdictEntry["kanji"] {
+    const prioritized = entry.kanji.filter((k) => k.priorities.length > 0);
+    return prioritized.length > 0 ? prioritized : entry.kanji.length > 0 ? [] : entry.kanji;
+  }
+
   function entryKanjiAllSeeded(entry: JMdictEntry): boolean {
-    if (entry.kanji.length === 0) return true; // kana-only vocab has no kanji dependency
+    const forms = primaryEligibleKanjiForms(entry);
+    if (forms.length === 0) return true; // kana-only (or only-unprioritized-kanji) vocab has no kanji dependency
     // Every kanji form must consist entirely of seeded kanji characters
     // (non-kanji characters in a form, e.g. okurigana kana, are ignored).
-    return entry.kanji.every((k) =>
-      [...k.text].every((ch) => !isKanjiChar(ch) || seededKanjiChars.has(ch)),
-    );
+    return forms.every((k) => [...k.text].every((ch) => !isKanjiChar(ch) || seededKanjiChars.has(ch)));
   }
 
   const candidateVocab = jmdictEntries.filter((e) => entryIsCommon(e) && entryKanjiAllSeeded(e));
@@ -339,7 +361,28 @@ async function main() {
   // the most common entries first; entries without an nfXX bucket sort last
   // but still ahead of being dropped, since isCommonPriority already
   // guarantees some priority signal exists.
+  //
+  // EXCEPTION: entries tagged spec1/spec2 — JMdict's own "the frequency
+  // list doesn't cover this, but it's obviously essential" marker, which is
+  // exactly the (small, ~dozens-of-entries) bucket the core particles は/
+  // の/を/が/で/と/か and copulas だ/です live in — never carry an nfXX
+  // sub-rank, so the plain `?? 999` fallback below sorted them dead last
+  // among ~20k nf-ranked nouns and dropped them from the 10k cap entirely.
+  // That in turn made whole-sentence resolution (phase 2's sentence
+  // transform, which requires every token in a candidate sentence to
+  // resolve to seeded vocab) nearly impossible, since virtually every
+  // sentence uses a particle. Boosting the full news1/ichi1/gai1-tagged-
+  // but-unranked population (~7.5k entries, not just spec1/spec2) was
+  // tried and reverted: it starves the nf-ranked tier's own top of common
+  // nouns/verbs (見る, 来る, 良い...) enough to crater furigana coverage and
+  // net *fewer* resolvable sentences, not more — most nfXX-ranked entries
+  // are themselves also news1/ichi1-tagged, so a blanket tag boost mostly
+  // just reorders ties rather than rescuing anything. spec1/spec2 is kept
+  // narrow and targeted at true grammar words specifically.
   candidateVocab.sort((a, b) => {
+    const specA = hasSpecPriority(a);
+    const specB = hasSpecPriority(b);
+    if (specA !== specB) return specA ? -1 : 1;
     const rankA = bestNfBucket(a);
     const rankB = bestNfBucket(b);
     return (rankA ?? 999) - (rankB ?? 999);
@@ -348,7 +391,13 @@ async function main() {
     candidateVocab.length > VOCAB_TARGET_MAX ? candidateVocab.slice(0, VOCAB_TARGET_MAX) : candidateVocab;
 
   for (const entry of selectedVocab) {
-    const primaryKanji = entry.kanji[0]?.text ?? null;
+    // Prefer a prioritized (actually-common-in-writing) kanji form, same
+    // eligibility rule as entryKanjiAllSeeded above, so an entry whose only
+    // kanji forms are rare/search-only spellings (ke_pri-less, e.g. の's 乃)
+    // is treated as kana-primary rather than surfacing that obscure form as
+    // "the" characters for the subject.
+    const eligibleKanji = primaryEligibleKanjiForms(entry);
+    const primaryKanji = eligibleKanji[0]?.text ?? null;
     const primaryReading = entry.readings[0]?.text ?? entry.kanji[0]?.text ?? "";
     const characters = primaryKanji ?? primaryReading;
     const tempId = `vocab-${entry.entSeq}`;
@@ -365,7 +414,13 @@ async function main() {
     }));
 
     const pairs = jmdictFormPairs(entry);
-    const primaryPair = pairs.find((p) => p.text === characters) ?? pairs[0];
+    // Only fall back to an arbitrary pair when `characters` itself is a
+    // kanji form some pair actually names — for a kana-primary entry (no
+    // prioritized kanji form, characters === primaryReading, e.g. の), the
+    // remaining pairs all belong to demoted/unprioritized kanji spellings
+    // (乃, 之) and would produce a wrong ruby if used, so skip straight to
+    // the synthesized whole-word fallback instead of pairs[0].
+    const primaryPair = pairs.find((p) => p.text === characters);
     const { furigana, fallback } = primaryPair
       ? lookupFurigana(furiganaIndex, primaryPair.text, primaryPair.reading)
       : { furigana: [{ ruby: characters, rt: primaryReading }], fallback: true };
@@ -429,11 +484,249 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
-  // Level assignment
+  // Level assignment (radicals, kanji, vocab)
   // ---------------------------------------------------------------------
   const levels = assignLevels(levelInputs);
   for (const subject of subjects) {
     subject.level = levels.get(subject.tempId) ?? null;
+  }
+
+  // ---------------------------------------------------------------------
+  // SENTENCE subjects, built from Tatoeba (see scripts/seed/lib/tatoeba-*).
+  // ---------------------------------------------------------------------
+  const sentenceFunnel = {
+    totalIndexed: 0,
+    goodExample: 0,
+    hasTranslation: 0,
+    allTokensResolved: 0,
+    selected: 0,
+  };
+
+  // Vocab lookup: headword or reading -> candidate vocab tempIds, so a
+  // token's `headword` (kanji or kana form) and optional disambiguating
+  // `reading` can resolve to the specific seeded VOCAB subject it names.
+  const vocabByCharacters = new Map<string, string[]>(); // kanji-form characters -> tempIds
+  const vocabByKanaCharacters = new Map<string, string[]>(); // kana-only vocab's characters -> tempIds
+  const vocabSubjectByTempId = new Map<string, SubjectRecord>();
+  for (const s of subjects) {
+    if (s.type !== "VOCAB") continue;
+    vocabSubjectByTempId.set(s.tempId, s);
+    if (!s.characters) continue;
+    // A vocab's `characters` is its primary kanji form when it has one,
+    // otherwise its primary kana reading (see the VOCAB-building loop
+    // above). Route headword matches accordingly: kanji-form vocab is
+    // matched by its kanji characters, kana-only vocab (particles, kana-
+    // only common words) by its own kana form — never by a kanji-form
+    // vocab's *reading*, which collides constantly across homophones (e.g.
+    // 野 and 三 both read さん/の for different words; matching a bare kana
+    // index token like の or さん against those would silently mis-resolve
+    // a particle to an unrelated content word).
+    const hasKanji = [...s.characters].some(isKanjiChar);
+    const index = hasKanji ? vocabByCharacters : vocabByKanaCharacters;
+    const list = index.get(s.characters) ?? [];
+    list.push(s.tempId);
+    index.set(s.characters, list);
+  }
+
+  /// Resolves one index token to a single seeded VOCAB tempId, or null if it
+  /// doesn't resolve. Matches the token's `headword` against a kanji-form
+  /// vocab's `characters` (optionally narrowed by `reading` when the
+  /// headword is ambiguous across multiple seeded entries sharing that
+  /// kanji form, e.g. 生物 read as either せいぶつ or なまもの), falling back
+  /// to a kana-only vocab whose own characters equal the headword. Never
+  /// matches a kana headword against a kanji-form vocab's reading — see the
+  /// comment on vocabByKanaCharacters above for why that produces wrong
+  /// matches.
+  function resolveToken(token: { headword: string; reading?: string }): string | null {
+    const byChars = vocabByCharacters.get(token.headword);
+    if (byChars && byChars.length > 0) {
+      if (byChars.length === 1) return byChars[0];
+      if (token.reading) {
+        const disambiguated = byChars.find((tempId) =>
+          vocabSubjectByTempId.get(tempId)!.readings.some((r) => r.reading === token.reading),
+        );
+        if (disambiguated) return disambiguated;
+      }
+      return byChars[0];
+    }
+    const byKana = vocabByKanaCharacters.get(token.headword);
+    if (byKana && byKana.length > 0) return byKana[0];
+    // The index's headword is sometimes a rare/archaic kanji spelling
+    // (為る, 此の, 彼, ...) that our seeded vocab set never surfaces as
+    // `characters` (see primaryEligibleKanjiForms above — an unprioritized
+    // kanji form never becomes a vocab's primary characters), while the
+    // token's own disambiguating `reading` names the modern/common kana
+    // form directly (為る(する) -> する). Try the reading itself as a kana
+    // headword before giving up.
+    if (token.reading) {
+      const byReadingAsKana = vocabByKanaCharacters.get(token.reading);
+      if (byReadingAsKana && byReadingAsKana.length > 0) return byReadingAsKana[0];
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------- Tatoeba raw parse
+  const jpnSentenceRows = parseTatoebaSentences(readFileSync(path.join(RAW_DIR, "jpn_sentences.tsv"), "utf-8"));
+  const engSentenceRows = parseTatoebaSentences(readFileSync(path.join(RAW_DIR, "eng_sentences.tsv"), "utf-8"));
+  const links = parseTatoebaLinks(readFileSync(path.join(RAW_DIR, "jpn-eng_links.tsv"), "utf-8"));
+  const { lines: indexLines } = parseTatoebaIndices(readFileSync(path.join(RAW_DIR, "jpn_indices"), "utf-8"));
+
+  const jpnTextById = new Map(jpnSentenceRows.map((s) => [s.id, s.text]));
+  const engTextById = new Map(engSentenceRows.map((s) => [s.id, s.text]));
+  const engTranslationsByJpnId = new Map<string, string[]>();
+  for (const link of links) {
+    const engText = engTextById.get(link.targetId);
+    if (!engText) continue;
+    const list = engTranslationsByJpnId.get(link.sourceId) ?? [];
+    list.push(engText);
+    engTranslationsByJpnId.set(link.sourceId, list);
+  }
+
+  // A sentence can have multiple index lines (one per meaning id); a
+  // sentence counts as a "good example" if ANY of its index lines carries
+  // the ~ marker on any token, and its token set for resolution purposes is
+  // the union of tokens across its own index lines.
+  const indexLinesBySentenceId = new Map<string, typeof indexLines>();
+  for (const line of indexLines) {
+    const list = indexLinesBySentenceId.get(line.sentenceId) ?? [];
+    list.push(line);
+    indexLinesBySentenceId.set(line.sentenceId, list);
+  }
+  sentenceFunnel.totalIndexed = indexLinesBySentenceId.size;
+
+  interface SentenceCandidate {
+    tempId: string;
+    sentenceId: string;
+    characters: string;
+    meanings: MeaningEntry[];
+    resolvedTokens: {
+      surface: string;
+      start: number;
+      end: number;
+      vocabTempId: string;
+    }[];
+    furiganaFallback: boolean;
+    isGoodExample: boolean;
+  }
+
+  const sentenceCandidates: SentenceCandidate[] = [];
+  const usedSentenceSlugs = new Set<string>();
+
+  for (const [sentenceId, lines] of indexLinesBySentenceId) {
+    const characters = jpnTextById.get(sentenceId);
+    if (!characters) continue;
+
+    // Use the first index line's tokens (the common case is exactly one
+    // line per sentence id; where multiple meaning ids exist, later lines
+    // are alternate word-sense annotations of the same text — the first is
+    // representative for token/offset purposes).
+    const primaryLine = lines[0];
+    const isGoodExample = lines.some((l) => l.tokens.some((t) => t.isGoodExample));
+    if (!isGoodExample) continue;
+    sentenceFunnel.goodExample += 1;
+
+    const translations = engTranslationsByJpnId.get(sentenceId);
+    if (!translations || translations.length === 0) continue;
+    sentenceFunnel.hasTranslation += 1;
+
+    const located = locateTokens(characters, primaryLine.tokens);
+    const resolvedTokens: SentenceCandidate["resolvedTokens"] = [];
+    let allResolved = primaryLine.tokens.length > 0;
+    for (let i = 0; i < primaryLine.tokens.length; i += 1) {
+      const loc = located[i];
+      const token = primaryLine.tokens[i];
+      if (!loc) {
+        allResolved = false;
+        continue;
+      }
+      const vocabTempId = resolveToken(token);
+      if (!vocabTempId) {
+        allResolved = false;
+        continue;
+      }
+      resolvedTokens.push({ surface: loc.text, start: loc.start, end: loc.end, vocabTempId });
+    }
+    if (!allResolved) continue;
+    sentenceFunnel.allTokensResolved += 1;
+
+    const meanings: MeaningEntry[] = translations.map((t, i) => ({ meaning: t, primary: i === 0 }));
+
+    sentenceCandidates.push({
+      tempId: `sentence-${sentenceId}`,
+      sentenceId,
+      characters,
+      meanings,
+      resolvedTokens,
+      furiganaFallback: false, // every token resolved, per the allResolved filter above
+      isGoodExample,
+    });
+  }
+  sentenceFunnel.selected = sentenceCandidates.length;
+
+  // Build SENTENCE subjects + SubjectComponent edges for every candidate
+  // (level assignment happens after, once vocab levels are known).
+  const sentenceLevelInputs: SentenceLevelInput[] = [];
+  for (const candidate of sentenceCandidates) {
+    const spliced: FuriganaSegment[] = spliceSentenceFurigana(
+      candidate.characters,
+      candidate.resolvedTokens.map((t) => ({
+        start: t.start,
+        end: t.end,
+        furigana: vocabSubjectByTempId.get(t.vocabTempId)!.furigana ?? [
+          { ruby: t.surface, rt: undefined },
+        ],
+      })),
+    );
+
+    const dedupedVocabTempIds = [...new Set(candidate.resolvedTokens.map((t) => t.vocabTempId))];
+    for (const vocabTempId of dedupedVocabTempIds) {
+      components.push({
+        parentTempId: candidate.tempId,
+        childTempId: vocabTempId,
+        position: null,
+        isRadical: false,
+        readingUsed: null,
+      });
+    }
+
+    subjects.push({
+      tempId: candidate.tempId,
+      type: "SENTENCE",
+      level: 0, // placeholder, overwritten below once vocab levels are known
+      slug: dedupeSlug(baseSlug("sentence", candidate.sentenceId), usedSentenceSlugs),
+      characters: candidate.characters,
+      meanings: candidate.meanings,
+      readings: [],
+      jlpt: null,
+      jlptLegacy: null,
+      frequency: null,
+      metadata: {
+        tatoebaSentenceId: candidate.sentenceId,
+        isGoodExample: candidate.isGoodExample,
+        tokens: candidate.resolvedTokens.map((t) => ({
+          surface: t.surface,
+          start: t.start,
+          end: t.end,
+          vocabTempId: t.vocabTempId,
+        })),
+      },
+      furigana: spliced,
+      furiganaFallback: false,
+    });
+
+    sentenceLevelInputs.push({ tempId: candidate.tempId, vocabTempIds: dedupedVocabTempIds });
+  }
+
+  // Per-level quota cap: if selection overshoots the target band, still seed
+  // every selected sentence (the filter is a hard quality bar, not trimmed
+  // to fit) — SENTENCE_TARGET_MAX is a reporting target, not a cap. Level
+  // assignment's own per-level quota (SENTENCE_PER_LEVEL) is what keeps any
+  // one level from being swamped; sentences beyond a level's quota simply
+  // roll to the next eligible level or fall off the ladder's tail as null.
+  const sentenceLevels = assignSentenceLevels(sentenceLevelInputs, levels);
+  for (const subject of subjects) {
+    if (subject.type !== "SENTENCE") continue;
+    subject.level = sentenceLevels.get(subject.tempId) ?? null;
   }
 
   // ---------------------------------------------------------------------
@@ -446,6 +739,7 @@ async function main() {
   const radicalCount = subjects.filter((s) => s.type === "RADICAL").length;
   const kanjiCount = subjects.filter((s) => s.type === "KANJI").length;
   const vocabCount = subjects.filter((s) => s.type === "VOCAB").length;
+  const sentenceCount = subjects.filter((s) => s.type === "SENTENCE").length;
 
   console.log("\n--- Transform summary ---");
   console.log(`Radicals: ${radicalCount}`);
@@ -465,7 +759,7 @@ async function main() {
   }
 
   console.log("\n--- Level distribution ---");
-  for (const type of ["RADICAL", "KANJI", "VOCAB"] as const) {
+  for (const type of ["RADICAL", "KANJI", "VOCAB", "SENTENCE"] as const) {
     const laddered = subjects.filter((s) => s.type === type && s.level !== null);
     const unladdered = subjects.filter((s) => s.type === type && s.level === null);
     console.log(`${type}: ${laddered.length} laddered, ${unladdered.length} null`);
@@ -473,13 +767,54 @@ async function main() {
   const byLevel = new Map<number, Record<string, number>>();
   for (const s of subjects) {
     if (s.level === null) continue;
-    const row = byLevel.get(s.level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0 };
+    const row = byLevel.get(s.level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0 };
     row[s.type] += 1;
     byLevel.set(s.level, row);
   }
   for (let level = 1; level <= 60; level += 1) {
-    const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0 };
-    console.log(`  L${level}: radical=${row.RADICAL} kanji=${row.KANJI} vocab=${row.VOCAB}`);
+    const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0 };
+    console.log(`  L${level}: radical=${row.RADICAL} kanji=${row.KANJI} vocab=${row.VOCAB} sentence=${row.SENTENCE}`);
+  }
+
+  // ----------------------------------------------------------- Sentences
+  console.log("\n--- Sentence summary ---");
+  console.log(`Sentences seeded: ${sentenceCount} (target ${SENTENCE_TARGET_MIN}-${SENTENCE_TARGET_MAX})`);
+  console.log("Selection funnel:");
+  console.log(`  Distinct sentences with an index line: ${sentenceFunnel.totalIndexed}`);
+  console.log(`  ...flagged good-example (~): ${sentenceFunnel.goodExample}`);
+  console.log(`  ...with an English translation: ${sentenceFunnel.hasTranslation}`);
+  console.log(`  ...every token located+resolved to seeded vocab: ${sentenceFunnel.allTokensResolved}`);
+  console.log(`  Selected: ${sentenceFunnel.selected}`);
+
+  console.log(
+    `Selected sentences resolve 100% of their tokens by construction (the "every token resolves" filter above is the token resolution rate over candidate sentences: ${sentenceFunnel.allTokensResolved}/${sentenceFunnel.hasTranslation} good-example+translated sentences had every token resolve).`,
+  );
+
+  const sentenceSubjects = subjects.filter((s) => s.type === "SENTENCE");
+  const fullyResolvedCount = sentenceSubjects.filter((s) => !s.furiganaFallback).length;
+  const fallbackCount = sentenceSubjects.filter((s) => s.furiganaFallback).length;
+  console.log(
+    `Furigana coverage: ${fullyResolvedCount} sentences fully resolved, ${fallbackCount} furiganaFallback=true`,
+  );
+
+  // Strict invariant check: every SENTENCE's level must be strictly greater
+  // than the max level of every vocab it contains.
+  let invariantViolations = 0;
+  for (const s of sentenceSubjects) {
+    if (s.level === null) continue;
+    const tokens = s.metadata.tokens as { vocabTempId: string }[];
+    for (const t of tokens) {
+      const vocabLevel = levels.get(t.vocabTempId);
+      if (typeof vocabLevel === "number" && !(s.level > vocabLevel)) {
+        invariantViolations += 1;
+      }
+    }
+  }
+  console.log(`Strict level invariant violations (sentence level > max vocab level): ${invariantViolations}`);
+
+  console.log("\n--- Sample sentence records ---");
+  for (const s of sentenceSubjects.slice(0, 5)) {
+    console.log(JSON.stringify(s, null, 2));
   }
 }
 
@@ -494,6 +829,16 @@ function bestNfBucket(entry: JMdictEntry): number | null {
     ...entry.readings.map((r) => nfBucket(r.priorities)),
   ].filter((b): b is number => b !== null);
   return buckets.length ? Math.min(...buckets) : null;
+}
+
+/// True if any kanji or reading form carries JMdict's spec1/spec2 priority
+/// tag — see the sort comment above candidateVocab.sort for why this narrow
+/// tag (not the full news1/ichi1/gai1 set) is boosted ahead of nf rank.
+function hasSpecPriority(entry: JMdictEntry): boolean {
+  return (
+    entry.kanji.some((k) => k.priorities.includes("spec1") || k.priorities.includes("spec2")) ||
+    entry.readings.some((r) => r.priorities.includes("spec1") || r.priorities.includes("spec2"))
+  );
 }
 
 function capitalize(s: string): string {

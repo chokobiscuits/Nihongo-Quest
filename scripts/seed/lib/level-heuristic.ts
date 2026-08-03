@@ -73,6 +73,14 @@ export const NON_JLPT_FREQUENCY_CEILING = 2500;
 // Target number of vocab placed on the ladder; the rest stay level = null.
 export const VOCAB_LADDER_TARGET = VOCAB_PER_LEVEL * LEVEL_COUNT; // ~5,400
 
+// Per-level quota for SENTENCE subjects. Sentences are placed by
+// transform.ts in a third pass, after assignLevels has settled vocab levels
+// (a sentence's level must be strictly greater than the max level of every
+// vocab it contains — see strictDependsOn's doc comment above for why
+// "strict" means "no ties" throughout this pipeline). Kept modest so
+// sentences don't swamp any one level's lesson queue.
+export const SENTENCE_PER_LEVEL = 30;
+
 export interface LevelInput {
   tempId: string;
   type: SubjectType;
@@ -96,7 +104,7 @@ export interface LevelInput {
   strictDependsOn?: string[];
 }
 
-const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2 };
+const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2, SENTENCE: 3 };
 
 /// Curriculum ordering key used both to pick which kanji/vocab make the
 /// ladder and to break ties within a topological wave: JLPT band ascending
@@ -255,8 +263,12 @@ function quotaForType(type: SubjectType, level: number): number {
       return KANJI_PER_LEVEL;
     case "VOCAB":
       return VOCAB_PER_LEVEL;
+    case "SENTENCE":
+      return SENTENCE_PER_LEVEL;
   }
 }
+
+export { quotaForType };
 
 /// Places a single already-selected item at the earliest level >= minLevel
 /// with room under its type's base quota; if every level from minLevel to
@@ -388,6 +400,65 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
       levelCounts.set(key, count + 1);
       vocabPlaced += 1;
     }
+  }
+
+  return levels;
+}
+
+export interface SentenceLevelInput {
+  tempId: string;
+  /// tempIds of every VOCAB subject the sentence's tokens resolved to. The
+  /// sentence's level must be STRICTLY greater than the max level of these
+  /// (same strict-dependency convention as every other component edge in
+  /// this pipeline — see strictDependsOn above) so a sentence is never
+  /// offered before every word it exemplifies has already unlocked.
+  vocabTempIds: string[];
+}
+
+/// Assigns levels to SENTENCE subjects in a third pass, after `assignLevels`
+/// has settled every RADICAL/KANJI/VOCAB level. A sentence becomes eligible
+/// for level N once every vocab it depends on already has a level strictly
+/// less than N; sentences whose vocab is entirely off-ladder (any dependency
+/// missing a level) get level = null, same as any other subject that falls
+/// outside the 60-level curriculum. Quota-filled per level like every other
+/// type, via SENTENCE_PER_LEVEL through quotaForType.
+export function assignSentenceLevels(
+  inputs: SentenceLevelInput[],
+  vocabLevels: Map<string, number | null>,
+): Map<string, number | null> {
+  const levels = new Map<string, number | null>();
+  const levelCounts = new Map<number, number>();
+
+  // Precompute each sentence's minimum eligible level (max vocab level + 1);
+  // sentences with any off-ladder vocab dependency never become eligible.
+  const minLevelByTempId = new Map<string, number | null>();
+  for (const input of inputs) {
+    let maxVocabLevel = 0;
+    let allLaddered = true;
+    for (const vocabTempId of input.vocabTempIds) {
+      const level = vocabLevels.get(vocabTempId);
+      if (typeof level !== "number") {
+        allLaddered = false;
+        break;
+      }
+      if (level > maxVocabLevel) maxVocabLevel = level;
+    }
+    minLevelByTempId.set(input.tempId, allLaddered ? maxVocabLevel + 1 : null);
+    levels.set(input.tempId, null);
+  }
+
+  for (let level = 1; level <= LEVEL_COUNT; level += 1) {
+    const quota = quotaForType("SENTENCE", level);
+    const eligibleNow = inputs.filter(
+      (i) => levels.get(i.tempId) === null && minLevelByTempId.get(i.tempId) !== null && minLevelByTempId.get(i.tempId)! <= level,
+    );
+    let placed = levelCounts.get(level) ?? 0;
+    for (const item of eligibleNow) {
+      if (placed >= quota) break;
+      levels.set(item.tempId, level);
+      placed += 1;
+    }
+    levelCounts.set(level, placed);
   }
 
   return levels;

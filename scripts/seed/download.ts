@@ -54,6 +54,11 @@ const TATOEBA_SOURCES: Source[] = [
     url: "https://downloads.tatoeba.org/exports/per_language/jpn/jpn-eng_links.tsv.bz2",
     filename: "jpn-eng_links.tsv",
   },
+  {
+    key: "tatoeba_eng_sentences",
+    url: "https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2",
+    filename: "eng_sentences.tsv",
+  },
 ];
 
 const TATOEBA_INDICES: Source = {

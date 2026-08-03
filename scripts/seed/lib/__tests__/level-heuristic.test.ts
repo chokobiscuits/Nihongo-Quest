@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   assignLevels,
+  assignSentenceLevels,
   KANJI_LADDER_TARGET,
   KANJI_PER_LEVEL,
   LEVEL_COUNT,
   QUOTA_OVERRUN_TOLERANCE,
+  SENTENCE_PER_LEVEL,
   VOCAB_LADDER_TARGET,
   VOCAB_PER_LEVEL,
   type LevelInput,
@@ -176,7 +178,7 @@ describe("assignLevels", () => {
     for (const [tempId, level] of levels) {
       if (level === null) continue;
       const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0 };
-      row[byId.get(tempId)!.type] += 1;
+      row[byId.get(tempId)!.type as "RADICAL" | "KANJI" | "VOCAB"] += 1;
       byLevel.set(level, row);
     }
 
@@ -188,5 +190,68 @@ describe("assignLevels", () => {
     const level1 = byLevel.get(1)!;
     expect(level1.RADICAL).toBeGreaterThan(0);
     expect(level1.KANJI).toBeGreaterThan(0);
+  });
+});
+
+describe("assignSentenceLevels", () => {
+  it("places a sentence strictly after the max level of its vocab dependencies", () => {
+    const vocabLevels = new Map<string, number | null>([
+      ["v1", 3],
+      ["v2", 5],
+    ]);
+    const levels = assignSentenceLevels(
+      [{ tempId: "s1", vocabTempIds: ["v1", "v2"] }],
+      vocabLevels,
+    );
+    expect(levels.get("s1")).toBe(6);
+  });
+
+  it("gives level = null to a sentence with any off-ladder (unlevelled) vocab dependency", () => {
+    const vocabLevels = new Map<string, number | null>([
+      ["v1", 3],
+      ["v2", null],
+    ]);
+    const levels = assignSentenceLevels(
+      [{ tempId: "s1", vocabTempIds: ["v1", "v2"] }],
+      vocabLevels,
+    );
+    expect(levels.get("s1")).toBeNull();
+  });
+
+  it("places a sentence with no vocab dependencies at level 1", () => {
+    const levels = assignSentenceLevels([{ tempId: "s1", vocabTempIds: [] }], new Map());
+    expect(levels.get("s1")).toBe(1);
+  });
+
+  it("respects SENTENCE_PER_LEVEL quota, overflowing later sentences to the next eligible level", () => {
+    const vocabLevels = new Map<string, number | null>([["v1", 1]]);
+    const inputs = Array.from({ length: SENTENCE_PER_LEVEL + 2 }, (_, i) => ({
+      tempId: `s${i}`,
+      vocabTempIds: ["v1"],
+    }));
+    const levels = assignSentenceLevels(inputs, vocabLevels);
+    const byLevel = new Map<number, number>();
+    for (const level of levels.values()) {
+      if (level === null) continue;
+      byLevel.set(level, (byLevel.get(level) ?? 0) + 1);
+    }
+    expect(byLevel.get(2)).toBe(SENTENCE_PER_LEVEL);
+    expect(byLevel.get(3)).toBe(2);
+  });
+
+  it("never places a sentence at or before the level of any vocab it contains (strict invariant)", () => {
+    const vocabLevels = new Map<string, number | null>([
+      ["v1", 10],
+      ["v2", 4],
+    ]);
+    const levels = assignSentenceLevels(
+      [{ tempId: "s1", vocabTempIds: ["v1", "v2"] }],
+      vocabLevels,
+    );
+    const sentenceLevel = levels.get("s1")!;
+    expect(sentenceLevel).not.toBeNull();
+    for (const vocabTempId of ["v1", "v2"]) {
+      expect(sentenceLevel!).toBeGreaterThan(vocabLevels.get(vocabTempId)!);
+    }
   });
 });

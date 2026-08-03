@@ -58,4 +58,12 @@ export const DATA_SOURCES: DataSourceRecord[] = [
     versionDate: "2026-08-01",
     attribution: "kanji-data JLPT level mapping by David Luz Gouveia (https://github.com/davidluzgouveia/kanji-data).",
   },
+  {
+    name: "Tatoeba",
+    url: "https://tatoeba.org/",
+    license: "CC BY 2.0 FR",
+    versionDate: "2026-08-02",
+    attribution:
+      "Example sentences from the Tatoeba Project (https://tatoeba.org/), contributed by its community and used under CC BY 2.0 FR. Individual sentences are attributed to their original authors on tatoeba.org.",
+  },
 ];

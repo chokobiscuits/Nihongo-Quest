@@ -3,7 +3,7 @@
 // load.ts can upsert them almost verbatim, but stay decoupled from the
 // generated Prisma client so the transform phase has zero DB dependency.
 
-export type SubjectType = "RADICAL" | "KANJI" | "VOCAB";
+export type SubjectType = "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE";
 
 /// WaniKani-style meaning/reading entry: a flat list with one "primary" flag.
 export interface MeaningEntry {
