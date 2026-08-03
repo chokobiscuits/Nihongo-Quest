@@ -97,6 +97,45 @@ function ContinueLearningCard({
     );
   }
 
+  // The Review card links to the queue, not a subject type, and shows a due
+  // count rather than a completion percent.
+  if (card.isReviewQueue) {
+    const due = card.dueCount ?? 0;
+    return (
+      <Link
+        href="/reviews"
+        className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
+        style={{
+          background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
+        }}
+      >
+        <div className="relative flex items-start justify-between">
+          <span className="text-caption font-semibold text-text" lang="ja">
+            {card.labelJa}
+          </span>
+          <span aria-hidden className="text-text-faint">
+            ⤢
+          </span>
+        </div>
+
+        <div className="relative flex flex-1 items-center justify-center">
+          <span className="text-glyph-sm" aria-hidden style={{ color: accent }}>
+            {card.glyph}
+          </span>
+        </div>
+
+        <div className="relative flex flex-col gap-1.5">
+          <span className="text-h2 font-semibold tabular-nums text-text" lang="en">
+            {due}
+          </span>
+          <span className="text-micro text-text-faint" lang="en">
+            {due === 0 ? "Nothing due" : due === 1 ? "item due" : "items due"}
+          </span>
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={`/subjects/${typeToSlug(card.type)}`}

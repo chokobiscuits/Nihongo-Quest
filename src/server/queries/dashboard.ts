@@ -49,6 +49,10 @@ export interface DashboardContinueCard {
   seeded: boolean;
   lessonNumber: number | null;
   percent: number | null;
+  /// True for the Review card, which links to the review queue rather than
+  /// a lesson type and shows a due count instead of a completion percent.
+  isReviewQueue?: boolean;
+  dueCount?: number;
 }
 
 export interface DashboardReviewTypeCount {
@@ -144,7 +148,20 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal) },
     { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: false, lessonNumber: null, percent: null },
     { type: SubjectType.READING, labelEn: "Text Reading", labelJa: "ぶんしょうどっかい", glyph: "読解", seeded: false, lessonNumber: null, percent: null },
-    { type: SubjectType.SENTENCE, labelEn: "Review", labelJa: "ふくしゅう", glyph: "復習", seeded: false, lessonNumber: null, percent: null },
+    // Reviews is not a content type — it is the review queue, and it works.
+    // It was previously typed SENTENCE and hardcoded seeded:false, so the
+    // dashboard advertised a working feature as "Coming soon".
+    {
+      type: SubjectType.SENTENCE,
+      labelEn: "Review",
+      labelJa: "ふくしゅう",
+      glyph: "復習",
+      seeded: true,
+      isReviewQueue: true,
+      lessonNumber: null,
+      percent: null,
+      dueCount: reviewQueue.items.length,
+    },
   ];
 
   const dueTypeCounts = new Map<SubjectType, number>();
