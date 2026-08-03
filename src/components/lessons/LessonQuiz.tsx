@@ -6,8 +6,7 @@ import { grade, type QuestionKind } from "@/services/answer/grade";
 import { acceptMeaningAnswer } from "@/server/actions/mnemonics";
 import type { LessonSubject } from "@/server/queries/lessons";
 import type { LessonQuizAnswerRecord } from "@/server/actions/lessons";
-import { xpForCorrectAnswer } from "@/services/xp/curve";
-import { LESSON_STAGE } from "@/services/srs/stages";
+import { xpForLesson } from "@/services/xp/curve";
 import { XpPopupLayer, type XpPopupLayerHandle } from "./XpPopupLayer";
 import { cn } from "@/lib/utils";
 
@@ -86,7 +85,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     });
 
     if (result.result === "correct") {
-      xpPopupRef.current?.spawn(xpForCorrectAnswer(LESSON_STAGE));
+      xpPopupRef.current?.spawn(xpForLesson());
       setCompleted((prev) => [
         ...prev,
         { subjectId: current.subject.id, questionType: current.kind, incorrectCount: current.incorrectCount },
@@ -129,7 +128,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     // Flip this question to correct for the session and move on. This is
     // the "should have been marked correct" override, so it fires the XP
     // popup the same as the normal correct-answer path.
-    xpPopupRef.current?.spawn(xpForCorrectAnswer(LESSON_STAGE));
+    xpPopupRef.current?.spawn(xpForLesson());
     const finished = {
       subjectId: current.subject.id,
       questionType: current.kind,

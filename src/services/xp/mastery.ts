@@ -1,10 +1,16 @@
-const MASTERY_XP_PER_CORRECT = 10;
+/// Base mastery XP for a correct answer, before stage scaling.
+export const MASTERY_XP_BASE = 5;
+/// Per-stage mastery XP bonus for a correct answer: higher stages are worth
+/// more, mirroring how review XP scales by stage.
+export const MASTERY_XP_PER_STAGE = 2;
 
-/// Mastery XP awarded for one correct answer. Unlike SRS XP, this never
-/// decreases and has no incorrect-answer counterpart — it tracks cumulative
-/// familiarity with an item, not current recall confidence.
-export function masteryXpForCorrectAnswer(): number {
-  return MASTERY_XP_PER_CORRECT;
+/// Mastery XP awarded for one correct answer at a given SRS stage. Unlike
+/// SRS XP, this never decreases and has no incorrect-answer counterpart — it
+/// tracks cumulative familiarity with an item, not current recall
+/// confidence. Weighted by stage the same way review XP is: 7 at Apprentice
+/// I, 21 at Enlightened.
+export function masteryXpForAnswer(srsStage: number): number {
+  return MASTERY_XP_BASE + srsStage * MASTERY_XP_PER_STAGE;
 }
 
 /// masteryLevel = floor(sqrt(masteryXp / 25)). Unbounded: there is no cap on
@@ -43,7 +49,7 @@ export interface MasteryTier {
 // kanji/vocab/rank tokens are semantically tied elsewhere), so tiers reuse
 // the closest fitting existing `--color-*` tokens by hue rather than
 // inventing new hex values.
-const MASTERY_TIER_BANDS: readonly { name: string; min: number; colorToken: string }[] = [
+export const MASTERY_TIER_BANDS: readonly { name: string; min: number; colorToken: string }[] = [
   { name: "Unranked", min: 0, colorToken: "--color-text-faint" },
   { name: "Novice", min: 1, colorToken: "--color-text-dim" },
   { name: "Apprentice", min: 2, colorToken: "--color-rank-bronze" },

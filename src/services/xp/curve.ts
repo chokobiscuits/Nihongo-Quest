@@ -1,30 +1,64 @@
-const INCORRECT_ANSWER_XP = 2;
+/// Flat XP awarded for learning a brand-new item (lesson, stage 0 -> 1).
+/// Learning is the highest-value act in the app — it is the one action that
+/// always grows the user's total item count — so it is a flat reward rather
+/// than stage-scaled (a lesson item has no prior stage to scale from).
+export const LESSON_XP = 25;
 
-/// XP for one correct answer at a given SRS stage: higher stages are worth
-/// more, since they are harder to earn and riskier to lose.
+/// Base XP for a review answered correctly, before stage scaling.
+export const REVIEW_CORRECT_BASE_XP = 8;
+/// Per-stage XP bonus for a review answered correctly: higher stages are
+/// worth more, since they are harder to earn and riskier to lose.
+export const REVIEW_CORRECT_PER_STAGE_XP = 3;
+
+/// Flat XP for an incorrect answer — a small participation reward, not tied
+/// to stage.
+export const INCORRECT_ANSWER_XP = 2;
+
+/// Streak multiplier growth rate: +2% per consecutive day active.
+export const STREAK_MULTIPLIER_PER_DAY = 0.02;
+/// Streak multiplier cap, reached at 25 days (1 + 25 * 0.02 = 1.5).
+export const STREAK_MULTIPLIER_CAP = 1.5;
+
+/// XP for learning a new item in a lesson (stage 0 -> 1). Flat, not
+/// stage-scaled — see LESSON_XP.
+export function xpForLesson(): number {
+  return LESSON_XP;
+}
+
+/// XP for one correct review answer at a given SRS stage: higher stages are
+/// worth more, since they are harder to earn and riskier to lose.
 export function xpForCorrectAnswer(srsStage: number): number {
-  return Math.round(10 * (1 + srsStage * 0.15));
+  return Math.round(REVIEW_CORRECT_BASE_XP + srsStage * REVIEW_CORRECT_PER_STAGE_XP);
 }
 
 export function xpForIncorrectAnswer(): number {
   return INCORRECT_ANSWER_XP;
 }
 
-/// Flat completion bonus for finishing a session, scaled by how many items
-/// were in it.
-export function sessionBonus(itemCount: number): number {
-  return 20 + 2 * itemCount;
+/// Multiplier applied to a session's total XP based on the user's current
+/// daily streak. Capped at STREAK_MULTIPLIER_CAP (streakDays >= 25).
+export function streakMultiplier(streakDays: number): number {
+  return Math.min(1 + streakDays * STREAK_MULTIPLIER_PER_DAY, STREAK_MULTIPLIER_CAP);
 }
 
-/// Multiplier applied to a session's total XP based on the user's current
-/// daily streak. Capped at 1.5x (streakDays >= 25).
-export function streakMultiplier(streakDays: number): number {
-  return Math.min(1 + streakDays * 0.02, 1.5);
-}
+// Level cost curve: quadratic-ish early (levels 1..INFLECTION), linear after
+// the inflection point (matching the tangent slope at INFLECTION so the
+// curve has no kink), with a floor so no level ever costs less than roughly
+// one session's worth of XP.
+export const LEVEL_COST_K = 95;
+export const LEVEL_COST_P = 1.38;
+export const LEVEL_COST_INFLECTION = 24;
+export const LEVEL_COST_FLOOR = 160;
 
 /// XP required to go from level L to level L+1.
 export function xpForLevel(level: number): number {
-  return Math.round(100 * Math.pow(level, 1.6));
+  if (level <= LEVEL_COST_INFLECTION) {
+    return Math.max(LEVEL_COST_FLOOR, Math.round(LEVEL_COST_K * Math.pow(level, LEVEL_COST_P)));
+  }
+  const atInflection = LEVEL_COST_K * Math.pow(LEVEL_COST_INFLECTION, LEVEL_COST_P);
+  const slopeAtInflection = LEVEL_COST_K * LEVEL_COST_P * Math.pow(LEVEL_COST_INFLECTION, LEVEL_COST_P - 1);
+  const cost = atInflection + slopeAtInflection * (level - LEVEL_COST_INFLECTION);
+  return Math.max(LEVEL_COST_FLOOR, Math.round(cost));
 }
 
 /// Total XP needed to reach level L from level 1, i.e. the sum of

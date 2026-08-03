@@ -117,6 +117,15 @@ export function AchievementIcon(props: IconProps) {
   );
 }
 
+export function MasteryIcon(props: IconProps) {
+  return (
+    <svg {...BASE_PROPS} {...props}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M9.5 12.5 11 14l3.5-4" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg {...BASE_PROPS} {...props}>

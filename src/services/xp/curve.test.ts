@@ -1,34 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
   levelFromTotalXp,
-  sessionBonus,
   streakMultiplier,
   totalXpToReach,
   xpForCorrectAnswer,
   xpForIncorrectAnswer,
+  xpForLesson,
   xpForLevel,
+  LESSON_XP,
+  REVIEW_CORRECT_BASE_XP,
+  REVIEW_CORRECT_PER_STAGE_XP,
+  LEVEL_COST_K,
+  LEVEL_COST_P,
+  LEVEL_COST_INFLECTION,
+  LEVEL_COST_FLOOR,
 } from "./curve";
 
+describe("xpForLesson", () => {
+  it("is a flat 25 xp", () => {
+    expect(xpForLesson()).toBe(LESSON_XP);
+    expect(xpForLesson()).toBe(25);
+  });
+});
+
 describe("xpForCorrectAnswer", () => {
-  it("scales with SRS stage", () => {
-    expect(xpForCorrectAnswer(0)).toBe(10); // round(10 * 1)
-    expect(xpForCorrectAnswer(5)).toBe(18); // round(10 * 1.75)
-    // round(10 * 2.35) === 23 due to floating point (10 * 2.35 evaluates to
-    // 23.499999999999996, just under the .5 rounding boundary).
-    expect(xpForCorrectAnswer(9)).toBe(23);
+  it("scales with SRS stage: 8 + stage * 3", () => {
+    expect(REVIEW_CORRECT_BASE_XP).toBe(8);
+    expect(REVIEW_CORRECT_PER_STAGE_XP).toBe(3);
+    expect(xpForCorrectAnswer(0)).toBe(8);
+    expect(xpForCorrectAnswer(1)).toBe(11); // Apprentice I
+    expect(xpForCorrectAnswer(8)).toBe(32); // Enlightened
+    expect(xpForCorrectAnswer(9)).toBe(35); // Burned
   });
 });
 
 describe("xpForIncorrectAnswer", () => {
   it("is a flat 2 xp", () => {
     expect(xpForIncorrectAnswer()).toBe(2);
-  });
-});
-
-describe("sessionBonus", () => {
-  it("is 20 + 2 per item", () => {
-    expect(sessionBonus(0)).toBe(20);
-    expect(sessionBonus(10)).toBe(40);
   });
 });
 
@@ -45,10 +53,39 @@ describe("streakMultiplier", () => {
 });
 
 describe("xpForLevel", () => {
-  it("matches round(100 * L^1.6)", () => {
-    expect(xpForLevel(1)).toBe(100);
-    expect(xpForLevel(2)).toBe(Math.round(100 * Math.pow(2, 1.6)));
-    expect(xpForLevel(10)).toBe(Math.round(100 * Math.pow(10, 1.6)));
+  it("matches the piecewise cost curve constants", () => {
+    expect(LEVEL_COST_K).toBe(95);
+    expect(LEVEL_COST_P).toBe(1.38);
+    expect(LEVEL_COST_INFLECTION).toBe(24);
+    expect(LEVEL_COST_FLOOR).toBe(160);
+  });
+
+  it("never costs less than the floor", () => {
+    for (let level = 1; level <= 150; level++) {
+      expect(xpForLevel(level)).toBeGreaterThanOrEqual(LEVEL_COST_FLOOR);
+    }
+  });
+
+  it("is quadratic-ish (Math.round(K * L^P)) up to the inflection point, floored", () => {
+    expect(xpForLevel(1)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(1, 1.38))));
+    expect(xpForLevel(10)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(10, 1.38))));
+    expect(xpForLevel(24)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(24, 1.38))));
+  });
+
+  it("is linear past the inflection point, continuing the tangent slope", () => {
+    const atInflection = 95 * Math.pow(24, 1.38);
+    const slope = 95 * 1.38 * Math.pow(24, 0.38);
+    expect(xpForLevel(25)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(atInflection + slope * 1)));
+    expect(xpForLevel(50)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(atInflection + slope * 26)));
+  });
+
+  it("is monotonically non-decreasing", () => {
+    let previous = 0;
+    for (let level = 1; level <= 200; level++) {
+      const cost = xpForLevel(level);
+      expect(cost).toBeGreaterThanOrEqual(previous);
+      previous = cost;
+    }
   });
 });
 
@@ -64,7 +101,7 @@ describe("totalXpToReach", () => {
 
 describe("levelFromTotalXp", () => {
   it("round-trips against totalXpToReach across a range of levels", () => {
-    for (let level = 1; level <= 50; level++) {
+    for (let level = 1; level <= 150; level++) {
       const xpAtLevel = totalXpToReach(level);
       expect(levelFromTotalXp(xpAtLevel)).toBe(level);
 
@@ -76,5 +113,9 @@ describe("levelFromTotalXp", () => {
 
   it("is level 1 at zero xp", () => {
     expect(levelFromTotalXp(0)).toBe(1);
+  });
+
+  it("local-user's 353 xp still resolves to level 2 (no migration regression)", () => {
+    expect(levelFromTotalXp(353)).toBe(2);
   });
 });

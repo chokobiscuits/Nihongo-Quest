@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   masteryLevelFromXp,
-  masteryXpForCorrectAnswer,
+  masteryXpForAnswer,
   accountMasteryLevel,
   masteryTier,
   masteryProgress,
   ACCOUNT_MASTERY_DIVISOR,
+  MASTERY_XP_BASE,
+  MASTERY_XP_PER_STAGE,
 } from "./mastery";
 
-describe("masteryXpForCorrectAnswer", () => {
-  it("awards 10 xp", () => {
-    expect(masteryXpForCorrectAnswer()).toBe(10);
+describe("masteryXpForAnswer", () => {
+  it("scales with SRS stage: 5 + stage * 2", () => {
+    expect(MASTERY_XP_BASE).toBe(5);
+    expect(MASTERY_XP_PER_STAGE).toBe(2);
+    expect(masteryXpForAnswer(1)).toBe(7); // Apprentice I
+    expect(masteryXpForAnswer(8)).toBe(21); // Enlightened
   });
 });
 

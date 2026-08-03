@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { computeTransition } from "@/services/srs/transition";
-import { xpForCorrectAnswer, xpForIncorrectAnswer, sessionBonus, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
-import { masteryXpForCorrectAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
+import { xpForCorrectAnswer, xpForIncorrectAnswer, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
+import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
@@ -135,9 +135,8 @@ export async function commitReviewSession(
     const stage = row?.srsStage ?? 1;
     return sum + (a.correct ? xpForCorrectAnswer(stage) : xpForIncorrectAnswer());
   }, 0);
-  const bonus = sessionBonus(userSubjectIds.length);
   const multiplier = streakMultiplier(profile.currentStreak);
-  const xpAwarded = Math.round((answerXp + bonus) * multiplier);
+  const xpAwarded = Math.round(answerXp * multiplier);
 
   const previousTotalXp = Number(profile.totalXp);
   const newTotalXp = previousTotalXp + xpAwarded;
@@ -193,7 +192,9 @@ export async function commitReviewSession(
         });
       }
 
-      const masteryXpGain = itemAnswers.filter((a) => a.correct).length * masteryXpForCorrectAnswer();
+      const masteryXpGain = itemAnswers
+        .filter((a) => a.correct)
+        .reduce((sum) => sum + masteryXpForAnswer(row.srsStage), 0);
       const newMasteryXp = row.masteryXp + masteryXpGain;
 
       const meaningCorrectDelta = itemAnswers.filter((a) => a.questionType === "MEANING" && a.correct).length;

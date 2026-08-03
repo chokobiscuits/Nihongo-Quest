@@ -26,7 +26,7 @@ import { commitLessonSession, type LessonQuizAnswerRecord } from "../../src/serv
 import { commitReviewSession, type ReviewAnswerRecord } from "../../src/server/actions/reviews";
 import { GURU_STAGE, BURNED_STAGE, intervalForStage, STAGES } from "../../src/services/srs/stages";
 import { xpForCorrectAnswer } from "../../src/services/xp/curve";
-import { masteryXpForCorrectAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
+import { masteryXpForAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
 import { rankForLevel } from "../../src/services/xp/rank";
 import { SubjectType } from "../../src/generated/prisma/enums";
 
@@ -530,8 +530,8 @@ async function main() {
       await learnSubjects([testRadical2.id], new Map([[testRadical2.id, "RADICAL"]]));
       const row = await prisma.userSubject.findUniqueOrThrow({ where: { userId_subjectId: { userId: SIM_USER, subjectId: testRadical2.id } } });
 
-      // masteryXp/masteryLevel: lesson awards exactly one masteryXpForCorrectAnswer (MEANING only, radical).
-      assertEqual(SECTION_E, "masteryXp advances per mastery.ts (one correct answer)", row.masteryXp, masteryXpForCorrectAnswer());
+      // masteryXp/masteryLevel: lesson awards exactly one masteryXpForAnswer(1) (MEANING only, radical, stage 1 at teach time).
+      assertEqual(SECTION_E, "masteryXp advances per mastery.ts (one correct answer)", row.masteryXp, masteryXpForAnswer(1));
       assertEqual(SECTION_E, "masteryLevel derives from masteryXpForXp(masteryXp)", row.masteryLevel, masteryLevelFromXp(row.masteryXp));
 
       await backdate([testRadical2.id], 5);
@@ -539,7 +539,7 @@ async function main() {
       await reviewAllCorrectFor(testRadical2.id);
       const profileAfter = await getOrCreateProfile(SIM_USER);
       const xpGain = Number(profileAfter.totalXp) - xpBeforeReview;
-      // Stage 1 at review time (radical, meaning-only): 1 answer at xpForCorrectAnswer(1) + sessionBonus(1), times streakMultiplier.
+      // Stage 1 at review time (radical, meaning-only): 1 answer at xpForCorrectAnswer(1), times streakMultiplier. No session bonus anymore.
       assertTrue(SECTION_E, "XP awarded is > 0 and consistent with xpForCorrectAnswer(stage)", xpGain >= xpForCorrectAnswer(1));
 
       // Account mastery aggregates: sum of all UserSubject.masteryXp for the user.

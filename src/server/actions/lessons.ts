@@ -3,8 +3,8 @@
 import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { LESSON_STAGE, intervalForStage } from "@/services/srs/stages";
-import { xpForCorrectAnswer, sessionBonus, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
-import { masteryXpForCorrectAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
+import { xpForLesson, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
+import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
@@ -65,13 +65,12 @@ export async function commitLessonSession(
     return interval === null ? null : new Date(now.getTime() + interval);
   })();
 
-  // XP: every recorded answer in a lesson is a correct answer (wrong
-  // sub-answers re-queue within the session and are never sent here as their
-  // own record — `incorrectCount` just tracks how much friction there was).
-  const answerXp = answers.reduce((sum) => sum + xpForCorrectAnswer(LESSON_STAGE), 0);
-  const bonus = sessionBonus(subjectIds.length);
+  // XP: learning a new item is a flat award per item taught, not per
+  // question answered — a lesson item always ends up known regardless of how
+  // many sub-answers it took, so XP is keyed to the item, not the answer log.
+  const answerXp = subjectIds.length * xpForLesson();
   const multiplier = streakMultiplier(profile.currentStreak);
-  const xpAwarded = Math.round((answerXp + bonus) * multiplier);
+  const xpAwarded = Math.round(answerXp * multiplier);
 
   const previousTotalXp = Number(profile.totalXp);
   const newTotalXp = previousTotalXp + xpAwarded;
@@ -137,7 +136,9 @@ export async function commitLessonSession(
           },
         });
 
-        const masteryXp = masteryXpForCorrectAnswer();
+        // Lesson items land at stage 1 (Apprentice I) once taught, so
+        // mastery XP is weighted the same as a stage-1 review answer.
+        const masteryXp = masteryXpForAnswer(1);
         const correctField = answer.questionType === "MEANING" ? "meaningCorrect" : "readingCorrect";
         await tx.userSubject.update({
           where: { id: userSubject.id },

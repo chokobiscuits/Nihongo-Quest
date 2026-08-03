@@ -6,10 +6,25 @@
 // say that plainly rather than imply a hidden cap the way a percent bar
 // would.
 
+// Positions kept clear of the centered content block (roughly x: 15-85,
+// y: 28-78, where the ∞ glyph / "Mastery Level ∞" / tagline text sits) so a
+// star can never render on top of the text — they're pinned to the margins
+// and the strip above/below the text instead. Each carries its own radius
+// (2-4px in the card's own coordinate scale, see the r= usage below) and
+// base opacity so the field reads as varied rather than uniform dots.
 const STAR_POSITIONS = [
-  { x: 18, y: 22 }, { x: 42, y: 14 }, { x: 66, y: 26 }, { x: 84, y: 18 },
-  { x: 12, y: 42 }, { x: 30, y: 34 }, { x: 58, y: 40 }, { x: 92, y: 38 },
-  { x: 8, y: 60 }, { x: 76, y: 12 }, { x: 50, y: 54 }, { x: 96, y: 58 },
+  { x: 6, y: 12, r: 1.1, opacity: 0.5 },
+  { x: 30, y: 8, r: 0.8, opacity: 0.35 },
+  { x: 55, y: 10, r: 1.3, opacity: 0.6 },
+  { x: 8, y: 30, r: 0.9, opacity: 0.4 },
+  { x: 4, y: 55, r: 1.0, opacity: 0.5 },
+  { x: 6, y: 82, r: 0.8, opacity: 0.35 },
+  { x: 94, y: 30, r: 1.2, opacity: 0.55 },
+  { x: 96, y: 50, r: 0.9, opacity: 0.4 },
+  { x: 92, y: 72, r: 1.1, opacity: 0.5 },
+  { x: 40, y: 90, r: 0.8, opacity: 0.35 },
+  { x: 65, y: 92, r: 1.0, opacity: 0.45 },
+  { x: 18, y: 6, r: 1.2, opacity: 0.55 },
 ];
 
 // Indices (into STAR_POSITIONS) that get the twinkle animation, each on its
@@ -40,7 +55,8 @@ export function InfiniteMasteryCard({ className }: { className?: string }) {
         <circle cx="78" cy="20" r="10" fill="#e9e2ff" opacity={0.9} />
         <circle cx="82" cy="17" r="10" fill="#1c1440" opacity={0.55} />
 
-        {/* Stars */}
+        {/* Stars — kept off to the margins so they never sit under the
+            centered text block; see STAR_POSITIONS' comment. */}
         {STAR_POSITIONS.map((p, i) => {
           const twinkleIndex = TWINKLE_INDICES.indexOf(i);
           const isTwinkling = twinkleIndex !== -1;
@@ -49,10 +65,10 @@ export function InfiniteMasteryCard({ className }: { className?: string }) {
               key={i}
               cx={p.x}
               cy={p.y}
-              r={0.7}
+              r={p.r}
               fill="#ffffff"
               className={isTwinkling ? "mastery-star" : undefined}
-              style={isTwinkling ? { animationDelay: `${TWINKLE_DELAYS_S[twinkleIndex]}s` } : { opacity: 0.55 }}
+              style={isTwinkling ? { animationDelay: `${TWINKLE_DELAYS_S[twinkleIndex]}s` } : { opacity: p.opacity }}
             />
           );
         })}
