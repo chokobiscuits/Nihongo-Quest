@@ -8,7 +8,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 const PUBLIC_PATHS = ["/login", "/api/login"];
 
 export async function proxy(request: NextRequest) {
-  const appPassword = process.env.APP_PASSWORD;
+  const appPassword = process.env.APP_PASSWORD?.trim();
   if (!appPassword) {
     return NextResponse.next();
   }
@@ -18,7 +18,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionSecret = process.env.APP_SESSION_SECRET;
+  const sessionSecret = process.env.APP_SESSION_SECRET?.trim();
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (sessionSecret && (await verifySessionToken(token, sessionSecret))) {
     return NextResponse.next();
