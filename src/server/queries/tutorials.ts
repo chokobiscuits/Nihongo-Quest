@@ -183,3 +183,15 @@ export async function acknowledgeTutorial(tutorialId: string, userId: string = A
     create: { userId, tutorialId, acknowledged: true },
   });
 }
+
+/// Marks every tutorial complete. `createMany` with `skipDuplicates` keeps
+/// this idempotent, so re-running it is a no-op rather than an error.
+/// Returns how many rows were newly created.
+export async function acknowledgeAllTutorials(userId: string = APP_USER_ID): Promise<number> {
+  const all = await prisma.tutorial.findMany({ select: { id: true } });
+  const result = await prisma.tutorialCompletion.createMany({
+    data: all.map((t) => ({ userId, tutorialId: t.id, acknowledged: true })),
+    skipDuplicates: true,
+  });
+  return result.count;
+}

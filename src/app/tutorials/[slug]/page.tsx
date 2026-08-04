@@ -4,6 +4,7 @@ import { getTutorialBySlug } from "@/server/queries/tutorials";
 import { Panel } from "@/components/panel/Panel";
 import { TutorialBody } from "@/components/tutorials/TutorialBody";
 import { TutorialIcon } from "@/components/shell/NavIcons";
+import { MarkReadButton } from "@/components/tutorials/MarkReadButton";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -37,6 +38,7 @@ export default async function TutorialDetailPage({ params }: { params: Promise<{
             )}
           </div>
           <TutorialBody markdown={tutorial.body} />
+          <MarkReadButton tutorialId={tutorial.id} completed={tutorial.completed} />
         </div>
       </Panel>
     </div>

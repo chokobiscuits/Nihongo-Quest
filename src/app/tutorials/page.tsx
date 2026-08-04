@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTutorialLibrary } from "@/server/queries/tutorials";
 import { Panel } from "@/components/panel/Panel";
 import { TutorialIcon } from "@/components/shell/NavIcons";
+import { MarkAllReadButton } from "@/components/tutorials/MarkReadButton";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -16,9 +17,12 @@ export default async function TutorialsPage() {
       <h1 className="text-h1 font-semibold text-text">
         <span lang="en">Tutorials</span> <span lang="ja" className="text-text-muted">チュートリアル</span>
       </h1>
-      <p className="text-body text-text-dim" lang="en">
-        {completedCount} of {tutorials.length} completed
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-body text-text-dim" lang="en">
+          {completedCount} of {tutorials.length} completed
+        </p>
+        <MarkAllReadButton remaining={tutorials.length - completedCount} />
+      </div>
 
       <Panel accent="var(--color-brand)" icon={<TutorialIcon />} title="All tutorials" titleJa="一覧">
         <div className="flex flex-col divide-y divide-line">
