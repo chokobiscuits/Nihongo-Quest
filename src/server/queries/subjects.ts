@@ -3,14 +3,14 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
-import { sentenceWordBreakdown, tatoebaSentenceIdOf } from "@/server/queries/sentenceWordBreakdown";
+import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
 // Ladder types have a curriculum level and are gated by unlock rules.
-// Grammar/Reading have no seeded rows yet (see dashboard.ts); Sentence is
-// seeded and laddered as of seed phase 1-3.
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
+// Reading has no seeded rows yet (see dashboard.ts); Sentence and Grammar
+// are seeded and laddered (seed phases 1-3 and grammar phase 1-2).
+const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
 export type SubjectListState = "burned" | "learning" | "not-started" | "locked";
 
@@ -43,10 +43,10 @@ export interface SubjectTypeSummary {
 }
 
 /// Overview counts for all six SubjectTypes, for the `/subjects` index.
-/// Grammar/Reading have no Subject rows, so they report 0/0 with
-/// `seeded: false` — the page renders those as "Coming soon" placeholders.
+/// Reading has no Subject rows, so it reports 0/0 with `seeded: false` — the
+/// page renders that as a "Coming soon" placeholder.
 export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Promise<SubjectTypeSummary[]> {
-  const seededTypes: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
+  const seededTypes: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
   const [totals, passedCounts] = await Promise.all([
     // level: not null — the laddered curriculum denominator, not the whole
@@ -75,18 +75,19 @@ export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Pro
     return {
       type,
       seeded,
-      learned: seeded ? (passedByType[type as unknown as "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE"] ?? 0) : 0,
+      learned: seeded ? (passedByType[type as unknown as "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR"] ?? 0) : 0,
       total: seeded ? (totalByType.get(type) ?? 0) : 0,
     };
   });
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE", number> = {
+  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
     SENTENCE: 0,
+    GRAMMAR: 0,
   };
   if (subjectIds.length === 0) return result;
 
@@ -99,6 +100,7 @@ async function bucketByType(subjectIds: string[]) {
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
+    else if (row.type === SubjectType.GRAMMAR) result.GRAMMAR += 1;
   }
   return result;
 }
@@ -343,6 +345,14 @@ export interface SubjectDetail {
   /// SENTENCE only: the source Tatoeba sentence id, for attribution linking
   /// to https://tatoeba.org/en/sentences/show/<id>.
   tatoebaSentenceId: string | null;
+  /// GRAMMAR only: the "N/Na + です"-style formation note from metadata —
+  /// the most useful field to show while a point still has no authored
+  /// explanation.
+  formation: string | null;
+  /// GRAMMAR only: up to 5 attached example sentences (isGating: false),
+  /// each with furigana and an English gloss. Empty for the 13 points that
+  /// matched zero Tatoeba sentences.
+  grammarExamples: GrammarExample[];
   /// Null when the user has no UserSubject row for this item yet (unlocked
   /// but not started, or still locked).
   srs: {
@@ -391,7 +401,18 @@ export async function getSubjectDetail(
         select: {
           readingUsed: true,
           isGating: true,
-          child: { select: { id: true, slug: true, characters: true, meanings: true, readings: true, type: true } },
+          child: {
+            select: {
+              id: true,
+              slug: true,
+              characters: true,
+              meanings: true,
+              readings: true,
+              type: true,
+              furigana: true,
+              furiganaFallback: true,
+            },
+          },
         },
       },
       childLinks: {
@@ -453,17 +474,21 @@ export async function getSubjectDetail(
     componentsOf:
       subject.type === SubjectType.SENTENCE
         ? sentenceWordBreakdown(subject.metadata, subject.parentLinks)
-        : subject.parentLinks.map((link) => ({
-            id: link.child.id,
-            type: link.child.type as LessonComponentSummary["type"],
-            slug: link.child.slug,
-            characters: link.child.characters,
-            meaning: firstMeaning(link.child.meanings),
-            readingUsed: link.readingUsed,
-          })),
+        : subject.type === SubjectType.GRAMMAR
+          ? []
+          : subject.parentLinks.map((link) => ({
+              id: link.child.id,
+              type: link.child.type as LessonComponentSummary["type"],
+              slug: link.child.slug,
+              characters: link.child.characters,
+              meaning: firstMeaning(link.child.meanings),
+              readingUsed: link.readingUsed,
+            })),
     usedIn: rankUsedIn(subject.type, subject.childLinks).slice(0, 20),
     usedInTotal: subject.childLinks.length,
     tatoebaSentenceId: subject.type === SubjectType.SENTENCE ? tatoebaSentenceIdOf(subject.metadata) : null,
+    formation: subject.type === SubjectType.GRAMMAR ? formationOf(subject.metadata) : null,
+    grammarExamples: subject.type === SubjectType.GRAMMAR ? grammarExamples(subject.parentLinks) : [],
     srs: userSubject
       ? {
           stage: userSubject.srsStage,
@@ -484,6 +509,11 @@ export async function getSubjectDetail(
 function partsOfSpeechOf(metadata: unknown): string[] {
   const meta = metadata as { pos?: string[] } | null | undefined;
   return meta?.pos ?? [];
+}
+
+function formationOf(metadata: unknown): string | null {
+  const meta = metadata as { formation?: string } | null | undefined;
+  return meta?.formation ?? null;
 }
 
 function vocabIsCommon(metadata: unknown): boolean {

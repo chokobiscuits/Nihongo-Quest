@@ -7,12 +7,11 @@ import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, type MasteryTier } from "@/services/xp/mastery";
 
-// Static denominators for content types that aren't seeded/laddered yet
-// (grammar and readings have no Subject rows to count). Sentences are now
-// real (seed phase 1-3) and count live from the DB alongside radical/kanji/
-// vocab — see `sentenceTotal` below.
-const UNSEEDED_DENOMINATORS: Record<"GRAMMAR" | "READING", number> = {
-  GRAMMAR: 856,
+// Static denominator for the one content type that still has no Subject
+// rows (readings). Grammar and sentences are now real (seed phases 1-3) and
+// count live from the DB alongside radical/kanji/vocab — see
+// `grammarTotal`/`sentenceTotal` below.
+const UNSEEDED_DENOMINATORS: Record<"READING", number> = {
   READING: 320,
 };
 
@@ -96,10 +95,11 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
-  const [kanjiTotal, vocabTotal, sentenceTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
+  const [kanjiTotal, vocabTotal, sentenceTotal, grammarTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.SENTENCE, level: { not: null } } }),
+    prisma.subject.count({ where: { type: SubjectType.GRAMMAR, level: { not: null } } }),
     prisma.userSubject.groupBy({
       by: ["subjectId"],
       where: { userId, passedAt: { not: null } },
@@ -139,7 +139,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", learned: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", learned: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
     { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", learned: passedByType.SENTENCE, started: startedByType.SENTENCE, total: sentenceTotal },
-    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.GRAMMAR },
+    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", learned: passedByType.GRAMMAR, started: startedByType.GRAMMAR, total: grammarTotal },
     { type: SubjectType.READING, labelEn: "Readings", labelJa: "読解", learned: 0, started: 0, total: UNSEEDED_DENOMINATORS.READING },
   ];
 
@@ -147,7 +147,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal) },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal) },
     { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal) },
-    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: false, lessonNumber: null, percent: null },
+    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: true, lessonNumber: seededLessonNumber(passedByType.GRAMMAR), percent: percentOf(passedByType.GRAMMAR, grammarTotal) },
     { type: SubjectType.READING, labelEn: "Text Reading", labelJa: "ぶんしょうどっかい", glyph: "読解", seeded: false, lessonNumber: null, percent: null },
     // Reviews is not a content type — it is the review queue, and it works.
     // It was previously typed SENTENCE and hardcoded seeded:false, so the
@@ -216,11 +216,12 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE", number> = {
+  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
     SENTENCE: 0,
+    GRAMMAR: 0,
   };
   if (subjectIds.length === 0) return result;
 
@@ -233,6 +234,7 @@ async function bucketByType(subjectIds: string[]) {
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
+    else if (row.type === SubjectType.GRAMMAR) result.GRAMMAR += 1;
   }
   return result;
 }

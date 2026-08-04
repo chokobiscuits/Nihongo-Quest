@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { locateTokens, spliceSentenceFurigana } from "../sentence-transform";
+import {
+  locateTokens,
+  matchGrammarExamples,
+  spliceSentenceFurigana,
+  type GrammarExampleCandidate,
+} from "../sentence-transform";
 
 describe("locateTokens", () => {
   it("locates tokens left-to-right by surface form when present", () => {
@@ -112,5 +117,51 @@ describe("spliceSentenceFurigana", () => {
       { start: 0, end: 2, furigana: [{ ruby: "見", rt: "み" }, { ruby: "る" }] },
     ]);
     expect(result).toEqual([{ ruby: "見", rt: "み" }, { ruby: "る" }]);
+  });
+});
+
+describe("matchGrammarExamples", () => {
+  function candidate(tempId: string, characters: string, isLaddered = true): GrammarExampleCandidate {
+    return { tempId, characters, isLaddered };
+  }
+
+  it("returns only sentences matching at least one pattern", () => {
+    const candidates = [
+      candidate("s1", "食べたことがあります。"),
+      candidate("s2", "今日は晴れです。"),
+      candidate("s3", "行ったことがある。"),
+    ];
+    const result = matchGrammarExamples([/たことがあります/, /たことがある/], candidates);
+    expect(result.map((c) => c.tempId).sort()).toEqual(["s1", "s3"]);
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    const candidates = [candidate("s1", "今日は晴れです。")];
+    const result = matchGrammarExamples([/たことがある/], candidates);
+    expect(result).toEqual([]);
+  });
+
+  it("caps results at 5", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => candidate(`s${i}`, `文${i}たことがある。`));
+    const result = matchGrammarExamples([/たことがある/], candidates);
+    expect(result).toHaveLength(5);
+  });
+
+  it("prefers laddered sentences over unladdered ones", () => {
+    const candidates = [
+      candidate("unladdered", "たことがある短い。", false),
+      candidate("laddered", "たことがある長い文章です。", true),
+    ];
+    const result = matchGrammarExamples([/たことがある/], candidates);
+    expect(result.map((c) => c.tempId)).toEqual(["laddered", "unladdered"]);
+  });
+
+  it("prefers shorter sentences within the same ladder status", () => {
+    const candidates = [
+      candidate("long", "これはとても長い文章でたことがあると言えます。"),
+      candidate("short", "たことがある。"),
+    ];
+    const result = matchGrammarExamples([/たことがある/], candidates);
+    expect(result.map((c) => c.tempId)).toEqual(["short", "long"]);
   });
 });

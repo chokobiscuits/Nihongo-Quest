@@ -3,13 +3,13 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { selectLessonBatch, type LessonCandidate, type LessonSubjectType } from "@/services/lessons/batch";
 import { getOrCreateProfile } from "@/server/queries/profile";
-import { sentenceWordBreakdown, tatoebaSentenceIdOf } from "@/server/queries/sentenceWordBreakdown";
+import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 import { getNextRequiredTutorial, type TutorialDetail } from "@/server/queries/tutorials";
 
 // Lessons only ever schedule the 60-level curriculum ladder (level != null).
 // Off-ladder subjects (jlpt/frequency reference material, and the ~5,900
 // off-ladder sentences) are seeded but never surface as lessons.
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE];
+const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
 export interface LessonSubjectMeaning {
   meaning: string;
@@ -55,6 +55,9 @@ export interface LessonSubject {
   acceptedMeanings: string[];
   authored: boolean;
   frequency: number | null;
+  /// GRAMMAR only (also present on other seeded types): the JLPT N-level,
+  /// shown alongside the pattern header.
+  jlpt: number | null;
   furigana: { ruby: string; rt?: string }[] | null;
   furiganaFallback: boolean;
   /// The child subjects this subject is built from: a KANJI's radicals, or
@@ -71,6 +74,11 @@ export interface LessonSubject {
   partsOfSpeech: string[];
   /// SENTENCE only: the source Tatoeba sentence id, for attribution.
   tatoebaSentenceId: string | null;
+  /// GRAMMAR only: the "N/Na + です"-style formation note from metadata.
+  formation: string | null;
+  /// GRAMMAR only: up to 5 attached example sentences with furigana + gloss.
+  /// Empty for the points that matched zero Tatoeba sentences.
+  grammarExamples: GrammarExample[];
 }
 
 /// Candidate subject shape pulled for the unlock check: every ladder subject
@@ -101,6 +109,7 @@ async function fetchUnstartedLadderSubjects(userId: string, userLevel: number) {
       acceptedMeanings: true,
       authored: true,
       frequency: true,
+      jlpt: true,
       furigana: true,
       furiganaFallback: true,
       metadata: true,
@@ -112,7 +121,16 @@ async function fetchUnstartedLadderSubjects(userId: string, userLevel: number) {
           readingUsed: true,
           isGating: true,
           child: {
-            select: { id: true, slug: true, characters: true, meanings: true, readings: true, type: true },
+            select: {
+              id: true,
+              slug: true,
+              characters: true,
+              meanings: true,
+              readings: true,
+              type: true,
+              furigana: true,
+              furiganaFallback: true,
+            },
           },
         },
       },
@@ -170,6 +188,11 @@ function vocabIsCommon(metadata: unknown): boolean {
 function partsOfSpeechOf(metadata: unknown): string[] {
   const meta = metadata as { pos?: string[] } | null | undefined;
   return meta?.pos ?? [];
+}
+
+function formationOf(metadata: unknown): string | null {
+  const meta = metadata as { formation?: string } | null | undefined;
+  return meta?.formation ?? null;
 }
 
 /// Returns the next lesson batch for `userId`: unlocked, not-yet-started
@@ -245,23 +268,28 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
     acceptedMeanings: source.acceptedMeanings as string[],
     authored: source.authored,
     frequency: source.frequency,
+    jlpt: source.jlpt,
     furigana: source.furigana as { ruby: string; rt?: string }[] | null,
     furiganaFallback: source.furiganaFallback,
     componentsOf:
       source.type === "SENTENCE"
         ? sentenceWordBreakdown(source.metadata, source.parentLinks)
-        : source.parentLinks.map((link) => ({
-            id: link.child.id,
-            type: link.child.type as LessonSubjectType,
-            slug: link.child.slug,
-            characters: link.child.characters,
-            meaning: firstMeaning(link.child.meanings),
-            readingUsed: link.readingUsed,
-          })),
+        : source.type === "GRAMMAR"
+          ? []
+          : source.parentLinks.map((link) => ({
+              id: link.child.id,
+              type: link.child.type as LessonSubjectType,
+              slug: link.child.slug,
+              characters: link.child.characters,
+              meaning: firstMeaning(link.child.meanings),
+              readingUsed: link.readingUsed,
+            })),
     usedIn: rankUsedIn(source.type, source.childLinks),
     usedInTotal: source.childLinks.length,
     partsOfSpeech: source.type === "VOCAB" ? partsOfSpeechOf(source.metadata) : [],
     tatoebaSentenceId: source.type === "SENTENCE" ? tatoebaSentenceIdOf(source.metadata) : null,
+    formation: source.type === "GRAMMAR" ? formationOf(source.metadata) : null,
+    grammarExamples: source.type === "GRAMMAR" ? grammarExamples(source.parentLinks) : [],
   }));
 }
 

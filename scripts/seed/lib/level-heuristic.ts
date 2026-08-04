@@ -81,6 +81,13 @@ export const VOCAB_LADDER_TARGET = VOCAB_PER_LEVEL * LEVEL_COUNT; // ~5,400
 // sentences don't swamp any one level's lesson queue.
 export const SENTENCE_PER_LEVEL = 30;
 
+// Per-level quota for GRAMMAR subjects. Grammar has no dependsOn edges (it is
+// deliberately not gated behind vocab/kanji — see transform.ts's grammar
+// section), so it is placed purely by curriculumCompare (JLPT band) order
+// within this quota, roughly 5 per level across the ladder per the task
+// directive.
+export const GRAMMAR_PER_LEVEL = 5;
+
 export interface LevelInput {
   tempId: string;
   type: SubjectType;
@@ -104,7 +111,7 @@ export interface LevelInput {
   strictDependsOn?: string[];
 }
 
-const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2, SENTENCE: 3 };
+const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2, SENTENCE: 3, GRAMMAR: 4 };
 
 /// Curriculum ordering key used both to pick which kanji/vocab make the
 /// ladder and to break ties within a topological wave: JLPT band ascending
@@ -265,6 +272,8 @@ function quotaForType(type: SubjectType, level: number): number {
       return VOCAB_PER_LEVEL;
     case "SENTENCE":
       return SENTENCE_PER_LEVEL;
+    case "GRAMMAR":
+      return GRAMMAR_PER_LEVEL;
   }
 }
 
@@ -400,6 +409,35 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
       levelCounts.set(key, count + 1);
       vocabPlaced += 1;
     }
+  }
+
+  return levels;
+}
+
+/// Assigns levels to GRAMMAR subjects independently of assignLevels (which
+/// only handles RADICAL/KANJI/VOCAB's dependency-driven placement). Grammar
+/// has no dependsOn edges — deliberately loose per the task directive, since
+/// a sentence's grammar isn't meant to be structurally gated behind specific
+/// vocab/kanji — so placement is purely curriculumCompare order (N5 band
+/// first) filled into GRAMMAR_PER_LEVEL-quota levels 1..LEVEL_COUNT. Every
+/// input is placed (no selection/exclusion step, unlike kanji/vocab): the
+/// full ~150-point hand-authored list is small enough to always fit on the
+/// ladder.
+export function assignGrammarLevels(inputs: LevelInput[]): Map<string, number | null> {
+  const ordered = [...inputs].sort(curriculumCompare);
+  const levels = new Map<string, number | null>();
+  const levelCounts = new Map<number, number>();
+
+  for (const item of ordered) {
+    let level = 1;
+    while (level <= LEVEL_COUNT) {
+      const count = levelCounts.get(level) ?? 0;
+      if (count < GRAMMAR_PER_LEVEL) break;
+      level += 1;
+    }
+    if (level > LEVEL_COUNT) level = LEVEL_COUNT; // overflow: pile onto the last level rather than go null
+    levels.set(item.tempId, level);
+    levelCounts.set(level, (levelCounts.get(level) ?? 0) + 1);
   }
 
   return levels;

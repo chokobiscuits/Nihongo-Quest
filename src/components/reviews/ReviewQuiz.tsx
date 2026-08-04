@@ -184,6 +184,10 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
               current.subject.characters
             )}
           </span>
+        ) : current.subject.type === "GRAMMAR" ? (
+          <span lang="ja" className="max-w-[560px] text-center text-h1" style={{ color: theme?.text }}>
+            {current.subject.characters}
+          </span>
         ) : (
           <span lang="ja" className="subject-glyph text-glyph-sm" style={{ color: theme?.text }}>
             {current.subject.characters}

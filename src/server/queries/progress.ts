@@ -80,6 +80,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
     kanjiTotal,
     vocabTotal,
     sentenceTotal,
+    grammarTotal,
     passedRows,
     startedRows,
     stageRows,
@@ -92,6 +93,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.SENTENCE, level: { not: null } } }),
+    prisma.subject.count({ where: { type: SubjectType.GRAMMAR, level: { not: null } } }),
     prisma.userSubject.findMany({
       where: { userId, passedAt: { not: null } },
       select: { subjectId: true },
@@ -134,6 +136,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", passed: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", passed: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
     { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "例文", passed: passedByType.SENTENCE, started: startedByType.SENTENCE, total: sentenceTotal },
+    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "文法", passed: passedByType.GRAMMAR, started: startedByType.GRAMMAR, total: grammarTotal },
   ];
 
   // SRS distribution: stages 1-9 (Apprentice I through Burned). Stage 0
@@ -212,11 +215,12 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE", number> = {
+  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
     SENTENCE: 0,
+    GRAMMAR: 0,
   };
   if (subjectIds.length === 0) return result;
 
@@ -229,6 +233,7 @@ async function bucketByType(subjectIds: string[]) {
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
+    else if (row.type === SubjectType.GRAMMAR) result.GRAMMAR += 1;
   }
   return result;
 }

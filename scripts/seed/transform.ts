@@ -17,7 +17,13 @@ import { parseJlptSource } from "./lib/jlpt-source";
 import { parseKanjiAliveRadicals } from "./lib/kanji-alive-parser";
 import { parseJmdictFuriganaJson } from "./lib/jmdict-furigana-parser";
 import { buildFuriganaIndex, jmdictFormPairs, lookupFurigana } from "./lib/furigana-join";
-import { assignLevels, assignSentenceLevels, type LevelInput, type SentenceLevelInput } from "./lib/level-heuristic";
+import {
+  assignGrammarLevels,
+  assignLevels,
+  assignSentenceLevels,
+  type LevelInput,
+  type SentenceLevelInput,
+} from "./lib/level-heuristic";
 import { baseSlug, dedupeSlug } from "./lib/slug";
 import { DATA_SOURCES } from "./lib/data-sources";
 import { KANGXI_RADICALS } from "./lib/kangxi-radicals";
@@ -27,6 +33,8 @@ import { parseTatoebaIndices } from "./lib/tatoeba-indices";
 import { parseTatoebaLinks } from "./lib/tatoeba-links";
 import { locateTokens, spliceSentenceFurigana } from "./lib/sentence-transform";
 import { classifyVocabPos } from "./lib/pos-classifier";
+import { GRAMMAR_POINTS } from "./lib/grammar-points";
+import { matchGrammarExamples } from "./lib/sentence-transform";
 import type { ComponentRecord, FuriganaSegment, MeaningEntry, ReadingEntry, SubjectRecord } from "./lib/types";
 
 const RAW_DIR = path.resolve(__dirname, "../../data/raw");
@@ -826,6 +834,88 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
+  // GRAMMAR subjects, matched against the SENTENCE pool just built above.
+  // See scripts/seed/lib/grammar-points.ts for the hand-authored point list
+  // and scripts/seed/lib/sentence-transform.ts's matchGrammarExamples for
+  // the pure selection logic (up to 5 examples, laddered-then-shorter
+  // preferred). Every GRAMMAR -> SENTENCE edge is isGating: false — grammar
+  // must not be locked behind knowing specific example sentences (see the
+  // task write-up on the 1,781-unreachable-sentences bug this must avoid
+  // repeating in the opposite direction).
+  // ---------------------------------------------------------------------
+  const grammarCandidates = subjects.filter((s) => s.type === "SENTENCE").map((s) => ({
+    tempId: s.tempId,
+    characters: s.characters!,
+    isLaddered: s.level !== null,
+  }));
+
+  const grammarMatchCounts = new Map<string, number>();
+  const grammarUsedSlugs = new Set<string>();
+  const grammarLevelInputs: LevelInput[] = [];
+
+  for (const point of GRAMMAR_POINTS) {
+    const tempId = `grammar-${point.slug}`;
+    // Raw match count (before the 5-example cap) drives the reporting below
+    // ("how many sentences actually match", not "how many got attached") —
+    // over-matching regexes should be visible even once capped at 5 edges.
+    const rawMatchCount = grammarCandidates.filter((c) => point.matchPatterns.some((re) => re.test(c.characters))).length;
+    const examples = matchGrammarExamples(point.matchPatterns, grammarCandidates);
+    grammarMatchCounts.set(point.slug, rawMatchCount);
+
+    subjects.push({
+      tempId,
+      type: "GRAMMAR",
+      level: 0, // placeholder, overwritten below
+      slug: dedupeSlug(`grammar-${point.slug}`, grammarUsedSlugs),
+      characters: point.pattern,
+      meanings: [{ meaning: point.titleEn, primary: true }],
+      readings: [],
+      jlpt: point.jlpt,
+      jlptLegacy: null,
+      frequency: null,
+      metadata: {
+        jlpt: point.jlpt,
+        formation: point.formation,
+        exampleCount: examples.length,
+        relatedSlugs: point.relatedSlugs,
+      },
+      furigana: null,
+      furiganaFallback: false,
+    });
+
+    for (const example of examples) {
+      components.push({
+        parentTempId: tempId,
+        childTempId: example.tempId,
+        position: null,
+        isRadical: false,
+        readingUsed: null,
+        isGating: false,
+      });
+    }
+
+    // Grammar has no strict structural dependency on vocab/kanji (deliberate
+    // — see the task write-up), so it carries no dependsOn/strictDependsOn
+    // edges; assignLevels places it purely by curriculumCompare order
+    // (JLPT band, i.e. N5 first) within its own type's quota.
+    grammarLevelInputs.push({
+      tempId,
+      type: "GRAMMAR",
+      grade: null,
+      frequency: null,
+      jlpt: point.jlpt,
+      isCommon: false,
+      dependsOn: [],
+    });
+  }
+
+  const grammarLevels = assignGrammarLevels(grammarLevelInputs);
+  for (const subject of subjects) {
+    if (subject.type !== "GRAMMAR") continue;
+    subject.level = grammarLevels.get(subject.tempId) ?? null;
+  }
+
+  // ---------------------------------------------------------------------
   // Write artifacts
   // ---------------------------------------------------------------------
   writeJsonl("subjects.jsonl", subjects);
@@ -855,7 +945,7 @@ async function main() {
   }
 
   console.log("\n--- Level distribution ---");
-  for (const type of ["RADICAL", "KANJI", "VOCAB", "SENTENCE"] as const) {
+  for (const type of ["RADICAL", "KANJI", "VOCAB", "SENTENCE", "GRAMMAR"] as const) {
     const laddered = subjects.filter((s) => s.type === type && s.level !== null);
     const unladdered = subjects.filter((s) => s.type === type && s.level === null);
     console.log(`${type}: ${laddered.length} laddered, ${unladdered.length} null`);
@@ -863,13 +953,15 @@ async function main() {
   const byLevel = new Map<number, Record<string, number>>();
   for (const s of subjects) {
     if (s.level === null) continue;
-    const row = byLevel.get(s.level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0 };
+    const row = byLevel.get(s.level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0, GRAMMAR: 0 };
     row[s.type] += 1;
     byLevel.set(s.level, row);
   }
   for (let level = 1; level <= 60; level += 1) {
-    const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0 };
-    console.log(`  L${level}: radical=${row.RADICAL} kanji=${row.KANJI} vocab=${row.VOCAB} sentence=${row.SENTENCE}`);
+    const row = byLevel.get(level) ?? { RADICAL: 0, KANJI: 0, VOCAB: 0, SENTENCE: 0, GRAMMAR: 0 };
+    console.log(
+      `  L${level}: radical=${row.RADICAL} kanji=${row.KANJI} vocab=${row.VOCAB} sentence=${row.SENTENCE} grammar=${row.GRAMMAR}`,
+    );
   }
 
   // ----------------------------------------------------------- Sentences
@@ -892,6 +984,31 @@ async function main() {
   console.log(
     `Furigana coverage: ${fullyResolvedCount} sentences fully resolved, ${fallbackCount} furiganaFallback=true`,
   );
+
+  // ------------------------------------------------------------- Grammar
+  console.log("\n--- Grammar summary ---");
+  console.log(`Grammar points emitted: ${GRAMMAR_POINTS.length}`);
+  const grammarByJlpt = new Map<number, number>();
+  for (const point of GRAMMAR_POINTS) grammarByJlpt.set(point.jlpt, (grammarByJlpt.get(point.jlpt) ?? 0) + 1);
+  console.log(
+    `JLPT distribution: N5=${grammarByJlpt.get(5) ?? 0} N4=${grammarByJlpt.get(4) ?? 0} N3=${grammarByJlpt.get(3) ?? 0}`,
+  );
+
+  const fiveExamples = [...grammarMatchCounts.entries()].filter(([, n]) => n >= 5);
+  const partialExamples = [...grammarMatchCounts.entries()].filter(([, n]) => n >= 1 && n <= 4);
+  const zeroExamples = [...grammarMatchCounts.entries()].filter(([, n]) => n === 0);
+  console.log(`Points with >=5 matching sentences (5 examples attached): ${fiveExamples.length}`);
+  console.log(`Points with 1-4 matching sentences: ${partialExamples.length}`);
+  console.log(`Points with 0 matching sentences: ${zeroExamples.length}`);
+  if (zeroExamples.length > 0) {
+    console.log("Zero-match points:", zeroExamples.map(([slug]) => slug).join(", "));
+  }
+
+  const topMatching = [...grammarMatchCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  console.log("Top 10 highest-matching points:");
+  for (const [slug, count] of topMatching) {
+    console.log(`  ${slug}: ${count}`);
+  }
 
   // Strict invariant check: every SENTENCE's level must be strictly greater
   // than the max level of every CONTENT vocab it contains (function-word

@@ -5,6 +5,7 @@ import { renderFurigana } from "@/services/furigana/render";
 import { MnemonicEditor } from "@/components/mnemonic/MnemonicEditor";
 import { SectionPanel } from "./SectionPanel";
 import type { LessonComponentSummary, LessonSubject } from "@/server/queries/lessons";
+import type { GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 import { typeToSlug } from "@/components/subject/typeSlug";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +106,41 @@ function ChipTray({ children }: { children: React.ReactNode }) {
   );
 }
 
+/// One example sentence attached to a GRAMMAR point: furigana + English
+/// gloss, linking to its own sentence subject. Grammar examples are never
+/// gating (see transform.ts), so unlike SentenceWordChip there's no dimming
+/// to do here — every attached example is shown at full weight.
+function GrammarExampleCard({ example }: { example: GrammarExample }) {
+  const render = example.furigana ? renderFurigana(example.furigana, true) : null;
+  return (
+    <Link
+      href={`/subjects/sentences/${example.slug}`}
+      className="flex flex-col gap-1.5 rounded-[var(--radius-chip)] border border-line bg-surface px-4 py-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+    >
+      <span lang="ja" className="text-body leading-relaxed text-text">
+        {render ? <FuriganaText render={render} fallback={example.furiganaFallback} /> : example.characters}
+      </span>
+      {example.englishMeaning && <span className="text-caption text-text-dim">{example.englishMeaning}</span>}
+    </Link>
+  );
+}
+
+/// Empty state for the ~13 grammar points that matched zero Tatoeba
+/// sentences — renders as an intentional "not yet" state, not a broken
+/// missing section.
+function GrammarExamplesEmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-[var(--radius-chip)] border border-dashed border-line px-4 py-5 text-center">
+      <span className="text-caption text-text-dim" lang="en">
+        No example sentences yet
+      </span>
+      <span className="text-micro text-text-faint" lang="en">
+        This pattern didn&apos;t match any seeded sentences — add a mnemonic below to fill the gap.
+      </span>
+    </div>
+  );
+}
+
 /// Teach screen for one lesson item: glyph header, meanings/readings,
 /// component breakdown, and mnemonic slots.
 export function LessonTeachCard({ subject, position, batchSize, className }: LessonTeachCardProps) {
@@ -173,6 +209,17 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
                 subject.characters
               )}
             </span>
+          ) : subject.type === "GRAMMAR" ? (
+            // A grammar pattern (e.g. ～たことがある) is not a single glyph —
+            // rendering it at the 6rem .subject-glyph size badly overflows,
+            // so it gets a smaller, still-prominent readable size instead.
+            <span
+              lang="ja"
+              className="flex min-h-[100px] max-w-[560px] items-center justify-center text-center text-h1"
+              style={{ color: theme.text }}
+            >
+              {subject.characters}
+            </span>
           ) : (
             <>
               <span
@@ -194,6 +241,11 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
               {primaryMeaning.meaning}
             </span>
           )}
+          {subject.type === "GRAMMAR" && subject.jlpt && (
+            <span className="text-caption font-semibold uppercase tracking-wide" style={{ color: theme.base }} lang="en">
+              N{subject.jlpt}
+            </span>
+          )}
         </div>
       </div>
 
@@ -205,6 +257,28 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
               <p className="text-sub text-text-dim">{alternateMeanings.join(", ")}</p>
             )}
           </section>
+        )}
+
+        {subject.type === "GRAMMAR" && subject.formation && (
+          <SectionPanel label="Formation" labelColor={theme.base}>
+            <span lang="ja" className="text-h3 text-text">
+              {subject.formation}
+            </span>
+          </SectionPanel>
+        )}
+
+        {subject.type === "GRAMMAR" && (
+          <SectionPanel label="Example sentences" count={subject.grammarExamples.length} labelColor={theme.base}>
+            {subject.grammarExamples.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {subject.grammarExamples.map((example) => (
+                  <GrammarExampleCard key={example.id} example={example} />
+                ))}
+              </div>
+            ) : (
+              <GrammarExamplesEmptyState />
+            )}
+          </SectionPanel>
         )}
 
         {subject.type === "KANJI" && (onyomi.length > 0 || kunyomi.length > 0) && (
@@ -330,7 +404,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
             characters={subject.characters}
             accentColor={theme.base}
           />
-          {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && (
+          {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && subject.type !== "GRAMMAR" && (
             <MnemonicEditor
               subjectId={subject.id}
               field="readingMnemonic"

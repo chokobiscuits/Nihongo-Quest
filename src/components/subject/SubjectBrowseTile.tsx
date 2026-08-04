@@ -5,13 +5,21 @@ import { SrsStageChip } from "@/components/srs/SrsStageChip";
 import type { SubjectListItem } from "@/server/queries/subjects";
 import { cn } from "@/lib/utils";
 
-/// Sentences are long strings — the shared `subject-glyph` size (6rem) is
-/// sized for a single radical/kanji/vocab glyph and would badly overflow a
-/// whole sentence, so tiles clamp sentence text to a small caption instead.
+/// Sentences and grammar patterns are multi-character strings — the shared
+/// `subject-glyph` size (6rem) is sized for a single radical/kanji/vocab
+/// glyph and would badly overflow either, so tiles clamp them to a smaller,
+/// readable size instead of the full glyph treatment.
 function TileGlyph({ type, characters, color }: { type: SubjectListItem["type"]; characters: string; color: string }) {
   if (type === "SENTENCE") {
     return (
       <span lang="ja" className="line-clamp-2 text-center text-caption" style={{ color }}>
+        {characters}
+      </span>
+    );
+  }
+  if (type === "GRAMMAR") {
+    return (
+      <span lang="ja" className="line-clamp-2 text-center text-body font-semibold" style={{ color }}>
         {characters}
       </span>
     );

@@ -98,3 +98,36 @@ export function spliceSentenceFurigana(
 
   return segments;
 }
+
+/// A sentence candidate for grammar-point example matching. `isLaddered` is
+/// whether the sentence itself has a curriculum level (level !== null);
+/// `characters` is what `matchPatterns` runs against.
+export interface GrammarExampleCandidate {
+  tempId: string;
+  characters: string;
+  isLaddered: boolean;
+}
+
+// Cap on illustrative examples attached per grammar point, per the task's
+// directive: up to 5, preferring laddered sentences, then shorter (easier to
+// read) ones.
+export const MAX_EXAMPLES_PER_GRAMMAR_POINT = 5;
+
+/// Picks up to MAX_EXAMPLES_PER_GRAMMAR_POINT sentences whose `characters`
+/// match any of `matchPatterns`, preferring laddered sentences over
+/// unladdered ones, then shorter sentences (easier to read as a first
+/// example) over longer ones, with candidate order as the final tiebreak for
+/// determinism. Pure — no I/O, so it's directly unit-testable against inline
+/// fixtures; transform.ts calls this once per grammar point over the full
+/// SENTENCE candidate pool built earlier in the same run.
+export function matchGrammarExamples(
+  matchPatterns: RegExp[],
+  candidates: GrammarExampleCandidate[],
+): GrammarExampleCandidate[] {
+  const matched = candidates.filter((c) => matchPatterns.some((re) => re.test(c.characters)));
+  const sorted = [...matched].sort((a, b) => {
+    if (a.isLaddered !== b.isLaddered) return a.isLaddered ? -1 : 1;
+    return a.characters.length - b.characters.length;
+  });
+  return sorted.slice(0, MAX_EXAMPLES_PER_GRAMMAR_POINT);
+}

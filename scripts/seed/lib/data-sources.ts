@@ -59,6 +59,14 @@ export const DATA_SOURCES: DataSourceRecord[] = [
     attribution: "kanji-data JLPT level mapping by David Luz Gouveia (https://github.com/davidluzgouveia/kanji-data).",
   },
   {
+    name: "Grammar points (hand-authored)",
+    url: "",
+    license: "N/A (original work for this project)",
+    versionDate: "2026-08-03",
+    attribution:
+      "N5-N3 grammar point list and example-sentence matching patterns hand-authored for this project, referencing standard JLPT grammar study materials; no external dataset or license applies.",
+  },
+  {
     name: "Tatoeba",
     url: "https://tatoeba.org/",
     license: "CC BY 2.0 FR",

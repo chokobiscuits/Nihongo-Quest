@@ -83,3 +83,42 @@ export function tatoebaSentenceIdOf(metadata: unknown): string | null {
   const meta = metadata as { tatoebaSentenceId?: string } | null | undefined;
   return meta?.tatoebaSentenceId ?? null;
 }
+
+/// One example sentence attached to a GRAMMAR point (a GRAMMAR -> SENTENCE
+/// SubjectComponent edge), carrying enough of the child SENTENCE to render
+/// furigana + English translation without a second round trip.
+export interface GrammarExample {
+  id: string;
+  slug: string;
+  characters: string | null;
+  furigana: { ruby: string; rt?: string }[] | null;
+  furiganaFallback: boolean;
+  englishMeaning: string | null;
+}
+
+export interface GrammarParentLink {
+  child: {
+    id: string;
+    slug: string;
+    characters: string | null;
+    meanings: unknown;
+    furigana: unknown;
+    furiganaFallback: boolean;
+  };
+}
+
+/// Turns a GRAMMAR subject's parentLinks (its attached SENTENCE examples,
+/// always isGating: false — see transform.ts) into the shape the teach card
+/// and detail page render: each linking to its own sentence subject with
+/// furigana and an English gloss. Zero-example points (13 of 107) simply
+/// return an empty array; callers render a clear empty state for that case.
+export function grammarExamples(parentLinks: GrammarParentLink[]): GrammarExample[] {
+  return parentLinks.map((link) => ({
+    id: link.child.id,
+    slug: link.child.slug,
+    characters: link.child.characters,
+    furigana: link.child.furigana as { ruby: string; rt?: string }[] | null,
+    furiganaFallback: link.child.furiganaFallback,
+    englishMeaning: firstMeaning(link.child.meanings),
+  }));
+}
