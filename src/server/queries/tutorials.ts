@@ -5,7 +5,7 @@ import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { isTriggered, type TutorialStats } from "@/services/tutorials/triggers";
 import type { TutorialSubjectType, TutorialTrigger } from "@/services/tutorials/trigger-types";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const LADDER_TYPES: TutorialSubjectType[] = [
   SubjectType.RADICAL,

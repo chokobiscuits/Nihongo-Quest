@@ -105,7 +105,7 @@ export interface DashboardData {
 /// Single aggregated read for the whole dashboard. Every panel gets a
 /// fully-populated object with real denominators — zeroed counts render as
 /// designed empty states, not null branches per-panel.
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);

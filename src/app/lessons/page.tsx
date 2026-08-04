@@ -2,7 +2,7 @@ import { getLessonBatchOrTutorial } from "@/server/queries/lessons";
 import { LessonRunner } from "@/components/lessons/LessonRunner";
 import { TutorialGate } from "@/components/tutorials/TutorialGate";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export default async function LessonsPage() {
   const result = await getLessonBatchOrTutorial(APP_USER_ID);

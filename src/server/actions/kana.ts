@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { SubjectType } from "@/generated/prisma/enums";
 import { BURNED_STAGE } from "@/services/srs/stages";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export interface SkipKanaResult {
   skipped: number;

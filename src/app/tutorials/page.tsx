@@ -4,7 +4,7 @@ import { Panel } from "@/components/panel/Panel";
 import { TutorialIcon } from "@/components/shell/NavIcons";
 import { MarkAllReadButton } from "@/components/tutorials/MarkReadButton";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 /// Full tutorial library — every tutorial, readable anytime regardless of
 /// trigger, in `order` with its completed state.

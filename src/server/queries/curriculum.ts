@@ -9,7 +9,7 @@ import { GURU_STAGE } from "@/services/srs/stages";
 import { curriculumLevel, type LevelGuruStats } from "@/services/srs/curriculum";
 import { typeUnlockStatuses, type GuruCounts, type TypeUnlockStatus } from "@/services/srs/typeUnlock";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const LADDER_TYPES: SubjectType[] = [
   SubjectType.KANA,

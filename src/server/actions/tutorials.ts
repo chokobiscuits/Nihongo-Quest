@@ -3,7 +3,7 @@
 import { acknowledgeTutorial, acknowledgeAllTutorials } from "@/server/queries/tutorials";
 import { revalidatePath } from "next/cache";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 /// Writes a TutorialCompletion row for the given tutorial and revalidates
 /// /lessons so the next required-and-triggered tutorial (or lesson items,

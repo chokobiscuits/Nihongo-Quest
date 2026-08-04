@@ -211,7 +211,7 @@ function formationOf(metadata: unknown): string | null {
 /// ladder subjects, ordered radical -> kanji -> vocab, by level, then
 /// frequency, truncated to `UserProfile.settings.lessonBatchSize` (default
 /// 5). Creates the user's profile on first access if missing.
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export type LessonBatchResult =
   | { kind: "tutorial"; tutorial: TutorialDetail }

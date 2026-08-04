@@ -7,7 +7,7 @@ import { rankForLevel } from "@/services/xp/rank";
 import { totalXpToReach } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 // Same laddered denominators the dashboard uses — see
 // src/server/queries/dashboard.ts's UNSEEDED_DENOMINATORS/RADICAL_TOTAL for

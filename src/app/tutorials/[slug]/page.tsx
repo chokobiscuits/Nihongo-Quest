@@ -6,7 +6,7 @@ import { TutorialBody } from "@/components/tutorials/TutorialBody";
 import { TutorialIcon } from "@/components/shell/NavIcons";
 import { MarkReadButton } from "@/components/tutorials/MarkReadButton";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export default async function TutorialDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

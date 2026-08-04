@@ -12,7 +12,7 @@ import {
 } from "@/server/queries/subjects";
 import { getCurriculumLevels, getTypeUnlockStatuses } from "@/server/queries/curriculum";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 // Levels rendered per page load, windowed around the user's current level
 // (or page 1 of the ladder) so a full 60-level browse never fires 60

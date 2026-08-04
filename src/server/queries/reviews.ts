@@ -35,7 +35,7 @@ export interface ReviewQueueResult {
 /// stage 9 is Burned and leaves the queue for good). No due-date filter —
 /// `dueAt` is a priority weight (ORDER BY, ascending, overdue-first), never
 /// a WHERE-clause lock. The user can review as much as they want, whenever.
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export async function getReviewQueue(userId: string = APP_USER_ID): Promise<ReviewQueueResult> {
   const rows = await prisma.userSubject.findMany({

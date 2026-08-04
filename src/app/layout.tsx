@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { storage } from "@/lib/storage";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const fontLatin = Inter({
   subsets: ["latin"],

@@ -1,7 +1,7 @@
 import { getReviewQueue } from "@/server/queries/reviews";
 import { ReviewRunner } from "@/components/reviews/ReviewRunner";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export default async function ReviewsPage() {
   const { items } = await getReviewQueue(APP_USER_ID);

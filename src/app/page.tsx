@@ -13,7 +13,7 @@ import { AchievementsCard } from "@/components/dashboard/AchievementsCard";
 import { RankLevelCard } from "@/components/rank/RankLevelCard";
 import { InfiniteMasteryCard } from "@/components/dashboard/InfiniteMasteryCard";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const JLPT_LEVELS: JlptLevel[] = ["N5", "N4", "N3", "N2", "N1"];
 

@@ -7,7 +7,7 @@ import { getCurriculumLevels, getGuruCounts, getTypeUnlockStatuses } from "@/ser
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 // Ladder types have a curriculum level and are gated by unlock rules.
 // Reading has no seeded rows yet (see dashboard.ts); Sentence and Grammar

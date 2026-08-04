@@ -11,7 +11,7 @@ import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
 import { SubjectType } from "@/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export interface LessonQuizAnswerRecord {
   subjectId: string;

@@ -17,7 +17,7 @@ const ALL_RADICALS_TOTAL = 214;
 // named locally against the same table Guru/Burned already read from.
 const MASTER_STAGE = 7;
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export interface AchievementRow {
   definition: AchievementDefinition;

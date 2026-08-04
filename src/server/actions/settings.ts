@@ -10,7 +10,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { InputJsonValue } from "@/generated/prisma/internal/prismaNamespace";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // ~2MB
 const AVATAR_SIZE_PX = 512;

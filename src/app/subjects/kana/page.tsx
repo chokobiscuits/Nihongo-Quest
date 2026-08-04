@@ -6,7 +6,7 @@ import { getKanaBrowseGroups } from "@/server/queries/subjects";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { SubjectType } from "@/generated/prisma/enums";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 const SCRIPT_LABEL: Record<"hiragana" | "katakana", { en: string; ja: string }> = {
   hiragana: { en: "Hiragana", ja: "ひらがな" },

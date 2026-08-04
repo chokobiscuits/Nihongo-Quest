@@ -4,7 +4,7 @@ import { slugToType } from "@/components/subject/typeSlug";
 import { getSubjectDetail } from "@/server/queries/subjects";
 import { SubjectDetailCard } from "@/components/subject/SubjectDetailCard";
 
-const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export default async function SubjectDetailPage({
   params,
