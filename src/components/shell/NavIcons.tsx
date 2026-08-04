@@ -126,6 +126,16 @@ export function MasteryIcon(props: IconProps) {
   );
 }
 
+export function TutorialIcon(props: IconProps) {
+  return (
+    <svg {...BASE_PROPS} {...props}>
+      <path d="M4 19.5V5.5a2 2 0 0 1 2-2h12v15H6a2 2 0 0 0-2 2Z" />
+      <path d="M18 21H6a2 2 0 0 1 0-4h12" />
+      <path d="M8.5 8h7M8.5 11.5h5" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg {...BASE_PROPS} {...props}>

@@ -24,6 +24,7 @@ import {
   MasteryIcon,
   AchievementIcon,
   SettingsIcon,
+  TutorialIcon,
 } from "./NavIcons";
 
 /// Maps a nav href to the SubjectType whose theme color it should borrow
@@ -81,6 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { href: "/progress", labelEn: "Progress", labelJa: "進捗", Icon: ProgressIcon },
+      { href: "/tutorials", labelEn: "Tutorials", labelJa: "チュートリアル", Icon: TutorialIcon },
       { href: "/mastery", labelEn: "Mastery", labelJa: "熟練度", Icon: MasteryIcon },
       { href: "/achievements", labelEn: "Achievements", labelJa: "実績", Icon: AchievementIcon },
       { href: "/settings", labelEn: "Settings", labelJa: "設定", Icon: SettingsIcon },

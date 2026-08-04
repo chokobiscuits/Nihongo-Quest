@@ -4,6 +4,7 @@ import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/un
 import { selectLessonBatch, type LessonCandidate, type LessonSubjectType } from "@/services/lessons/batch";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf } from "@/server/queries/sentenceWordBreakdown";
+import { getNextRequiredTutorial, type TutorialDetail } from "@/server/queries/tutorials";
 
 // Lessons only ever schedule the 60-level curriculum ladder (level != null).
 // Off-ladder subjects (jlpt/frequency reference material, and the ~5,900
@@ -176,6 +177,21 @@ function partsOfSpeechOf(metadata: unknown): string[] {
 /// frequency, truncated to `UserProfile.settings.lessonBatchSize` (default
 /// 5). Creates the user's profile on first access if missing.
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
+
+export type LessonBatchResult =
+  | { kind: "tutorial"; tutorial: TutorialDetail }
+  | { kind: "lessons"; batch: LessonSubject[] };
+
+/// Wraps `getLessonBatch`: if a REQUIRED tutorial is currently triggered and
+/// has no TutorialCompletion for this user, returns it instead of lesson
+/// items — one at a time, ordered by `Tutorial.order` ascending (see
+/// getNextRequiredTutorial). Optional triggered tutorials never block here;
+/// they surface as dismissible dashboard cards instead.
+export async function getLessonBatchOrTutorial(userId: string = APP_USER_ID): Promise<LessonBatchResult> {
+  const tutorial = await getNextRequiredTutorial(userId);
+  if (tutorial) return { kind: "tutorial", tutorial };
+  return { kind: "lessons", batch: await getLessonBatch(userId) };
+}
 
 export async function getLessonBatch(userId: string = APP_USER_ID): Promise<LessonSubject[]> {
   const profile = await getOrCreateProfile(userId);

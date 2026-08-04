@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { getDashboard } from "@/server/queries/dashboard";
+import { getTriggeredOptionalTutorials } from "@/server/queries/tutorials";
+import { TutorialTipsCard } from "@/components/dashboard/TutorialTipsCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DayStreakCard } from "@/components/dashboard/DayStreakCard";
 import { ContinueLearningSection } from "@/components/dashboard/ContinueLearningSection";
@@ -14,7 +16,10 @@ import { CelebrationDevTrigger } from "@/components/celebration/CelebrationDevTr
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
 export default async function HomePage() {
-  const dashboard = await getDashboard(APP_USER_ID);
+  const [dashboard, tutorialTips] = await Promise.all([
+    getDashboard(APP_USER_ID),
+    getTriggeredOptionalTutorials(APP_USER_ID),
+  ]);
 
   return (
     <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:gap-4">
@@ -38,6 +43,8 @@ export default async function HomePage() {
           <ProgressOverviewCard rows={dashboard.progress} />
           <JlptProgressCard currentLevel="N5" progressFraction={0} />
         </div>
+
+        <TutorialTipsCard tutorials={tutorialTips} />
 
         <ContinueLearningSection cards={dashboard.continueCards} />
 

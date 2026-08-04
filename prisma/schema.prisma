@@ -250,6 +250,41 @@ model XpEvent {
   @@index([userId, createdAt])
 }
 
+// -------------------------------------------------------------- Tutorials
+
+model Tutorial {
+  id     String @id @default(cuid())
+  slug   String @unique
+  order  Int
+
+  titleEn String
+  titleJa String
+  /// Markdown. Seeded on create only — see scripts/seed/lib/tutorials.ts and
+  /// load.ts's tutorial upsert, which never overwrites a body the user has
+  /// since edited (same treatment as Subject's USER-AUTHORED block).
+  body    String
+
+  /// Discriminated union — see src/services/tutorials/trigger-types.ts.
+  trigger Json
+
+  required         Boolean @default(false)
+  estimatedMinutes Int     @default(2)
+
+  completions TutorialCompletion[]
+}
+
+model TutorialCompletion {
+  userId      String
+  tutorialId  String
+  completedAt DateTime @default(now())
+  acknowledged Boolean @default(true)
+
+  tutorial Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tutorialId])
+  @@index([userId])
+}
+
 // --------------------------------------------------------------- Attribution
 
 /// Backs the required license attribution screen (/about). One row per

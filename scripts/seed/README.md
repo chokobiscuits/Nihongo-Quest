@@ -9,7 +9,15 @@ retuning) can be developed and verified without a live database.
 npm run seed:download    # network + filesystem only, writes data/raw/
 npm run seed:transform   # pure, writes data/processed/*.jsonl
 npm run seed:load        # thin Prisma upserts from data/processed/ into Postgres
+npm run seed:load-tutorials  # separate: hand-encoded Tutorial content, no download/transform phase
 ```
+
+`load-tutorials.ts` is independent of the three phases above — it upserts the
+hand-encoded `TUTORIALS` constant (`scripts/seed/lib/tutorials.ts`) straight
+into the `Tutorial` table, on the same idempotent-upsert-on-slug pattern as
+Kangxi radicals. `body` is treated like Subject's USER-AUTHORED fields:
+seeded on create only, never overwritten on update, so a user's own edits
+survive a reseed.
 
 `data/` is gitignored. Both `data/raw/` and `data/processed/` are fully
 regenerable from source; nothing under `data/` should ever be hand-edited or
