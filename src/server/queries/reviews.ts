@@ -200,6 +200,13 @@ export async function getReviewQueue(userId: string = APP_USER_ID, now: Date = n
 /// mastery and leaves SRS stage and dueAt untouched. That's what makes it
 /// safe to drill a weak item repeatedly without either farming XP or risking
 /// a demotion.
+///
+/// Unlike the ranked queue this deliberately INCLUDES Burned items (stage
+/// 9). Burned means "known well enough to leave the SRS", not "unavailable":
+/// skipped kana are burned outright, so excluding them would make the single
+/// most likely thing to want casual drilling on the one thing unreachable.
+/// Nothing here can change an item's stage, so including Burned costs
+/// nothing.
 export async function getUnrankedReviewQueue(
   userId: string = APP_USER_ID,
   filter: UnrankedQueueFilter = {},
@@ -208,7 +215,7 @@ export async function getUnrankedReviewQueue(
     where: {
       userId,
       startedAt: { not: null },
-      srsStage: { gte: 1, lte: 8 },
+      srsStage: { gte: 1 },
       subject: {
         ...(filter.types?.length ? { type: { in: filter.types } } : {}),
         ...(filter.levels?.length ? { level: { in: filter.levels } } : {}),
@@ -231,9 +238,13 @@ export interface UnrankedOption {
 /// started anything in, and which curriculum levels within each. Drives the
 /// subject/level pickers on the unranked page so the UI can only offer
 /// combinations that actually have items behind them.
+///
+/// Matches getUnrankedReviewQueue's stage filter exactly, Burned included —
+/// if the two drifted apart the picker would offer counts the session
+/// couldn't deliver, or hide items the session would happily serve.
 export async function getUnrankedOptions(userId: string = APP_USER_ID): Promise<UnrankedOption[]> {
   const rows = await prisma.userSubject.findMany({
-    where: { userId, startedAt: { not: null }, srsStage: { gte: 1, lte: 8 } },
+    where: { userId, startedAt: { not: null }, srsStage: { gte: 1 } },
     select: { subject: { select: { type: true, level: true } } },
   });
 
