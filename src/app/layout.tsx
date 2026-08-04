@@ -40,6 +40,13 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+/// Every page renders inside this layout, and the layout reads the user's
+/// profile, mastery and unlock state from the database. That makes the whole
+/// app request-time by nature, so opt out of static prerendering explicitly.
+/// Without this, `next build` tries to prerender /_not-found, hits the
+/// database with no connection available, and fails the build.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
