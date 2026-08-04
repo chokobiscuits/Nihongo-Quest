@@ -123,7 +123,7 @@ function toReviewSubject(row: ReviewRow): ReviewSubject {
 /// The due-date filter is what makes a ranked session finite and
 /// completable. Without it the queue is every item the user has ever
 /// started, which at a few hundred items means every session dumps the whole
-/// collection out and the queue can never empty. Practising items that
+/// collection out and the queue can never empty. Practicing items that
 /// aren't due yet is a real want, but it belongs in the unranked queue
 /// below, where it earns no XP and cannot touch SRS state.
 ///

@@ -326,9 +326,9 @@ export interface CommitUnrankedSessionResult {
 /// Specifically it does NOT touch:
 /// - XP or account level (unranked is not a progression path)
 /// - masteryXp or masteryLevel (mastery never decreases, so awarding it here
-///   would be farmable by simply practising the same item repeatedly)
+///   would be farmable by simply practicing the same item repeatedly)
 /// - srsStage, dueAt, lastPromotedAt, passedAt, burnedAt (no promotion, and
-///   crucially no demotion — practising a weak item must be risk-free, or
+///   crucially no demotion — practicing a weak item must be risk-free, or
 ///   users avoid the items they most need to drill)
 /// - streak / DailyActivity XP
 ///

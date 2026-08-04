@@ -66,7 +66,7 @@ export function UnrankedPicker({ options }: UnrankedPickerProps) {
   if (options.length === 0) {
     return (
       <div className="rounded-[var(--radius-card)] border border-line bg-surface p-6 text-body text-text-dim">
-        Nothing to practise yet. Learn some items first and they&apos;ll show up here.
+        Nothing to practice yet. Learn some items first and they&apos;ll show up here.
       </div>
     );
   }
@@ -92,7 +92,7 @@ export function UnrankedPicker({ options }: UnrankedPickerProps) {
             </button>
           ))}
         </div>
-        <p className="text-caption text-text-faint">Select none to practise everything.</p>
+        <p className="text-caption text-text-faint">Select none to practice everything.</p>
       </div>
 
       {availableLevels.length > 0 && (
@@ -115,7 +115,7 @@ export function UnrankedPicker({ options }: UnrankedPickerProps) {
               </button>
             ))}
           </div>
-          <p className="text-caption text-text-faint">Select none to practise all levels.</p>
+          <p className="text-caption text-text-faint">Select none to practice all levels.</p>
         </div>
       )}
 

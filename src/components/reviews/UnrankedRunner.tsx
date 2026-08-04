@@ -49,7 +49,7 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
     return (
       <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-6">
         <p className="text-body font-medium text-text">Nothing matches that selection.</p>
-        <p className="text-caption text-text-dim">Pick different subjects or levels to practise.</p>
+        <p className="text-caption text-text-dim">Pick different subjects or levels to practice.</p>
         <Link
           href={pickerHref}
           className="mt-1 inline-flex h-9 w-fit items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand"
@@ -69,7 +69,7 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
       <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
         <h2 className="text-h2 font-semibold text-text">Practice complete</h2>
         <p className="text-body text-text-muted">
-          Practised {result.itemsReviewed} item{result.itemsReviewed === 1 ? "" : "s"}, {result.accuracyPct}% accuracy.
+          Practiced {result.itemsReviewed} item{result.itemsReviewed === 1 ? "" : "s"}, {result.accuracyPct}% accuracy.
         </p>
         <p className="text-caption text-text-faint">
           Unranked practice: no XP, no mastery, and no change to any item&apos;s SRS stage.
@@ -82,7 +82,7 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
             href={pickerHref}
             className="inline-flex h-9 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand"
           >
-            Practise again
+            Practice again
           </Link>
           <button
             type="button"

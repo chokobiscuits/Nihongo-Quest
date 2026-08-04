@@ -51,7 +51,7 @@ export default async function ReviewsPage() {
               href="/reviews/practice"
               className="inline-flex h-9 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand"
             >
-              Practise unranked
+              Practice unranked
             </Link>
             <Link
               href="/lessons"
