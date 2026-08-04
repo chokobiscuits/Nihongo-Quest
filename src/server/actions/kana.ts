@@ -8,16 +8,24 @@ import { BURNED_STAGE } from "@/services/srs/stages";
 import { APP_USER_ID } from "@/lib/appUser";
 
 export interface SkipKanaResult {
+  /// Kana that had no UserSubject row at all and were created at Burned.
   skipped: number;
+  /// Kana that already had a row below Burned (in-progress practice) and
+  /// were promoted up to Burned by this call.
+  promoted: number;
 }
 
-/// "I already know kana": creates a Burned UserSubject row for every KANA
-/// subject the user doesn't already have a row for, so kana counts as known
-/// and never enters the review queue — see src/services/srs/unlock.ts's
-/// kana gate, which only requires every kana to be passed OR skipped, not
-/// specifically learned through review. Existing rows (already started via
-/// real practice) are left untouched: skip only fills in the gaps, it never
-/// downgrades or overwrites genuine progress.
+/// "I already know kana": marks EVERY kana subject as Burned, so kana counts
+/// as known and never enters the review queue — see src/services/srs/unlock.ts's
+/// kana gate, which requires every kana to be passed OR skipped.
+///
+/// This deliberately overwrites in-progress kana rather than only filling in
+/// gaps. The gate checks `srsStage >= Guru` across *all* kana, so leaving a
+/// single Apprentice row behind keeps radicals locked and makes the button
+/// look like it did nothing. The button is a claim about what the user
+/// already knows, so it is taken at its word. `unskipKana` remains the
+/// escape hatch, and it still refuses to delete rows with real review
+/// history.
 export async function skipKana(userId: string = APP_USER_ID): Promise<SkipKanaResult> {
   const allKana = await prisma.subject.findMany({
     where: { type: SubjectType.KANA },
@@ -25,26 +33,52 @@ export async function skipKana(userId: string = APP_USER_ID): Promise<SkipKanaRe
   });
   const existing = await prisma.userSubject.findMany({
     where: { userId, subjectId: { in: allKana.map((k) => k.id) } },
-    select: { subjectId: true },
+    select: { id: true, subjectId: true, srsStage: true },
   });
   const existingIds = new Set(existing.map((r) => r.subjectId));
   const toSkip = allKana.filter((k) => !existingIds.has(k.id));
+  const toPromote = existing.filter((r) => r.srsStage < BURNED_STAGE);
 
-  if (toSkip.length === 0) return { skipped: 0 };
+  if (toSkip.length === 0 && toPromote.length === 0) return { skipped: 0, promoted: 0 };
 
   const now = new Date();
-  await prisma.userSubject.createMany({
-    data: toSkip.map((k) => ({
-      userId,
-      subjectId: k.id,
-      unlockedAt: now,
-      startedAt: now,
-      srsStage: BURNED_STAGE,
-      passedAt: now,
-      burnedAt: now,
-      lastPromotedAt: now,
-      dueAt: null,
-    })),
+  await prisma.$transaction(async (tx) => {
+    if (toSkip.length > 0) {
+      await tx.userSubject.createMany({
+        data: toSkip.map((k) => ({
+          userId,
+          subjectId: k.id,
+          unlockedAt: now,
+          startedAt: now,
+          srsStage: BURNED_STAGE,
+          passedAt: now,
+          burnedAt: now,
+          lastPromotedAt: now,
+          dueAt: null,
+        })),
+      });
+    }
+
+    if (toPromote.length > 0) {
+      // Burn in-progress kana. passedAt/burnedAt are preserved where already
+      // set so the original milestone timestamps aren't rewritten.
+      await tx.userSubject.updateMany({
+        where: { id: { in: toPromote.map((r) => r.id) }, passedAt: null },
+        data: { passedAt: now },
+      });
+      await tx.userSubject.updateMany({
+        where: { id: { in: toPromote.map((r) => r.id) }, burnedAt: null },
+        data: { burnedAt: now },
+      });
+      await tx.userSubject.updateMany({
+        where: { id: { in: toPromote.map((r) => r.id) } },
+        data: {
+          srsStage: BURNED_STAGE,
+          lastPromotedAt: now,
+          dueAt: null,
+        },
+      });
+    }
   });
 
   try {
@@ -59,7 +93,7 @@ export async function skipKana(userId: string = APP_USER_ID): Promise<SkipKanaRe
     // convention.
   }
 
-  return { skipped: toSkip.length };
+  return { skipped: toSkip.length, promoted: toPromote.length };
 }
 
 export interface UnskipKanaResult {

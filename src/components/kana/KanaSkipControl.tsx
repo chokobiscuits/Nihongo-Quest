@@ -25,7 +25,12 @@ export function KanaSkipControl({ initialResolved, className }: KanaSkipControlP
     startTransition(async () => {
       const result = await skipKana();
       setResolved(true);
-      setMessage(result.skipped > 0 ? `Marked ${result.skipped} kana as known.` : "Kana already marked as known.");
+      const total = result.skipped + result.promoted;
+      setMessage(
+        total > 0
+          ? `Marked ${total} kana as known.${result.promoted > 0 ? ` ${result.promoted} in-progress kana were burned.` : ""}`
+          : "Kana already marked as known.",
+      );
     });
   }
 
