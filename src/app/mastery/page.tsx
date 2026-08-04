@@ -1,11 +1,13 @@
-import { getProgress } from "@/server/queries/progress";
+import { getProgress, getNearPromotion } from "@/server/queries/progress";
 import { Panel } from "@/components/panel/Panel";
 import { MasteryTierLadder } from "@/components/mastery/MasteryTierLadder";
 import { InfiniteMasteryCard } from "@/components/dashboard/InfiniteMasteryCard";
+import { NearPromotionSection } from "@/components/progress/NearPromotionSection";
 import { MasteryIcon } from "@/components/shell/NavIcons";
 
 export default async function MasteryPage() {
-  const progress = await getProgress();
+  const now = new Date();
+  const [progress, nearPromotion] = await Promise.all([getProgress(), getNearPromotion(undefined, 5, now)]);
   const { account } = progress;
 
   return (
@@ -22,7 +24,16 @@ export default async function MasteryPage() {
         />
       </Panel>
 
-      <InfiniteMasteryCard />
+      <InfiniteMasteryCard
+        level={account.accountMasteryLevel}
+        tierName={account.masteryTier.name}
+        xpIntoLevel={account.masteryXpIntoLevel}
+        xpForNextLevel={account.masteryXpForNextLevel}
+      />
+
+      <Panel accent="var(--color-vocab)" title="Close to ranking up" titleJa="昇格間近">
+        <NearPromotionSection groups={nearPromotion} now={now} />
+      </Panel>
 
       <Panel accent="var(--color-brand)" title="How mastery works" titleJa="仕組み">
         <div className="flex flex-col gap-3 text-body text-text-dim">

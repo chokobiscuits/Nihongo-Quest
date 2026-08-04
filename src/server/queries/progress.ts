@@ -55,6 +55,35 @@ export interface ActivityDay {
   lessonCount: number;
 }
 
+export interface NearPromotionItem {
+  userSubjectId: string;
+  subjectId: string;
+  slug: string;
+  characters: string | null;
+  /// Primary English meaning, for items whose `characters` is null or whose
+  /// glyph alone isn't recognisable.
+  meaning: string | null;
+  srsStage: number;
+  stageName: string;
+  /// The stage this item moves to on its next correct review.
+  nextStage: number;
+  nextStageName: string;
+  dueAt: Date | null;
+  /// True when this promotion would cross into Guru (stage 5), which is what
+  /// unlocks dependent subjects.
+  unlocksAtGuru: boolean;
+}
+
+export interface NearPromotionGroup {
+  type: SubjectType;
+  labelEn: string;
+  labelJa: string;
+  items: NearPromotionItem[];
+  /// Total items of this type one correct review from promoting, which may
+  /// exceed `items.length` since the list is capped for display.
+  total: number;
+}
+
 export interface ProgressData {
   overall: OverallProgressRow[];
   srsDistribution: SrsDistributionRow[];
@@ -248,4 +277,107 @@ async function bucketByType(subjectIds: string[]) {
     else if (row.type === SubjectType.GRAMMAR) result.GRAMMAR += 1;
   }
   return result;
+}
+
+// Display labels per type, matching the OverallProgressRow labels above so
+// the same subject reads identically wherever it appears.
+const TYPE_LABELS: Record<string, { en: string; ja: string }> = {
+  KANA: { en: "Kana", ja: "かな" },
+  RADICAL: { en: "Radicals", ja: "部首" },
+  KANJI: { en: "Kanji", ja: "漢字" },
+  VOCAB: { en: "Vocabulary", ja: "語彙" },
+  SENTENCE: { en: "Sentences", ja: "例文" },
+  GRAMMAR: { en: "Grammar", ja: "文法" },
+  READING: { en: "Reading", ja: "読解" },
+};
+
+// Order groups the way the curriculum progresses rather than alphabetically.
+const TYPE_ORDER: SubjectType[] = [
+  SubjectType.KANA,
+  SubjectType.RADICAL,
+  SubjectType.KANJI,
+  SubjectType.VOCAB,
+  SubjectType.GRAMMAR,
+  SubjectType.SENTENCE,
+];
+
+/// Items that are one correct review away from moving up an SRS stage,
+/// grouped by subject type.
+///
+/// "Close to ranking up" means exactly that: every started, non-burned item
+/// is one correct answer from its next stage, so what actually distinguishes
+/// them is *readiness* — whether the item is due now, and how big the jump
+/// is. Ordering therefore puts due items first (you can act on them
+/// immediately), then the soonest-due, and within that the highest stage
+/// (the most valuable promotion).
+///
+/// Items crossing into Guru are flagged: that's the promotion that unlocks
+/// dependent subjects, so it's worth more than a plain stage step.
+export async function getNearPromotion(
+  userId: string = APP_USER_ID,
+  perTypeLimit = 5,
+  now: Date = new Date(),
+): Promise<NearPromotionGroup[]> {
+  const rows = await prisma.userSubject.findMany({
+    where: { userId, startedAt: { not: null }, srsStage: { gte: 1, lte: 8 } },
+    select: {
+      id: true,
+      srsStage: true,
+      dueAt: true,
+      subject: { select: { id: true, type: true, slug: true, characters: true, meanings: true } },
+    },
+  });
+
+  const byType = new Map<SubjectType, NearPromotionItem[]>();
+
+  for (const row of rows) {
+    const nextStage = Math.min(row.srsStage + 1, STAGES.length - 1);
+    const meanings = row.subject.meanings as { text?: string }[] | null;
+    const item: NearPromotionItem = {
+      userSubjectId: row.id,
+      subjectId: row.subject.id,
+      slug: row.subject.slug,
+      characters: row.subject.characters,
+      meaning: meanings?.[0]?.text ?? null,
+      srsStage: row.srsStage,
+      stageName: STAGES[row.srsStage].name,
+      nextStage,
+      nextStageName: STAGES[nextStage].name,
+      dueAt: row.dueAt,
+      unlocksAtGuru: row.srsStage < GURU_STAGE && nextStage >= GURU_STAGE,
+    };
+    const type = row.subject.type as SubjectType;
+    const list = byType.get(type) ?? [];
+    list.push(item);
+    byType.set(type, list);
+  }
+
+  const groups: NearPromotionGroup[] = [];
+  for (const type of TYPE_ORDER) {
+    const items = byType.get(type);
+    if (!items || items.length === 0) continue;
+
+    items.sort((a, b) => {
+      const aDue = a.dueAt === null || a.dueAt <= now;
+      const bDue = b.dueAt === null || b.dueAt <= now;
+      if (aDue !== bDue) return aDue ? -1 : 1;
+      // Both due, or both pending: soonest first. Nulls sort as "due now".
+      const aTime = a.dueAt?.getTime() ?? 0;
+      const bTime = b.dueAt?.getTime() ?? 0;
+      if (aTime !== bTime) return aTime - bTime;
+      // Same readiness: the bigger promotion first.
+      return b.srsStage - a.srsStage;
+    });
+
+    const labels = TYPE_LABELS[type] ?? { en: type, ja: "" };
+    groups.push({
+      type,
+      labelEn: labels.en,
+      labelJa: labels.ja,
+      items: items.slice(0, perTypeLimit),
+      total: items.length,
+    });
+  }
+
+  return groups;
 }
