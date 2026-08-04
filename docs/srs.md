@@ -46,16 +46,30 @@ Demotion happens immediately; XP is awarded regardless of correctness.
 
 **What it does not block:**
 - Demotion on an incorrect answer.
-- XP and mastery awards (both apply for correct and incorrect answers).
 - Queue ordering via `dueAt` (the item is still scheduled to come due at the computed time).
+
+**What it scales down:** XP and mastery for a correct answer whose promotion
+was blocked are multiplied by `UNPRODUCTIVE_REVIEW_XP_FACTOR` (0.1, floored at
+1 XP). Because the queue never filters by `dueAt`, the same items are always
+re-servable, so without this an item could be reviewed back-to-back
+indefinitely at full XP. Incorrect answers keep their flat participation
+award. See `scaleXpForProductivity` in `src/services/xp/curve.ts`.
 
 **Implementation:** `lastPromotedAt` is stored per UserSubject and updated only when `promoted = true`. `isPromotionBlocked(lastPromotedAt, now)` checks if now is within 4 hours of `lastPromotedAt`. See `src/services/srs/transition.ts`.
 
 **Warning:** The 4-hour figure is not validated against learner behavior data. It is an untested guess. If you deploy this, instrument promotion patterns to see if the cap is too tight (users skip items to avoid the cap) or too loose (users game it by reviewing too quickly).
 
-## No time gates
+## Ranked and unranked reviews
 
-The review queue sorts by `dueAt` but never filters by it. An item that is overdue is simply shown first; it does not unlock early or become unavailable. A user can review anything in their queue in any order at any time, subject to SRS stage and curriculum level constraints.
+There are two review modes.
+
+**Ranked** (`/reviews`) is the SRS proper. The queue is filtered to items that are actually due (`dueAt <= now`), so a session is finite and completable: you clear what's due and you're done. This is the only mode that awards XP and mastery or moves an item's SRS stage. When nothing is due the page says so and shows how long until the next item comes up.
+
+**Unranked** (`/reviews/practice`) is free practice. Pick any subject types and curriculum levels you've unlocked and drill them regardless of due date. It awards no XP and no mastery, and it never changes `srsStage`, `dueAt`, or `lastPromotedAt` — it cannot promote *or* demote. Answers are still written to `ReviewLog` (with `startedStage == endedStage`) and the per-item correct/incorrect counters still update, so accuracy stats stay honest.
+
+The split exists because an unfiltered queue does not scale: with a few hundred started items, every session serves the entire collection and the queue can never empty. It also removes the XP exploit at the root, since the only mode that pays is the one you cannot re-enter at will.
+
+See `getReviewQueue` / `getUnrankedReviewQueue` in `src/server/queries/reviews.ts` and `commitReviewSession` / `commitUnrankedReviewSession` in `src/server/actions/reviews.ts`.
 
 ## Unlock rules per type
 
@@ -96,7 +110,7 @@ See `src/services/srs/typeUnlock.ts` for the constants and the status UI.
 
 **XP rewards:**
 - Lesson (stage 0 to 1): 25 XP, flat (learning is the highest-value act).
-- Correct review: 8 + 3 * srsStage XP. (Apprentice I: 11 XP; Enlightened: 32 XP.)
+- Correct review: 8 + 3 * srsStage XP. (Apprentice I: 11 XP; Enlightened: 32 XP.) Scaled to 10% (min 1 XP) if the 4-hour cooldown blocked the promotion.
 - Incorrect review: 2 XP (participation reward, not stage-scaled).
 - Streak multiplier: +2% per consecutive day active, capped at 1.5x at 25+ days. Applied to the session's total.
 
@@ -144,6 +158,6 @@ A subject at curriculum level 7 is not unlocked until the user's current level f
 
 See `src/services/reviews/queue.ts` and `src/server/queries/reviews.ts`.
 
-The queue is sorted by `dueAt` (ascending, most overdue first), then by `srsStage` (descending, higher stages first within the same due time, so Guru items are reviewed before Apprentice). No `dueAt` filter: all items are reviewable at any time.
+The ranked queue selects only due items (`dueAt <= now`, or a null `dueAt`, which is a data anomaly worth surfacing rather than hiding), ordered by `dueAt` ascending. The returned items are then shuffled so sessions don't present the same order every time. The unranked queue skips the due filter entirely and instead narrows by the type/level filter the user picked.
 
 Question type selection (MEANING vs. READING) is governed by `questionKindsFor(type)` in `src/services/reviews/queue.ts`. Radicals and kana ask meaning only (they have no real pronunciations). Everything else asks both, selected randomly within a session with the constraint that both types must be asked at least once per session if the subject is not single-type.

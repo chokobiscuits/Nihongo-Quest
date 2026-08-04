@@ -128,8 +128,9 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
       where: { userId, startedAt: { not: null } },
       _count: true,
     }),
-    // No due-date filter: reviewable = started + stage 1-8. dueAt is a
-    // priority weight, not a lock — see src/server/queries/reviews.ts.
+    // Ranked queue only: due items (stage 1-8, dueAt <= now). The dashboard
+    // count means "reviews waiting for you", so unranked practice — which is
+    // always available and awards nothing — deliberately isn't counted here.
     getReviewQueue(userId),
     // Account mastery is derived, not stored: a single SUM aggregate avoids
     // loading every UserSubject row just to add up masteryXp.

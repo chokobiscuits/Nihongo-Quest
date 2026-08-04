@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { computeTransition } from "@/services/srs/transition";
-import { xpForCorrectAnswer, xpForIncorrectAnswer, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
+import { xpForCorrectAnswer, xpForIncorrectAnswer, scaleXpForProductivity, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
@@ -129,11 +129,17 @@ export async function commitReviewSession(
   }
 
   // XP: one award per logged answer (correct or incorrect), scaled by the
-  // stage the item was *at* when that answer was given.
+  // stage the item was *at* when that answer was given, then scaled again by
+  // whether the review actually moved the item. An item whose promotion the
+  // 4-hour cooldown blocked pays a token amount: the queue never filters by
+  // dueAt, so without this the same items could be re-reviewed back-to-back
+  // at full XP indefinitely.
   const answerXp = answers.reduce((sum, a) => {
     const row = bySubjectRow.get(a.userSubjectId);
     const stage = row?.srsStage ?? 1;
-    return sum + (a.correct ? xpForCorrectAnswer(stage) : xpForIncorrectAnswer());
+    if (!a.correct) return sum + xpForIncorrectAnswer();
+    const productive = transitions.get(a.userSubjectId)?.promoted ?? true;
+    return sum + scaleXpForProductivity(xpForCorrectAnswer(stage), productive);
   }, 0);
   const multiplier = streakMultiplier(profile.currentStreak);
   const xpAwarded = Math.round(answerXp * multiplier);
@@ -192,9 +198,11 @@ export async function commitReviewSession(
         });
       }
 
+      // Mastery never decreases, so it is farmable the same way account XP
+      // is; scale it by productivity for the same reason.
       const masteryXpGain = itemAnswers
         .filter((a) => a.correct)
-        .reduce((sum) => sum + masteryXpForAnswer(row.srsStage), 0);
+        .reduce((sum) => sum + scaleXpForProductivity(masteryXpForAnswer(row.srsStage), transition.promoted), 0);
       const newMasteryXp = row.masteryXp + masteryXpGain;
 
       const meaningCorrectDelta = itemAnswers.filter((a) => a.questionType === "MEANING" && a.correct).length;
@@ -299,6 +307,143 @@ export async function commitReviewSession(
     itemOutcomes: result.itemOutcomes,
     itemsReviewed: userSubjectIds.length,
     accuracyPct,
+  };
+}
+
+export interface CommitUnrankedSessionResult {
+  sessionId: string;
+  itemsReviewed: number;
+  accuracyPct: number;
+  /// Per-item correct/total, so the summary can show what needs work. No
+  /// stage data: unranked never moves an item's stage.
+  itemResults: { userSubjectId: string; correct: number; total: number }[];
+}
+
+/// Commits an UNRANKED (practice) session. Deliberately does far less than
+/// commitReviewSession: it records that the practice happened and nothing
+/// else.
+///
+/// Specifically it does NOT touch:
+/// - XP or account level (unranked is not a progression path)
+/// - masteryXp or masteryLevel (mastery never decreases, so awarding it here
+///   would be farmable by simply practising the same item repeatedly)
+/// - srsStage, dueAt, lastPromotedAt, passedAt, burnedAt (no promotion, and
+///   crucially no demotion — practising a weak item must be risk-free, or
+///   users avoid the items they most need to drill)
+/// - streak / DailyActivity XP
+///
+/// It DOES log each answer to ReviewLog with startedStage == endedStage, so
+/// per-item accuracy stats stay honest, and it records a Session row for
+/// history. The correct/incorrect counters on UserSubject are updated too,
+/// since those are descriptive stats rather than progression.
+export async function commitUnrankedReviewSession(
+  input: CommitReviewSessionInput,
+  userId: string = APP_USER_ID,
+): Promise<CommitUnrankedSessionResult> {
+  const { answers } = input;
+  const now = new Date();
+
+  const userSubjectIds = Array.from(new Set(answers.map((a) => a.userSubjectId)));
+  if (userSubjectIds.length === 0) {
+    throw new Error("commitUnrankedReviewSession called with no answers");
+  }
+
+  const profile = await getOrCreateProfile(userId);
+  const today = dayInTimezone(now, profile.timezone);
+
+  const userSubjects = await prisma.userSubject.findMany({
+    where: { id: { in: userSubjectIds }, userId },
+    select: { id: true, srsStage: true },
+  });
+  const stageById = new Map(userSubjects.map((u) => [u.id, u.srsStage]));
+
+  const correctAnswers = answers.filter((a) => a.correct).length;
+  const accuracyPct = answers.length === 0 ? 100 : Math.round((correctAnswers / answers.length) * 100);
+  const itemEverWrong = new Map<string, boolean>();
+  for (const a of answers) {
+    if (!a.correct) itemEverWrong.set(a.userSubjectId, true);
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const session = await tx.session.create({
+      data: {
+        userId,
+        kind: "REVIEW",
+        // Distinguishes practice sessions from ranked ones in history; the
+        // SessionKind enum stays as-is so this needs no migration.
+        scope: { userSubjectIds, unranked: true },
+        startedAt: now,
+        completedAt: now,
+        totalItems: userSubjectIds.length,
+        correctItems: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
+        scorePct: accuracyPct,
+        xpAwarded: 0,
+      },
+    });
+
+    const itemResults: CommitUnrankedSessionResult["itemResults"] = [];
+
+    for (const userSubjectId of userSubjectIds) {
+      const stage = stageById.get(userSubjectId);
+      if (stage === undefined) continue;
+
+      const itemAnswers = answers.filter((a) => a.userSubjectId === userSubjectId);
+      for (const answer of itemAnswers) {
+        await tx.reviewLog.create({
+          data: {
+            userSubjectId,
+            sessionId: session.id,
+            questionType: answer.questionType,
+            incorrectCount: answer.incorrectCount,
+            // Unchanged on both sides: this review moved nothing.
+            startedStage: stage,
+            endedStage: stage,
+            answeredAt: now,
+          },
+        });
+      }
+
+      await tx.userSubject.update({
+        where: { id: userSubjectId },
+        data: {
+          meaningCorrect: { increment: itemAnswers.filter((a) => a.questionType === "MEANING" && a.correct).length },
+          meaningIncorrect: { increment: itemAnswers.filter((a) => a.questionType === "MEANING" && !a.correct).length },
+          readingCorrect: { increment: itemAnswers.filter((a) => a.questionType === "READING" && a.correct).length },
+          readingIncorrect: { increment: itemAnswers.filter((a) => a.questionType === "READING" && !a.correct).length },
+        },
+      });
+
+      itemResults.push({
+        userSubjectId,
+        correct: itemAnswers.filter((a) => a.correct).length,
+        total: itemAnswers.length,
+      });
+    }
+
+    // Practice still counts as showing up for the day's activity, but
+    // contributes no XP.
+    await tx.dailyActivity.upsert({
+      where: { userId_day: { userId, day: today } },
+      update: { reviewCount: { increment: userSubjectIds.length } },
+      create: { userId, day: today, reviewCount: userSubjectIds.length, xpEarned: 0 },
+    });
+
+    return { sessionId: session.id, itemResults };
+  });
+
+  try {
+    revalidatePath("/reviews");
+    revalidatePath("/reviews/practice");
+    revalidatePath("/");
+  } catch {
+    // See commitReviewSession.
+  }
+
+  return {
+    sessionId: result.sessionId,
+    itemsReviewed: userSubjectIds.length,
+    accuracyPct,
+    itemResults: result.itemResults,
   };
 }
 
