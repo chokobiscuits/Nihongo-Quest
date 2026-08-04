@@ -33,6 +33,10 @@
   --color-warn: #fbbf24;
   --color-focus: #a78bfa;
 
+  --color-kana: #7dd3fc;
+  --color-kana-bg: #0e2a3a;
+  --color-kana-text: #bae6fd;
+
   --color-radical: #2dd4bf;
   --color-radical-bg: #10312f;
   --color-radical-text: #5eead4;
@@ -119,6 +123,10 @@
   --color-danger: var(--color-danger);
   --color-warn: var(--color-warn);
   --color-focus: var(--color-focus);
+
+  --color-kana: var(--color-kana);
+  --color-kana-bg: var(--color-kana-bg);
+  --color-kana-text: var(--color-kana-text);
 
   --color-radical: var(--color-radical);
   --color-radical-bg: var(--color-radical-bg);

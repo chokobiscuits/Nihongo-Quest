@@ -14,6 +14,14 @@ export interface SubjectThemeEntry {
 /// component that needs to color or label a SubjectType reads from here
 /// rather than hardcoding a color.
 export const SUBJECT_THEME: Record<SubjectType, SubjectThemeEntry> = {
+  [SubjectType.KANA]: {
+    base: "var(--color-kana)",
+    bg: "var(--color-kana-bg)",
+    text: "var(--color-kana-text)",
+    labelEn: "Kana",
+    labelJa: "かな",
+    icon: "あ",
+  },
   [SubjectType.RADICAL]: {
     base: "var(--color-radical)",
     bg: "var(--color-radical-bg)",

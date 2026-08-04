@@ -111,7 +111,10 @@ export interface LevelInput {
   strictDependsOn?: string[];
 }
 
-const TYPE_RANK: Record<SubjectType, number> = { RADICAL: 0, KANJI: 1, VOCAB: 2, SENTENCE: 3, GRAMMAR: 4 };
+// KANA never appears in a LevelInput (it has its own dedicated placement in
+// kana-level.ts, entirely outside assignLevels) but the type rank map must
+// still cover every SubjectType to satisfy the Record type.
+const TYPE_RANK: Record<SubjectType, number> = { KANA: -1, RADICAL: 0, KANJI: 1, VOCAB: 2, SENTENCE: 3, GRAMMAR: 4 };
 
 /// Curriculum ordering key used both to pick which kanji/vocab make the
 /// ladder and to break ties within a topological wave: JLPT band ascending
@@ -264,6 +267,11 @@ function radicalQuotaForLevel(level: number): number {
 
 function quotaForType(type: SubjectType, level: number): number {
   switch (type) {
+    case "KANA":
+      // KANA never goes through assignLevels/quotaForType — it has its own
+      // dedicated placement in kana-level.ts. Present only so this switch
+      // stays exhaustive over SubjectType.
+      return 0;
     case "RADICAL":
       return radicalQuotaForLevel(level);
     case "KANJI":

@@ -82,6 +82,7 @@ export function ProgressOverviewCard({ rows, className }: ProgressOverviewCardPr
 
 function subjectAccentKey(type: DashboardProgressRow["type"]): string {
   switch (type) {
+    case "KANA": return "kana";
     case "RADICAL": return "radical";
     case "KANJI": return "kanji";
     case "VOCAB": return "vocab";

@@ -97,6 +97,40 @@ describe("isSubjectUnlocked", () => {
     };
     expect(isSubjectUnlocked(kanji, 4)).toBe(false);
   });
+
+  it("kana unlocks on level alone, same as radicals", () => {
+    const kana = { id: "kn1", type: "KANA" as const, level: 2, components: [] };
+    expect(isSubjectUnlocked(kana, 2)).toBe(true);
+    expect(isSubjectUnlocked(kana, 1)).toBe(false);
+  });
+
+  describe("the kana gate on radicals", () => {
+    const radical = { id: "r1", type: "RADICAL" as const, level: 1, components: [] };
+
+    it("defaults kanaResolved to true, so existing callers that don't pass it are unaffected", () => {
+      expect(isSubjectUnlocked(radical, 1)).toBe(true);
+    });
+
+    it("blocks a level-eligible radical when kana is not resolved", () => {
+      expect(isSubjectUnlocked(radical, 1, false)).toBe(false);
+    });
+
+    it("unlocks a level-eligible radical once kana is resolved", () => {
+      expect(isSubjectUnlocked(radical, 1, true)).toBe(true);
+    });
+
+    it("still respects the level check even when kana is resolved", () => {
+      const highLevelRadical = { ...radical, level: 5 };
+      expect(isSubjectUnlocked(highLevelRadical, 1, true)).toBe(false);
+    });
+
+    it("cannot deadlock: kanaResolved=true always unlocks an in-level radical regardless of kana subject state elsewhere", () => {
+      // This is the "skip" case in miniature — once kana is resolved (passed
+      // or skipped), radicals unlock immediately, with no further
+      // dependency on any kana UserSubject row's specifics.
+      expect(isSubjectUnlocked(radical, 1, true)).toBe(true);
+    });
+  });
 });
 
 describe("nextUserLevel", () => {

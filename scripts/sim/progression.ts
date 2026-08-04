@@ -24,6 +24,8 @@ import { getReviewQueue } from "../../src/server/queries/reviews";
 import { getDashboard } from "../../src/server/queries/dashboard";
 import { commitLessonSession, type LessonQuizAnswerRecord } from "../../src/server/actions/lessons";
 import { commitReviewSession, type ReviewAnswerRecord } from "../../src/server/actions/reviews";
+import { skipKana, unskipKana } from "../../src/server/actions/kana";
+import { isKanaResolvedFor } from "../../src/services/srs/kana-gate";
 import { GURU_STAGE, BURNED_STAGE, intervalForStage, STAGES } from "../../src/services/srs/stages";
 import { xpForCorrectAnswer } from "../../src/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
@@ -89,11 +91,15 @@ async function wipeSimUser() {
 // Helpers to drive lesson/review flows through the real action functions
 // ---------------------------------------------------------------------------
 
+// KANA and RADICAL are both meaning-only (see src/services/reviews/queue.ts
+// questionKindsFor) — no READING question for either.
+const MEANING_ONLY_TYPES: string[] = [SubjectType.KANA, SubjectType.RADICAL];
+
 async function learnSubjects(subjectIds: string[], types: Map<string, string>) {
   const answers: LessonQuizAnswerRecord[] = [];
   for (const id of subjectIds) {
     answers.push({ subjectId: id, questionType: "MEANING", incorrectCount: 0 });
-    if (types.get(id) !== SubjectType.RADICAL) {
+    if (!MEANING_ONLY_TYPES.includes(types.get(id) ?? "")) {
       answers.push({ subjectId: id, questionType: "READING", incorrectCount: 0 });
     }
   }
@@ -107,7 +113,7 @@ async function reviewAllCorrect() {
   const answers: ReviewAnswerRecord[] = [];
   for (const item of items) {
     answers.push({ userSubjectId: item.id, questionType: "MEANING", correct: true, incorrectCount: 0 });
-    if (item.type !== "RADICAL") {
+    if (!MEANING_ONLY_TYPES.includes(item.type)) {
       answers.push({ userSubjectId: item.id, questionType: "READING", correct: true, incorrectCount: 0 });
     }
   }
@@ -171,6 +177,68 @@ async function main() {
       },
     });
 
+    // === A0. Kana gate =======================================================
+    const SECTION_A0 = "A0. Kana gate";
+    {
+      const resolvedBefore = await isKanaResolvedFor(SIM_USER);
+      assertEqual(SECTION_A0, "a brand-new user has not resolved kana", resolvedBefore, false);
+
+      const batchBeforeKana = await getLessonBatch(SIM_USER);
+      assertTrue(
+        SECTION_A0,
+        "radicals do not unlock before kana is resolved",
+        !batchBeforeKana.some((s) => s.type === SubjectType.RADICAL),
+        `unexpected radical lessons: ${batchBeforeKana.filter((s) => s.type === SubjectType.RADICAL).length}`,
+      );
+      assertTrue(SECTION_A0, "kana itself unlocks with no prerequisite", batchBeforeKana.some((s) => s.type === SubjectType.KANA));
+
+      // Learn+Guru one real kana subject the ordinary way, to prove the gate
+      // also resolves through genuine practice, not only through skip — then
+      // skip the rest so the gate is fully resolved without a 208-item grind.
+      const oneKana = batchBeforeKana.find((s) => s.type === SubjectType.KANA);
+      if (oneKana) {
+        await learnSubjects([oneKana.id], new Map([[oneKana.id, SubjectType.KANA]]));
+        await guruSubjects([oneKana.id], new Map([[oneKana.id, SubjectType.KANA]]));
+        const guruedKana = await prisma.userSubject.findUniqueOrThrow({
+          where: { userId_subjectId: { userId: SIM_USER, subjectId: oneKana.id } },
+        });
+        assertTrue(SECTION_A0, "a kana subject reaches Guru through ordinary practice", guruedKana.srsStage >= GURU_STAGE);
+      }
+
+      const skipResult = await skipKana(SIM_USER);
+      assertTrue(SECTION_A0, "skipKana burns every remaining (unresolved) kana subject", skipResult.skipped > 0);
+
+      const resolvedAfterSkip = await isKanaResolvedFor(SIM_USER);
+      assertEqual(SECTION_A0, "kana is resolved once every kana is passed or skipped", resolvedAfterSkip, true);
+
+      const batchAfterSkip = await getLessonBatch(SIM_USER);
+      assertTrue(
+        SECTION_A0,
+        "radicals unlock immediately once kana resolves — the gate does not deadlock",
+        batchAfterSkip.some((s) => s.type === SubjectType.RADICAL),
+      );
+
+      // Unskip: rows with real review history (the one learned+guru'd above)
+      // must survive; the rest (pure skip rows, zero ReviewLog) are removed.
+      const unskipResult = await unskipKana(SIM_USER);
+      assertTrue(SECTION_A0, "unskip removes the skip-created rows with no review history", unskipResult.removed > 0);
+      assertEqual(SECTION_A0, "unskip keeps the one kana row with real review history", unskipResult.kept, oneKana ? 1 : 0);
+
+      if (oneKana) {
+        const stillThere = await prisma.userSubject.findUnique({
+          where: { userId_subjectId: { userId: SIM_USER, subjectId: oneKana.id } },
+        });
+        assertTrue(SECTION_A0, "the genuinely-practiced kana row is not deleted by unskip", stillThere !== null);
+      }
+
+      // Re-resolve kana (skip again) so the rest of the simulation's radical/
+      // kanji/vocab sections — which assume kana is out of the way — proceed
+      // exactly as before this section existed.
+      await skipKana(SIM_USER);
+      const resolvedFinal = await isKanaResolvedFor(SIM_USER);
+      assertEqual(SECTION_A0, "kana is resolved again after re-skipping for the rest of the simulation", resolvedFinal, true);
+    }
+
     // === A. Unlock chain =====================================================
     const SECTION_A = "A. Unlock chain";
 
@@ -218,7 +286,14 @@ async function main() {
       typeMap,
     );
 
-    const started = await prisma.userSubject.findMany({ where: { userId: SIM_USER }, select: { srsStage: true } });
+    // Scoped to just the level-1 radicals learned above — a plain "every
+    // UserSubject row for this user" query would also pick up section A0's
+    // kana rows (a mix of Guru'd-via-practice and Burned-via-skip), which
+    // are irrelevant to this assertion.
+    const started = await prisma.userSubject.findMany({
+      where: { userId: SIM_USER, subjectId: { in: level1Radicals.map((r) => r.id) } },
+      select: { srsStage: true },
+    });
     assertTrue(SECTION_A, "learned radicals sit at Apprentice I (stage 1)", started.every((s) => s.srsStage === 1), `stages: ${started.map((s) => s.srsStage).join(",")}`);
 
     // Guru all level-1 radicals.
@@ -803,7 +878,7 @@ async function reviewAllCorrectFor(subjectId: string) {
   const row = await prisma.userSubject.findUniqueOrThrow({ where: { userId_subjectId: { userId: SIM_USER, subjectId } } });
   const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId }, select: { type: true } });
   const answers: ReviewAnswerRecord[] = [{ userSubjectId: row.id, questionType: "MEANING", correct: true, incorrectCount: 0 }];
-  if (subject.type !== SubjectType.RADICAL) {
+  if (!MEANING_ONLY_TYPES.includes(subject.type)) {
     answers.push({ userSubjectId: row.id, questionType: "READING", correct: true, incorrectCount: 0 });
   }
   return commitReviewSession({ answers }, SIM_USER);
@@ -815,7 +890,7 @@ async function reviewIncorrectFor(subjectId: string, incorrectCount: number) {
   const row = await prisma.userSubject.findUniqueOrThrow({ where: { userId_subjectId: { userId: SIM_USER, subjectId } } });
   const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId }, select: { type: true } });
   const answers: ReviewAnswerRecord[] = [{ userSubjectId: row.id, questionType: "MEANING", correct: false, incorrectCount }];
-  if (subject.type !== SubjectType.RADICAL) {
+  if (!MEANING_ONLY_TYPES.includes(subject.type)) {
     answers.push({ userSubjectId: row.id, questionType: "READING", correct: false, incorrectCount });
   }
   return commitReviewSession({ answers }, SIM_USER);

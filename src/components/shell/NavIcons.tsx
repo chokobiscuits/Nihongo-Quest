@@ -25,6 +25,16 @@ export function DashboardIcon(props: IconProps) {
   );
 }
 
+export function KanaIcon(props: IconProps) {
+  return (
+    <svg {...BASE_PROPS} {...props}>
+      <path d="M7 5c3 0 7 1 7 5s-4 5-7 5" />
+      <path d="M9 15c0 2 2 4 5 4" />
+      <path d="M15 9h5" />
+    </svg>
+  );
+}
+
 export function RadicalIcon(props: IconProps) {
   return (
     <svg {...BASE_PROPS} {...props}>

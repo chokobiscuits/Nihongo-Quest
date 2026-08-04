@@ -1,9 +1,12 @@
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { SettingsForm } from "@/components/settings/SettingsForm";
+import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
+import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 
 export default async function SettingsPage() {
   const profile = await getOrCreateProfile();
   const settings = (profile.settings ?? {}) as { lessonBatchSize?: number; furiganaOverride?: boolean | null };
+  const kanaResolved = await isKanaResolvedFor(profile.userId);
 
   return (
     <div className="flex flex-col gap-4">
@@ -20,6 +23,17 @@ export default async function SettingsPage() {
           timezone: profile.timezone,
         }}
       />
+
+      <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+        <span className="text-micro font-medium uppercase tracking-wide text-text-dim" lang="en">
+          Kana
+        </span>
+        <p className="text-caption text-text-dim">
+          If you already know hiragana and katakana, skip the kana lessons — radicals unlock as soon as every kana
+          is passed or skipped.
+        </p>
+        <KanaSkipControl initialResolved={kanaResolved} />
+      </div>
     </div>
   );
 }

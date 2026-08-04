@@ -84,6 +84,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
       meanings: current.subject.meanings,
       readings: current.subject.readings,
       acceptedMeanings: current.subject.acceptedMeanings,
+      isKanaRomaji: current.subject.type === "KANA",
     });
 
     if (result.result === "correct") {

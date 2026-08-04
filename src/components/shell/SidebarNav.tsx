@@ -12,6 +12,7 @@ import type { MasteryTier } from "@/services/xp/mastery";
 import { cn } from "@/lib/utils";
 import {
   DashboardIcon,
+  KanaIcon,
   RadicalIcon,
   KanjiIcon,
   VocabIcon,
@@ -36,6 +37,7 @@ import {
 /// Learn link.
 const NAV_THEME_BY_HREF: Partial<Record<string, SubjectType>> = Object.fromEntries(
   [
+    SubjectType.KANA,
     SubjectType.RADICAL,
     SubjectType.KANJI,
     SubjectType.VOCAB,
@@ -64,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     caption: "Learn",
     items: [
+      { href: `/subjects/${typeToSlug(SubjectType.KANA)}`, labelEn: "Kana", labelJa: "かな", Icon: KanaIcon },
       { href: `/subjects/${typeToSlug(SubjectType.RADICAL)}`, labelEn: "Radicals", labelJa: "部首", Icon: RadicalIcon },
       { href: `/subjects/${typeToSlug(SubjectType.KANJI)}`, labelEn: "Kanji", labelJa: "漢字", Icon: KanjiIcon },
       { href: `/subjects/${typeToSlug(SubjectType.VOCAB)}`, labelEn: "Vocabulary", labelJa: "語彙", Icon: VocabIcon },

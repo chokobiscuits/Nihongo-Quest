@@ -1,4 +1,5 @@
 import { normalizeMeaning, normalizeReading, stripOkuriganaDot } from "./normalize";
+import { acceptedKanaRomaji } from "./kana-romaji-variants";
 
 export type QuestionKind = "MEANING" | "READING";
 
@@ -18,6 +19,13 @@ export interface GradableSubject {
   readings: ReadingEntry[];
   /// User-authored synonym whitelist (Subject.acceptedMeanings).
   acceptedMeanings: string[];
+  /// True for KANA subjects: `meanings` stores the character's romaji
+  /// reading (not an English gloss — see scripts/seed/lib/kana.ts), so
+  /// grading must NOT go through wanakana's romaji-to-kana conversion (kana
+  /// is answered in romaji, not kana) and must instead accept the common
+  /// romanization variants in kana-romaji-variants.ts (shi/si, chi/ti,
+  /// tsu/tu, fu/hu, ji/zi, n/nn) on top of plain string equality.
+  isKanaRomaji?: boolean;
 }
 
 export type GradeResult =
@@ -51,7 +59,13 @@ function levenshtein(a: string, b: string): number {
 }
 
 function meaningPool(subject: GradableSubject): string[] {
-  return [...subject.meanings.map((m) => m.meaning), ...subject.acceptedMeanings];
+  const base = [...subject.meanings.map((m) => m.meaning), ...subject.acceptedMeanings];
+  if (!subject.isKanaRomaji) return base;
+  // Expand every stored romaji spelling (and every accepted-meaning
+  // addition, in case a user whitelisted a variant themselves) with its
+  // known romanization variants, so e.g. a subject storing "shi" also
+  // accepts a typed "si".
+  return [...new Set(base.flatMap((m) => acceptedKanaRomaji(m)))];
 }
 
 /// Normalizes a stored reading for comparison: strips the okurigana dot

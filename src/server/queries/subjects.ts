@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
+import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
@@ -10,7 +11,7 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 // Ladder types have a curriculum level and are gated by unlock rules.
 // Reading has no seeded rows yet (see dashboard.ts); Sentence and Grammar
 // are seeded and laddered (seed phases 1-3 and grammar phase 1-2).
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
+const LADDER_TYPES: SubjectType[] = [SubjectType.KANA, SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
 export type SubjectListState = "burned" | "learning" | "not-started" | "locked";
 
@@ -46,7 +47,7 @@ export interface SubjectTypeSummary {
 /// Reading has no Subject rows, so it reports 0/0 with `seeded: false` — the
 /// page renders that as a "Coming soon" placeholder.
 export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Promise<SubjectTypeSummary[]> {
-  const seededTypes: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
+  const seededTypes: SubjectType[] = [SubjectType.KANA, SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
   const [totals, passedCounts] = await Promise.all([
     // level: not null — the laddered curriculum denominator, not the whole
@@ -75,14 +76,15 @@ export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Pro
     return {
       type,
       seeded,
-      learned: seeded ? (passedByType[type as unknown as "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR"] ?? 0) : 0,
+      learned: seeded ? (passedByType[type as unknown as "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR"] ?? 0) : 0,
       total: seeded ? (totalByType.get(type) ?? 0) : 0,
     };
   });
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+  const result: Record<"KANA" | "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+    KANA: 0,
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
@@ -96,7 +98,8 @@ async function bucketByType(subjectIds: string[]) {
     select: { type: true },
   });
   for (const row of rows) {
-    if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
+    if (row.type === SubjectType.KANA) result.KANA += 1;
+    else if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
@@ -135,6 +138,7 @@ export async function getSubjectsForLevel(
   userId: string = APP_USER_ID,
 ): Promise<SubjectListItem[]> {
   const profile = await getOrCreateProfile(userId);
+  const kanaResolved = type === SubjectType.RADICAL ? await isKanaResolvedFor(userId) : true;
 
   const where: Record<string, unknown> = { type, level };
   if (filters.jlpt !== undefined) where.jlpt = filters.jlpt;
@@ -204,9 +208,14 @@ export async function getSubjectsForLevel(
       state = "burned";
     } else if (srsStage !== null && srsStage >= 1) {
       state = "learning";
-    } else if (type === SubjectType.RADICAL) {
-      // Radicals unlock purely on level.
+    } else if (type === SubjectType.KANA) {
+      // Kana unlocks purely on level, same as radicals below (minus the
+      // kana gate, which obviously doesn't apply to kana itself).
       state = (s.level ?? 0) <= profile.accountLevel ? "not-started" : "locked";
+    } else if (type === SubjectType.RADICAL) {
+      // Radicals unlock on level, gated additionally by kanaResolved (every
+      // kana passed or skipped) — see src/services/srs/unlock.ts.
+      state = (s.level ?? 0) <= profile.accountLevel && kanaResolved ? "not-started" : "locked";
     } else {
       const subjectForUnlock: SubjectWithComponents = {
         id: s.id,
@@ -562,6 +571,96 @@ function rankUsedIn(
       return (a.frequency ?? Infinity) - (b.frequency ?? Infinity);
     })
     .map(({ id, type, slug, characters, meaning, readingUsed }) => ({ id, type, slug, characters, meaning, readingUsed }));
+}
+
+// ------------------------------------------------------------- Kana browse
+
+export interface KanaRowGroup {
+  /// Gojuon row key (Subject.metadata.row) — see scripts/seed/lib/kana.ts.
+  row: string;
+  items: SubjectListItem[];
+}
+
+export interface KanaScriptGroup {
+  script: "hiragana" | "katakana";
+  rows: KanaRowGroup[];
+}
+
+/// Row display order within a script — plain gojuon rows first (a/ka/sa/...
+/// through n), then voiced (dakuten/handakuten) rows, then youon rows. Any
+/// row not listed here (shouldn't happen with the fixed kana set) sorts last
+/// alphabetically as a safety net rather than being dropped.
+const ROW_ORDER = [
+  "a", "ka", "sa", "ta", "na", "ha", "ma", "ya", "ra", "wa", "n",
+  "ga", "za", "da", "ba", "pa",
+  "kya", "sha", "cha", "nya", "hya", "mya", "rya", "gya", "ja", "bya", "pya",
+];
+
+/// All KANA subjects with the user's SRS state, grouped by script (hiragana
+/// before katakana) then by gojuon row in ROW_ORDER — the task's "grouped by
+/// script and row rather than an opaque level number" browse requirement.
+/// Kana unlocks purely on level and has no components, so this reuses the
+/// same locked/burned/learning/not-started state derivation as
+/// getSubjectsForLevel's KANA branch, just without the level-group
+/// structure.
+export async function getKanaBrowseGroups(userId: string = APP_USER_ID): Promise<KanaScriptGroup[]> {
+  const profile = await getOrCreateProfile(userId);
+
+  const subjects = await prisma.subject.findMany({
+    where: { type: SubjectType.KANA },
+    select: { id: true, type: true, level: true, slug: true, characters: true, meanings: true, jlpt: true, metadata: true },
+  });
+
+  const userSubjects = await prisma.userSubject.findMany({
+    where: { userId, subjectId: { in: subjects.map((s) => s.id) } },
+    select: { subjectId: true, srsStage: true },
+  });
+  const stageBySubject = new Map(userSubjects.map((r) => [r.subjectId, r.srsStage]));
+
+  const items: (SubjectListItem & { script: string; row: string })[] = subjects.map((s) => {
+    const meta = s.metadata as { script?: string; row?: string };
+    const srsStage = stageBySubject.get(s.id) ?? null;
+    let state: SubjectListState;
+    if (srsStage !== null && srsStage >= 9) state = "burned";
+    else if (srsStage !== null && srsStage >= 1) state = "learning";
+    else state = (s.level ?? 0) <= profile.accountLevel ? "not-started" : "locked";
+
+    return {
+      id: s.id,
+      type: s.type,
+      level: s.level,
+      slug: s.slug,
+      characters: s.characters,
+      meaning: firstMeaning(s.meanings),
+      jlpt: s.jlpt,
+      state,
+      srsStage,
+      lockedOn: [],
+      script: meta.script ?? "hiragana",
+      row: meta.row ?? "a",
+    };
+  });
+
+  const scripts: KanaScriptGroup["script"][] = ["hiragana", "katakana"];
+  return scripts.map((script) => {
+    const scriptItems = items.filter((i) => i.script === script);
+    const rowsPresent = [...new Set(scriptItems.map((i) => i.row))];
+    rowsPresent.sort((a, b) => {
+      const ai = ROW_ORDER.indexOf(a);
+      const bi = ROW_ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return {
+      script,
+      rows: rowsPresent.map((row) => ({
+        row,
+        items: scriptItems.filter((i) => i.row === row),
+      })),
+    };
+  });
 }
 
 export { LADDER_TYPES };

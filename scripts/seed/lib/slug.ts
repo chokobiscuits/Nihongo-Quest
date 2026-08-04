@@ -2,7 +2,7 @@
 // We prefix by type and use the literal characters (or a transliteration for
 // radicals without a Unicode kanji form), falling back to an index suffix on
 // collision. The caller is responsible for tracking used slugs across a run.
-export function baseSlug(type: "radical" | "kanji" | "vocab" | "sentence", characters: string): string {
+export function baseSlug(type: "kana" | "radical" | "kanji" | "vocab" | "sentence", characters: string): string {
   return `${type}-${characters}`;
 }
 

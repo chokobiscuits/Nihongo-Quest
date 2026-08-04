@@ -9,7 +9,7 @@ export interface ReviewCandidate {
   /// UserSubject id — questions and re-queue tracking key off this, not the
   /// subject id, since a subject only ever has one UserSubject per user.
   userSubjectId: string;
-  subjectType: "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
+  subjectType: "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
 }
 
 export interface ReviewQuestion {
@@ -17,18 +17,21 @@ export interface ReviewQuestion {
   kind: ReviewQuestionKind;
 }
 
-/// Which question kinds an item needs: RADICAL, SENTENCE, and GRAMMAR are
-/// meaning-only. A sentence already displays its furigana on the question
-/// card (see ReviewQuiz/LessonTeachCard), so a reading recall question would
-/// just be re-typing text that's visibly annotated on screen — the useful
-/// recall check for a sentence is translating it to English. A grammar
-/// point has a pattern and an English gloss, not a single-word reading —
-/// "what does ～たことがある mean" is the only recall question that makes
-/// sense for it. Everything else (KANJI, VOCAB, and off-ladder types that
-/// reach a review queue) needs both meaning and reading before it can
-/// resolve.
+/// Which question kinds an item needs: KANA, RADICAL, SENTENCE, and GRAMMAR
+/// are meaning-only. A sentence already displays its furigana on the
+/// question card (see ReviewQuiz/LessonTeachCard), so a reading recall
+/// question would just be re-typing text that's visibly annotated on
+/// screen — the useful recall check for a sentence is translating it to
+/// English. A grammar point has a pattern and an English gloss, not a
+/// single-word reading — "what does ～たことがある mean" is the only recall
+/// question that makes sense for it. KANA has no separate reading at all —
+/// its romaji IS the answer, stored in `meanings` (see
+/// scripts/seed/lib/kana.ts and src/services/answer/grade.ts's
+/// isKanaRomaji), so a second reading question would just repeat the same
+/// question. Everything else (KANJI, VOCAB, and off-ladder types that reach
+/// a review queue) needs both meaning and reading before it can resolve.
 export function questionKindsFor(subjectType: ReviewCandidate["subjectType"]): ReviewQuestionKind[] {
-  return subjectType === "RADICAL" || subjectType === "SENTENCE" || subjectType === "GRAMMAR"
+  return subjectType === "KANA" || subjectType === "RADICAL" || subjectType === "SENTENCE" || subjectType === "GRAMMAR"
     ? ["MEANING"]
     : ["MEANING", "READING"];
 }

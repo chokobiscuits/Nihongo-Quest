@@ -12,7 +12,7 @@ export interface ComponentProgress {
 
 export interface SubjectWithComponents {
   id: string;
-  type: "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
+  type: "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
   level: number;
   components: ComponentProgress[];
 }
@@ -30,15 +30,34 @@ export function componentsSatisfied(components: ComponentProgress[]): boolean {
 /// Whether `subject` should be unlocked for a user at `userLevel` given the
 /// current SRS state of its components.
 ///
-/// Radicals unlock purely on level (they have no components to gate them,
-/// and level is what introduces their level's new radicals). Everything else
-/// unlocks once its components are all Guru'd, subject to also being at or
-/// below the user's current level.
-export function isSubjectUnlocked(subject: SubjectWithComponents, userLevel: number): boolean {
+/// KANA and RADICAL both unlock purely on level (neither has components to
+/// gate them, and level is what introduces each level's new kana/radicals).
+/// Everything else unlocks once its components are all Guru'd, subject to
+/// also being at or below the user's current level.
+///
+/// RADICAL additionally requires `kanaResolved`: every kana subject must be
+/// either passed (learned to Guru+) or skipped (see the "I already know
+/// kana" flow, src/server/actions/kana.ts, which burns every kana subject
+/// outright) before any radical unlocks — kana is a pre-curriculum gate on
+/// the whole rest of the ladder. `kanaResolved` defaults to true so callers
+/// that don't pass it (or that operate on non-RADICAL subjects) are
+/// unaffected — this keeps the gate from ever deadlocking: a caller that
+/// forgets to compute kana state fails open, not closed, and the skip flow
+/// itself sets every kana subject to Burned atomically so kanaResolved
+/// becomes true the instant a user skips, never leaving radicals locked.
+export function isSubjectUnlocked(
+  subject: SubjectWithComponents,
+  userLevel: number,
+  kanaResolved: boolean = true,
+): boolean {
   if (subject.level > userLevel) return false;
 
-  if (subject.type === "RADICAL") {
+  if (subject.type === "KANA") {
     return true;
+  }
+
+  if (subject.type === "RADICAL") {
+    return kanaResolved;
   }
 
   return componentsSatisfied(subject.components);

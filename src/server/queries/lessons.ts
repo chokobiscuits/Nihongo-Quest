@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
+import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { selectLessonBatch, type LessonCandidate, type LessonSubjectType } from "@/services/lessons/batch";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
@@ -9,7 +10,7 @@ import { getNextRequiredTutorial, type TutorialDetail } from "@/server/queries/t
 // Lessons only ever schedule the 60-level curriculum ladder (level != null).
 // Off-ladder subjects (jlpt/frequency reference material, and the ~5,900
 // off-ladder sentences) are seeded but never surface as lessons.
-const LADDER_TYPES: SubjectType[] = [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
+const LADDER_TYPES: SubjectType[] = [SubjectType.KANA, SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
 export interface LessonSubjectMeaning {
   meaning: string;
@@ -227,7 +228,10 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
   const childIds = Array.from(
     new Set(candidates.flatMap((c) => c.parentLinks.map((link) => link.child.id))),
   );
-  const stageByChild = await fetchComponentStages(userId, childIds);
+  const [stageByChild, kanaResolved] = await Promise.all([
+    fetchComponentStages(userId, childIds),
+    isKanaResolvedFor(userId),
+  ]);
 
   const unlocked = candidates.filter((c) => {
     const subject: SubjectWithComponents = {
@@ -240,7 +244,7 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
         isGating: link.isGating,
       })),
     };
-    return isSubjectUnlocked(subject, profile.accountLevel);
+    return isSubjectUnlocked(subject, profile.accountLevel, kanaResolved);
   });
 
   const asLessonCandidates: (LessonCandidate & { source: (typeof unlocked)[number] })[] = unlocked.map((c) => ({

@@ -26,6 +26,8 @@ import {
 } from "./lib/level-heuristic";
 import { baseSlug, dedupeSlug } from "./lib/slug";
 import { DATA_SOURCES } from "./lib/data-sources";
+import { ALL_KANA } from "./lib/kana";
+import { assignKanaLevels } from "./lib/kana-level";
 import { KANGXI_RADICALS } from "./lib/kangxi-radicals";
 import { buildKangxiResolver, radicalSlugName } from "./lib/kangxi-resolver";
 import { parseTatoebaSentences } from "./lib/tatoeba-sentences";
@@ -139,6 +141,36 @@ async function main() {
   const components: ComponentRecord[] = [];
   const usedSlugs = new Set<string>();
   const levelInputs: LevelInput[] = [];
+
+  // ---------------------------------------------------------------------
+  // KANA subjects: the fixed 208-character hiragana/katakana set (see
+  // scripts/seed/lib/kana.ts), placed on its own pre-curriculum level ladder
+  // (kana-level.ts) entirely separate from assignLevels below — kana has no
+  // dependency graph and sits strictly before radicals (see
+  // src/services/srs/unlock.ts's kana gate). Meaning-only: the romaji is
+  // stored in `meanings` (not `readings`) so it grades through the same
+  // meaning-question path as every other type, per the task's grading
+  // design — see src/services/answer/grade.ts's isKanaRomaji handling.
+  // ---------------------------------------------------------------------
+  const kanaPlacements = assignKanaLevels(ALL_KANA);
+  for (const { kana, level } of kanaPlacements) {
+    const tempId = `kana-${kana.script}-${kana.romaji}`;
+    subjects.push({
+      tempId,
+      type: "KANA",
+      level,
+      slug: dedupeSlug(`kana-${kana.script}-${kana.romaji}`, usedSlugs),
+      characters: kana.character,
+      meanings: [{ meaning: kana.romaji, primary: true }],
+      readings: [],
+      jlpt: null,
+      jlptLegacy: null,
+      frequency: null,
+      metadata: { script: kana.script, row: kana.row, column: kana.column },
+      furigana: null,
+      furiganaFallback: false,
+    });
+  }
 
   const radicalTempIdByNumber = new Map<number, string>();
   for (const radical of KANGXI_RADICALS) {
@@ -500,6 +532,10 @@ async function main() {
   // ---------------------------------------------------------------------
   const levels = assignLevels(levelInputs);
   for (const subject of subjects) {
+    // KANA already has its own final level from assignKanaLevels above —
+    // it never appears in levelInputs (kana has no dependency graph), so
+    // levels.get would incorrectly null it out here.
+    if (subject.type === "KANA") continue;
     subject.level = levels.get(subject.tempId) ?? null;
   }
 
@@ -922,12 +958,14 @@ async function main() {
   writeJsonl("components.jsonl", components);
   writeJsonl("data-sources.jsonl", DATA_SOURCES);
 
+  const kanaCount = subjects.filter((s) => s.type === "KANA").length;
   const radicalCount = subjects.filter((s) => s.type === "RADICAL").length;
   const kanjiCount = subjects.filter((s) => s.type === "KANJI").length;
   const vocabCount = subjects.filter((s) => s.type === "VOCAB").length;
   const sentenceCount = subjects.filter((s) => s.type === "SENTENCE").length;
 
   console.log("\n--- Transform summary ---");
+  console.log(`Kana: ${kanaCount}`);
   console.log(`Radicals: ${radicalCount}`);
   console.log(`Kanji: ${kanjiCount}`);
   console.log(`Vocab: ${vocabCount} (target ${VOCAB_TARGET_MIN}-${VOCAB_TARGET_MAX})`);

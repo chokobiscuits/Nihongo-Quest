@@ -4,6 +4,7 @@ import { SubjectType } from "@/generated/prisma/enums";
 /// WaniKani-style segments ("radicals", "kanji", "readings"); the enum is
 /// the DB's singular uppercase name.
 const SLUG_TO_TYPE: Record<string, SubjectType> = {
+  kana: SubjectType.KANA,
   radicals: SubjectType.RADICAL,
   kanji: SubjectType.KANJI,
   vocabulary: SubjectType.VOCAB,
@@ -13,6 +14,7 @@ const SLUG_TO_TYPE: Record<string, SubjectType> = {
 };
 
 const TYPE_TO_SLUG: Record<SubjectType, string> = {
+  [SubjectType.KANA]: "kana",
   [SubjectType.RADICAL]: "radicals",
   [SubjectType.KANJI]: "kanji",
   [SubjectType.VOCAB]: "vocabulary",

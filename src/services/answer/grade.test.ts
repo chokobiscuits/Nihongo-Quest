@@ -40,6 +40,42 @@ describe("gradeMeaning", () => {
   });
 });
 
+describe("gradeMeaning with isKanaRomaji", () => {
+  const shi: GradableSubject = {
+    meanings: [{ meaning: "shi", primary: true }],
+    readings: [],
+    acceptedMeanings: [],
+    isKanaRomaji: true,
+  };
+
+  it("accepts the canonical stored romaji", () => {
+    expect(gradeMeaning("shi", shi)).toEqual({ result: "correct" });
+  });
+
+  it("accepts a known romanization variant not in the stored meanings", () => {
+    expect(gradeMeaning("si", shi)).toEqual({ result: "correct" });
+  });
+
+  it("does NOT run typed romaji through wanakana kana conversion — a raw kana answer is not accepted", () => {
+    expect(gradeMeaning("し", shi)).toEqual({ result: "incorrect" });
+  });
+
+  it("rejects an unrelated romaji answer", () => {
+    expect(gradeMeaning("ka", shi)).toEqual({ result: "incorrect" });
+  });
+
+  it("accepts both n and nn for ん regardless of canonical spelling", () => {
+    const n: GradableSubject = {
+      meanings: [{ meaning: "n", primary: true }],
+      readings: [],
+      acceptedMeanings: [],
+      isKanaRomaji: true,
+    };
+    expect(gradeMeaning("n", n)).toEqual({ result: "correct" });
+    expect(gradeMeaning("nn", n)).toEqual({ result: "correct" });
+  });
+});
+
 describe("gradeReading", () => {
   it("accepts romaji converted to kana", () => {
     expect(gradeReading("ki", tree)).toEqual({ result: "correct" });

@@ -3,7 +3,7 @@
 // yet started; this module only decides the order they are presented in and
 // truncates to the requested batch size.
 
-export type LessonSubjectType = "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
+export type LessonSubjectType = "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
 
 export interface LessonCandidate {
   id: string;
@@ -15,18 +15,19 @@ export interface LessonCandidate {
 }
 
 const TYPE_ORDER: Record<LessonSubjectType, number> = {
-  RADICAL: 0,
-  KANJI: 1,
-  VOCAB: 2,
-  GRAMMAR: 3,
-  SENTENCE: 4,
-  READING: 5,
+  KANA: 0,
+  RADICAL: 1,
+  KANJI: 2,
+  VOCAB: 3,
+  GRAMMAR: 4,
+  SENTENCE: 5,
+  READING: 6,
 };
 
-/// Radicals before kanji before vocab (and other types after, though lessons
-/// only schedule the curriculum ladder today), then by level (nulls last —
-/// off-ladder items never reach this list in practice, but the ordering
-/// stays total), then by frequency (rarer/unranked last).
+/// Kana before radicals before kanji before vocab (and other types after,
+/// though lessons only schedule the curriculum ladder today), then by level
+/// (nulls last — off-ladder items never reach this list in practice, but the
+/// ordering stays total), then by frequency (rarer/unranked last).
 export function compareLessonCandidates(a: LessonCandidate, b: LessonCandidate): number {
   const typeDelta = TYPE_ORDER[a.type] - TYPE_ORDER[b.type];
   if (typeDelta !== 0) return typeDelta;

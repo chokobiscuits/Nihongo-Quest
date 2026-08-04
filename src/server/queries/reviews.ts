@@ -5,7 +5,7 @@ import type { LessonSubjectMeaning, LessonSubjectReading } from "@/server/querie
 export interface ReviewSubject {
   id: string; // UserSubject id
   subjectId: string;
-  type: "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
+  type: "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "GRAMMAR" | "SENTENCE" | "READING";
   slug: string;
   characters: string | null;
   meanings: LessonSubjectMeaning[];

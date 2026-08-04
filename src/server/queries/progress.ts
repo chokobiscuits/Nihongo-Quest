@@ -15,6 +15,9 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 // laddered denominator matches the curriculum, not the whole seeded set).
 const RADICAL_TOTAL = 190;
 
+// Same treatment for KANA — see dashboard.ts's KANA_TOTAL.
+const KANA_TOTAL = 208;
+
 export interface OverallProgressRow {
   type: SubjectType;
   labelEn: string;
@@ -132,6 +135,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
   const startedByType = await bucketByType(startedRows.map((r) => r.subjectId));
 
   const overall: OverallProgressRow[] = [
+    { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", passed: passedByType.KANA, started: startedByType.KANA, total: KANA_TOTAL },
     { type: SubjectType.RADICAL, labelEn: "Radicals", labelJa: "部首", passed: passedByType.RADICAL, started: startedByType.RADICAL, total: RADICAL_TOTAL },
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", passed: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", passed: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
@@ -215,7 +219,8 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+  const result: Record<"KANA" | "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+    KANA: 0,
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
@@ -229,7 +234,8 @@ async function bucketByType(subjectIds: string[]) {
     select: { type: true },
   });
   for (const row of rows) {
-    if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
+    if (row.type === SubjectType.KANA) result.KANA += 1;
+    else if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;

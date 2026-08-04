@@ -22,6 +22,11 @@ const UNSEEDED_DENOMINATORS: Record<"READING", number> = {
 // changing total.
 const RADICAL_TOTAL = 190;
 
+// Same treatment for KANA: laddered total is fixed by the hand-encoded
+// character set (see scripts/seed/lib/kana.ts / kana-level.ts), not a
+// dictionary-derived count that changes on reseed.
+const KANA_TOTAL = 208;
+
 export interface DashboardProgressRow {
   type: SubjectType;
   labelEn: string;
@@ -135,6 +140,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   const rank = rankForLevel(profile.accountLevel);
 
   const progress: DashboardProgressRow[] = [
+    { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", learned: passedByType.KANA, started: startedByType.KANA, total: KANA_TOTAL },
     { type: SubjectType.RADICAL, labelEn: "Radicals", labelJa: "部首", learned: passedByType.RADICAL, started: startedByType.RADICAL, total: RADICAL_TOTAL },
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "漢字", learned: passedByType.KANJI, started: startedByType.KANJI, total: kanjiTotal },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "語彙", learned: passedByType.VOCAB, started: startedByType.VOCAB, total: vocabTotal },
@@ -144,6 +150,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   ];
 
   const continueCards: DashboardContinueCard[] = [
+    { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", glyph: "あ", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANA), percent: percentOf(passedByType.KANA, KANA_TOTAL) },
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal) },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal) },
     { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal) },
@@ -170,6 +177,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     dueTypeCounts.set(row.type, row.count);
   }
   const reviewsByType: DashboardReviewTypeCount[] = [
+    SubjectType.KANA,
     SubjectType.RADICAL,
     SubjectType.KANJI,
     SubjectType.VOCAB,
@@ -216,7 +224,8 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 }
 
 async function bucketByType(subjectIds: string[]) {
-  const result: Record<"RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+  const result: Record<"KANA" | "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR", number> = {
+    KANA: 0,
     RADICAL: 0,
     KANJI: 0,
     VOCAB: 0,
@@ -230,7 +239,8 @@ async function bucketByType(subjectIds: string[]) {
     select: { type: true },
   });
   for (const row of rows) {
-    if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
+    if (row.type === SubjectType.KANA) result.KANA += 1;
+    else if (row.type === SubjectType.RADICAL) result.RADICAL += 1;
     else if (row.type === SubjectType.KANJI) result.KANJI += 1;
     else if (row.type === SubjectType.VOCAB) result.VOCAB += 1;
     else if (row.type === SubjectType.SENTENCE) result.SENTENCE += 1;
@@ -241,6 +251,7 @@ async function bucketByType(subjectIds: string[]) {
 
 function labelForType(type: SubjectType): string {
   switch (type) {
+    case SubjectType.KANA: return "Kana";
     case SubjectType.RADICAL: return "Radicals";
     case SubjectType.KANJI: return "Kanji";
     case SubjectType.VOCAB: return "Vocabulary";
