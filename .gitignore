@@ -15,9 +15,12 @@
 
 # seed pipeline: raw downloads and generated JSONL artifacts, both
 # regenerable via `npm run seed:download` / `npm run seed:transform`
-/data/
-# ...except hand-authored content, which is NOT regenerable from any source
-# and would be lost with the database.
+# Seed pipeline output. Ignore the contents rather than the directory itself,
+# so the hand-authored exception below is reachable: git never descends into
+# an excluded directory, so `/data/` would make `!/data/authored/` dead.
+/data/*
+# Hand-authored content is NOT regenerable from any source and would be lost
+# with the database.
 !/data/authored/
 
 # next.js
