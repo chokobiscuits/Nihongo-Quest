@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { getReviewQueue } from "@/server/queries/reviews";
+import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { rankForLevel } from "@/services/xp/rank";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
@@ -56,6 +57,14 @@ export interface DashboardContinueCard {
   /// a lesson type and shows a due count instead of a completion percent.
   isReviewQueue?: boolean;
   dueCount?: number;
+  /// Type-unlock gate (see typeUnlock.ts) — false for a seeded type whose
+  /// prerequisite Guru count hasn't been met yet. Distinct from `seeded`:
+  /// an unseeded type (e.g. READING) keeps its own "Coming soon" treatment
+  /// regardless of this flag.
+  unlocked: boolean;
+  requirement: string | null;
+  have: number;
+  need: number;
 }
 
 export interface DashboardReviewTypeCount {
@@ -100,7 +109,7 @@ const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
-  const [kanjiTotal, vocabTotal, sentenceTotal, grammarTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg] = await Promise.all([
+  const [kanjiTotal, vocabTotal, sentenceTotal, grammarTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg, unlockStatuses] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.SENTENCE, level: { not: null } } }),
@@ -124,6 +133,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     // Account mastery is derived, not stored: a single SUM aggregate avoids
     // loading every UserSubject row just to add up masteryXp.
     prisma.userSubject.aggregate({ where: { userId }, _sum: { masteryXp: true } }),
+    getTypeUnlockStatuses(userId),
   ]);
 
   const accountMasteryXp = masteryXpAgg._sum.masteryXp ?? 0;
@@ -150,12 +160,16 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   ];
 
   const continueCards: DashboardContinueCard[] = [
-    { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", glyph: "あ", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANA), percent: percentOf(passedByType.KANA, KANA_TOTAL) },
-    { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal) },
-    { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal) },
-    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal) },
-    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: true, lessonNumber: seededLessonNumber(passedByType.GRAMMAR), percent: percentOf(passedByType.GRAMMAR, grammarTotal) },
-    { type: SubjectType.READING, labelEn: "Text Reading", labelJa: "ぶんしょうどっかい", glyph: "読解", seeded: false, lessonNumber: null, percent: null },
+    { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", glyph: "あ", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANA), percent: percentOf(passedByType.KANA, KANA_TOTAL), unlocked: true, requirement: null, have: 0, need: 0 },
+    { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal), unlocked: unlockStatuses.KANJI.unlocked, requirement: unlockStatuses.KANJI.unlocked ? null : unlockStatuses.KANJI.requirement, have: unlockStatuses.KANJI.have, need: unlockStatuses.KANJI.need },
+    { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal), unlocked: unlockStatuses.VOCAB.unlocked, requirement: unlockStatuses.VOCAB.unlocked ? null : unlockStatuses.VOCAB.requirement, have: unlockStatuses.VOCAB.have, need: unlockStatuses.VOCAB.need },
+    { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal), unlocked: unlockStatuses.SENTENCE.unlocked, requirement: unlockStatuses.SENTENCE.unlocked ? null : unlockStatuses.SENTENCE.requirement, have: unlockStatuses.SENTENCE.have, need: unlockStatuses.SENTENCE.need },
+    { type: SubjectType.GRAMMAR, labelEn: "Grammar", labelJa: "ぶんぽう", glyph: "文法", seeded: true, lessonNumber: seededLessonNumber(passedByType.GRAMMAR), percent: percentOf(passedByType.GRAMMAR, grammarTotal), unlocked: unlockStatuses.GRAMMAR.unlocked, requirement: unlockStatuses.GRAMMAR.unlocked ? null : unlockStatuses.GRAMMAR.requirement, have: unlockStatuses.GRAMMAR.have, need: unlockStatuses.GRAMMAR.need },
+    // READING is genuinely unseeded (no Subject rows at all) — this stays
+    // `seeded: false` regardless of its type-unlock status, so it keeps the
+    // "準備中 / Coming soon" treatment rather than being conflated with
+    // "locked" (a seeded type whose prerequisite Guru count isn't met yet).
+    { type: SubjectType.READING, labelEn: "Text Reading", labelJa: "ぶんしょうどっかい", glyph: "読解", seeded: false, lessonNumber: null, percent: null, unlocked: unlockStatuses.READING.unlocked, requirement: null, have: 0, need: 0 },
     // Reviews is not a content type — it is the review queue, and it works.
     // It was previously typed SENTENCE and hardcoded seeded:false, so the
     // dashboard advertised a working feature as "Coming soon".
@@ -169,6 +183,10 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
       lessonNumber: null,
       percent: null,
       dueCount: reviewQueue.items.length,
+      unlocked: true,
+      requirement: null,
+      have: 0,
+      need: 0,
     },
   ];
 

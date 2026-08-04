@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
-import { getOrCreateProfile } from "@/server/queries/profile";
+import { isTypeUnlocked } from "@/services/srs/typeUnlock";
+import { getCurriculumLevels, getGuruCounts, getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 
@@ -41,6 +42,15 @@ export interface SubjectTypeSummary {
   /// Reached Guru+ (srsStage >= 5) — matches the dashboard's "learned" count.
   learned: number;
   total: number;
+  /// Whether this type is open for lessons at all (type-unlock gate, see
+  /// typeUnlock.ts). KANA and RADICAL are always true. Undefined behavior
+  /// is never surfaced here — every seeded type gets a real value.
+  unlocked: boolean;
+  /// Human-readable unlock requirement (e.g. "Guru 10 radicals"), null for
+  /// types with no Guru-count prerequisite (KANA, RADICAL) or once unlocked.
+  requirement: string | null;
+  have: number;
+  need: number;
 }
 
 /// Overview counts for all six SubjectTypes, for the `/subjects` index.
@@ -49,7 +59,7 @@ export interface SubjectTypeSummary {
 export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Promise<SubjectTypeSummary[]> {
   const seededTypes: SubjectType[] = [SubjectType.KANA, SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
-  const [totals, passedCounts] = await Promise.all([
+  const [totals, passedCounts, unlockStatuses] = await Promise.all([
     // level: not null — the laddered curriculum denominator, not the whole
     // seeded set (sentences in particular have thousands of off-ladder rows
     // sourced from Tatoeba that are never reachable as lessons/reviews).
@@ -63,6 +73,7 @@ export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Pro
       where: { userId, passedAt: { not: null } },
       _count: true,
     }),
+    getTypeUnlockStatuses(userId),
   ]);
 
   const passedSubjectIds = passedCounts.map((r) => r.subjectId);
@@ -73,11 +84,17 @@ export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Pro
   const allTypes = Object.values(SubjectType);
   return allTypes.map((type) => {
     const seeded = seededTypes.includes(type);
+    const gated = type === SubjectType.KANJI || type === SubjectType.VOCAB || type === SubjectType.SENTENCE || type === SubjectType.GRAMMAR || type === SubjectType.READING;
+    const status = gated ? unlockStatuses[type as "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR" | "READING"] : null;
     return {
       type,
       seeded,
       learned: seeded ? (passedByType[type as unknown as "KANA" | "RADICAL" | "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR"] ?? 0) : 0,
       total: seeded ? (totalByType.get(type) ?? 0) : 0,
+      unlocked: status ? status.unlocked : true,
+      requirement: status && !status.unlocked ? status.requirement : null,
+      have: status?.have ?? 0,
+      need: status?.need ?? 0,
     };
   });
 }
@@ -137,8 +154,13 @@ export async function getSubjectsForLevel(
   filters: BrowseFilters = {},
   userId: string = APP_USER_ID,
 ): Promise<SubjectListItem[]> {
-  const profile = await getOrCreateProfile(userId);
-  const kanaResolved = type === SubjectType.RADICAL ? await isKanaResolvedFor(userId) : true;
+  const [curriculumLevels, guruCounts, kanaResolved] = await Promise.all([
+    getCurriculumLevels(userId),
+    getGuruCounts(userId),
+    type === SubjectType.RADICAL ? isKanaResolvedFor(userId) : Promise.resolve(true),
+  ]);
+  const typeLevel = curriculumLevels[type];
+  const typeGateOpen = isTypeUnlocked(type, guruCounts);
 
   const where: Record<string, unknown> = { type, level };
   if (filters.jlpt !== undefined) where.jlpt = filters.jlpt;
@@ -209,13 +231,15 @@ export async function getSubjectsForLevel(
     } else if (srsStage !== null && srsStage >= 1) {
       state = "learning";
     } else if (type === SubjectType.KANA) {
-      // Kana unlocks purely on level, same as radicals below (minus the
-      // kana gate, which obviously doesn't apply to kana itself).
-      state = (s.level ?? 0) <= profile.accountLevel ? "not-started" : "locked";
+      // Kana unlocks purely on its own curriculum level, same as radicals
+      // below (minus the kana gate, which obviously doesn't apply to kana
+      // itself).
+      state = (s.level ?? 0) <= typeLevel ? "not-started" : "locked";
     } else if (type === SubjectType.RADICAL) {
-      // Radicals unlock on level, gated additionally by kanaResolved (every
-      // kana passed or skipped) — see src/services/srs/unlock.ts.
-      state = (s.level ?? 0) <= profile.accountLevel && kanaResolved ? "not-started" : "locked";
+      // Radicals unlock on their own curriculum level, gated additionally
+      // by kanaResolved (every kana passed or skipped) — see
+      // src/services/srs/unlock.ts.
+      state = (s.level ?? 0) <= typeLevel && kanaResolved ? "not-started" : "locked";
     } else {
       const subjectForUnlock: SubjectWithComponents = {
         id: s.id,
@@ -227,7 +251,10 @@ export async function getSubjectsForLevel(
           isGating: l.isGating,
         })),
       };
-      const unlocked = isSubjectUnlocked(subjectForUnlock, profile.accountLevel);
+      // Not-started requires both the per-item component/level gate AND the
+      // type-unlock gate (Guru counts on the prerequisite type) — either one
+      // failing means "locked" from this list's point of view.
+      const unlocked = typeGateOpen && isSubjectUnlocked(subjectForUnlock, typeLevel);
       state = unlocked ? "not-started" : "locked";
       if (!unlocked) {
         lockedOn = s.parentLinks
@@ -604,7 +631,8 @@ const ROW_ORDER = [
 /// getSubjectsForLevel's KANA branch, just without the level-group
 /// structure.
 export async function getKanaBrowseGroups(userId: string = APP_USER_ID): Promise<KanaScriptGroup[]> {
-  const profile = await getOrCreateProfile(userId);
+  const curriculumLevels = await getCurriculumLevels(userId);
+  const kanaLevel = curriculumLevels[SubjectType.KANA];
 
   const subjects = await prisma.subject.findMany({
     where: { type: SubjectType.KANA },
@@ -623,7 +651,7 @@ export async function getKanaBrowseGroups(userId: string = APP_USER_ID): Promise
     let state: SubjectListState;
     if (srsStage !== null && srsStage >= 9) state = "burned";
     else if (srsStage !== null && srsStage >= 1) state = "learning";
-    else state = (s.level ?? 0) <= profile.accountLevel ? "not-started" : "locked";
+    else state = (s.level ?? 0) <= kanaLevel ? "not-started" : "locked";
 
     return {
       id: s.id,

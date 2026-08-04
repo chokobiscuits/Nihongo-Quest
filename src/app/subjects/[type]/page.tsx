@@ -10,7 +10,7 @@ import {
   getJlptOptions,
   type BrowseFilters,
 } from "@/server/queries/subjects";
-import { getOrCreateProfile } from "@/server/queries/profile";
+import { getCurriculumLevels, getTypeUnlockStatuses } from "@/server/queries/curriculum";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -38,11 +38,16 @@ export default async function SubjectTypePage({
   const query = await searchParams;
   const theme = SUBJECT_THEME[subjectType];
 
-  const [profile, levelIndex, jlptOptions] = await Promise.all([
-    getOrCreateProfile(APP_USER_ID),
+  const [curriculumLevels, unlockStatuses, levelIndex, jlptOptions] = await Promise.all([
+    getCurriculumLevels(APP_USER_ID),
+    getTypeUnlockStatuses(APP_USER_ID),
     getSubjectLevelIndex(subjectType),
     getJlptOptions(subjectType),
   ]);
+  const typeLevel = curriculumLevels[subjectType];
+  const gated = subjectType === "KANJI" || subjectType === "VOCAB" || subjectType === "SENTENCE" || subjectType === "GRAMMAR" || subjectType === "READING";
+  const unlockStatus = gated ? unlockStatuses[subjectType as "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR" | "READING"] : null;
+  const isLocked = Boolean(unlockStatus && !unlockStatus.unlocked);
 
   if (levelIndex.levels.length === 0 && !levelIndex.hasAdditional) {
     return (
@@ -74,7 +79,7 @@ export default async function SubjectTypePage({
   // Paging window: default to the page containing the user's current level.
   const page = Number(query.page ?? "0");
   const allLevels = levelIndex.levels;
-  const userLevelIndex = Math.max(0, allLevels.findIndex((l) => l >= profile.accountLevel));
+  const userLevelIndex = Math.max(0, allLevels.findIndex((l) => l >= typeLevel));
   const defaultPage = Math.floor((userLevelIndex === -1 ? 0 : userLevelIndex) / LEVELS_PER_PAGE);
   const activePage = query.page !== undefined ? page : defaultPage;
 
@@ -95,8 +100,8 @@ export default async function SubjectTypePage({
   // not) put /subjects/vocabulary at 1.8MB of HTML.
   const keyOf = (l: number | null) => (l === null ? "additional" : String(l));
   const requestedOpen = query.level;
-  const defaultOpenKey = windowLevels.includes(profile.accountLevel)
-    ? String(profile.accountLevel)
+  const defaultOpenKey = windowLevels.includes(typeLevel)
+    ? String(typeLevel)
     : keyOf(windowKeys[0] ?? null);
   const openKey = requestedOpen ?? defaultOpenKey;
 
@@ -144,6 +149,23 @@ export default async function SubjectTypePage({
   return (
     <div className="flex flex-col gap-4">
       <PageHeader labelEn={theme.labelEn} labelJa={theme.labelJa} />
+
+      {isLocked && unlockStatus && (
+        <div
+          className="flex items-center gap-3 rounded-[var(--radius-card)] border border-dashed p-4"
+          style={{ borderColor: theme.base }}
+        >
+          <span className="text-h3" aria-hidden>🔒</span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-sub font-medium text-text" lang="en">
+              Locked — {unlockStatus.requirement}
+            </span>
+            <span className="text-micro text-text-faint" lang="en">
+              {unlockStatus.have} of {unlockStatus.need} — content below is still browsable
+            </span>
+          </div>
+        </div>
+      )}
 
       <SubjectFilterBar accent={theme.base} jlptOptions={jlptOptions} />
 

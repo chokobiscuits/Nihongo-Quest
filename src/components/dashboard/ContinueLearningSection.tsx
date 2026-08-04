@@ -52,10 +52,12 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
             key={`${card.type}-${index}`}
             card={card}
             accent={CARD_ACCENTS[index % CARD_ACCENTS.length]}
-            // The first seeded card is the primary CTA — it's the one that
-            // gets the breathing glow, since it's the most likely next
-            // action for an account with lessons available.
-            isPrimaryCta={index === cards.findIndex((c) => c.seeded)}
+            // The first seeded, unlocked card is the primary CTA — it's the
+            // one that gets the breathing glow, since it's the most likely
+            // next action for an account with lessons actually available. A
+            // seeded-but-locked type (below its type-unlock threshold)
+            // never gets the glow even if it's earlier in the row.
+            isPrimaryCta={index === cards.findIndex((c) => c.seeded && c.unlocked)}
           />
         ))}
       </div>
@@ -130,6 +132,51 @@ function ContinueLearningCard({
           </span>
           <span className="text-micro text-text-faint" lang="en">
             {due === 0 ? "Nothing due" : due === 1 ? "item due" : "items due"}
+          </span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Locked (type-unlock gate not yet met): still a real, browsable type —
+  // shown distinctly from the unseeded "Coming soon" cards above, with the
+  // unlock requirement and progress in place of a completion percent.
+  if (!card.unlocked) {
+    const need = Math.max(card.need, 1);
+    const lockedFraction = Math.min(1, card.have / need);
+    return (
+      <Link
+        href={`/subjects/${typeToSlug(card.type)}`}
+        title={card.requirement ?? undefined}
+        className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-dashed border-line p-4 min-h-[190px] transition-colors duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
+      >
+        <div className="relative flex items-start justify-between">
+          <span className="text-caption font-semibold text-text" lang="ja">
+            {card.labelJa}
+          </span>
+          <span aria-hidden className="text-text-faint">
+            🔒
+          </span>
+        </div>
+
+        <div className="relative flex flex-1 items-center justify-center">
+          <span className="text-glyph-sm opacity-30" aria-hidden style={{ color: accent }}>
+            {card.glyph}
+          </span>
+        </div>
+
+        <div className="relative flex flex-col gap-1.5">
+          <span className="text-micro text-text-faint" lang="en">
+            {card.requirement}
+          </span>
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+            <div
+              className="h-full rounded-full opacity-50"
+              style={{ width: `${Math.max(lockedFraction * 100, card.have > 0 ? 0 : 1.5)}%`, background: accent }}
+            />
+          </div>
+          <span className="text-micro text-text-faint" lang="en">
+            {card.have} of {card.need}
           </span>
         </div>
       </Link>

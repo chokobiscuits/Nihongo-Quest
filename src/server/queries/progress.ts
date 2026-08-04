@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
+import { getCurriculumLevels } from "@/server/queries/curriculum";
 import { STAGES, GURU_STAGE } from "@/services/srs/stages";
 import { rankForLevel } from "@/services/xp/rank";
 import { totalXpToReach } from "@/services/xp/curve";
@@ -78,6 +79,11 @@ export interface ProgressData {
 
 export async function getProgress(userId: string = APP_USER_ID): Promise<ProgressData> {
   const profile = await getOrCreateProfile(userId);
+  // KANJI's own curriculum level (per-type, not the shared accountLevel —
+  // see curriculum.ts) is what levelKanji below needs to query the right
+  // level's kanji for the advancement-progress panel.
+  const curriculumLevels = await getCurriculumLevels(userId);
+  const kanjiCurriculumLevel = curriculumLevels[SubjectType.KANJI];
 
   const [
     kanjiTotal,
@@ -121,7 +127,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
       select: { subject: { select: { jlpt: true } } },
     }),
     prisma.userSubject.findMany({
-      where: { userId, subject: { type: SubjectType.KANJI, level: profile.accountLevel } },
+      where: { userId, subject: { type: SubjectType.KANJI, level: kanjiCurriculumLevel } },
       select: { srsStage: true },
     }),
     prisma.dailyActivity.findMany({
@@ -176,7 +182,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
 
   const levelKanjiGuruOrAbove = levelKanji.filter((k) => k.srsStage >= GURU_STAGE).length;
   const level: LevelProgress = {
-    currentLevel: profile.accountLevel,
+    currentLevel: kanjiCurriculumLevel,
     levelKanjiTotal: levelKanji.length,
     levelKanjiGuruOrAbove,
     percentToAdvance: levelKanji.length > 0 ? Math.round((levelKanjiGuruOrAbove / levelKanji.length) * 100) : 0,

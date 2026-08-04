@@ -6,6 +6,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { rankForLevel } from "@/services/xp/rank";
 import { accountMasteryLevel, masteryTier } from "@/services/xp/mastery";
 import { prisma } from "@/lib/db";
+import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -50,6 +51,7 @@ export default async function RootLayout({
     _sum: { masteryXp: true },
   });
   const tier = masteryTier(accountMasteryLevel(masteryXpAgg._sum.masteryXp ?? 0));
+  const unlockStatuses = await getTypeUnlockStatuses(APP_USER_ID);
 
   return (
     <html
@@ -64,6 +66,7 @@ export default async function RootLayout({
             masteryTier: tier,
             rank,
           }}
+          typeUnlockStatuses={unlockStatuses}
         >
           {children}
         </AppShell>

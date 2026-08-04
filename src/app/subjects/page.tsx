@@ -45,23 +45,27 @@ function SubjectTypeCard({ summary }: { summary: Awaited<ReturnType<typeof getSu
   }
 
   const percent = summary.total > 0 ? Math.round((summary.learned / summary.total) * 100) : 0;
+  const locked = summary.seeded && !summary.unlocked;
 
   return (
     <Link
       href={`/subjects/${slug}`}
       className="group flex flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-5 transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+      title={locked ? summary.requirement ?? undefined : undefined}
     >
       <div className="flex items-center justify-between">
         <span
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-h2"
-          style={{ background: "color-mix(in oklch, " + theme.base + " 18%, transparent)", color: theme.base }}
+          style={{ background: "color-mix(in oklch, " + theme.base + " 18%, transparent)", color: theme.base, opacity: locked ? 0.5 : 1 }}
           aria-hidden
         >
-          {theme.icon}
+          {locked ? "🔒" : theme.icon}
         </span>
-        <span className="text-caption font-semibold tabular-nums text-text" lang="en">
-          {percent}%
-        </span>
+        {!locked && (
+          <span className="text-caption font-semibold tabular-nums text-text" lang="en">
+            {percent}%
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col leading-tight">
@@ -73,17 +77,34 @@ function SubjectTypeCard({ summary }: { summary: Awaited<ReturnType<typeof getSu
         </span>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${Math.max(percent, percent > 0 ? 0 : 1.5)}%`, background: theme.base }}
-          />
+      {locked ? (
+        <div className="flex flex-col gap-1.5">
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+            <div
+              className="h-full rounded-full opacity-50"
+              style={{
+                width: `${Math.max(Math.round((summary.have / Math.max(summary.need, 1)) * 100), summary.have > 0 ? 0 : 1.5)}%`,
+                background: theme.base,
+              }}
+            />
+          </div>
+          <span className="text-micro text-text-dim" lang="en">
+            {summary.requirement}, {summary.have} of {summary.need}
+          </span>
         </div>
-        <span className="text-micro text-text-dim" lang="en">
-          {summary.learned.toLocaleString()} / {summary.total.toLocaleString()} learned
-        </span>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${Math.max(percent, percent > 0 ? 0 : 1.5)}%`, background: theme.base }}
+            />
+          </div>
+          <span className="text-micro text-text-dim" lang="en">
+            {summary.learned.toLocaleString()} / {summary.total.toLocaleString()} learned
+          </span>
+        </div>
+      )}
     </Link>
   );
 }

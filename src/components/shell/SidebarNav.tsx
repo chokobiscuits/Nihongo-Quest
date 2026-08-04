@@ -54,6 +54,14 @@ interface NavItem {
   Icon: (props: { className?: string }) => React.ReactElement;
 }
 
+/// Per-type unlock status keyed the same way getTypeUnlockStatuses returns
+/// it — only the gated types (KANJI/VOCAB/SENTENCE/GRAMMAR/READING) are
+/// present; KANA and RADICAL are always unlocked and never appear here.
+export type SidebarTypeUnlockStatuses = Record<
+  "KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR" | "READING",
+  { unlocked: boolean; requirement: string | null; have: number; need: number }
+>;
+
 interface NavGroup {
   caption?: string;
   items: NavItem[];
@@ -102,14 +110,20 @@ export interface SidebarNavUser {
 
 export interface SidebarNavProps {
   user: SidebarNavUser;
+  /// Locked-state and requirement text for the Learn nav's gated types
+  /// (KANJI/VOCAB/SENTENCE/GRAMMAR/READING). Undefined types render
+  /// unlocked, same as KANA/RADICAL, which are never gated.
+  typeUnlockStatuses?: SidebarTypeUnlockStatuses;
   className?: string;
 }
+
+const GATED_TYPES = new Set<SubjectType>([SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR, SubjectType.READING]);
 
 /// Primary navigation. Full 240px sidebar at lg+ (1024px), 72px icon rail
 /// with tooltips at md (768-1023px), hidden entirely below md (BottomTabBar
 /// takes over). The collapsed/expanded states are pure CSS breakpoints so
 /// there is no layout flash on resize.
-export function SidebarNav({ user, className }: SidebarNavProps) {
+export function SidebarNav({ user, typeUnlockStatuses, className }: SidebarNavProps) {
   const pathname = usePathname();
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLAnchorElement>>(new Map());
@@ -171,6 +185,15 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
               const active = pathname === item.href;
               const subjectType = NAV_THEME_BY_HREF[item.href];
               const activeColor = subjectType ? SUBJECT_THEME[subjectType].base : "var(--color-brand)";
+              // Soft gating: locked Learn types stay clickable — the lock
+              // icon and title are informational only, never a disabled
+              // link. Only KANJI/VOCAB/SENTENCE/GRAMMAR/READING are ever
+              // gated; KANA/RADICAL always render unlocked.
+              const status = subjectType && GATED_TYPES.has(subjectType) ? typeUnlockStatuses?.[subjectType as keyof SidebarTypeUnlockStatuses] : undefined;
+              const locked = Boolean(status && !status.unlocked);
+              const title = locked && status?.requirement
+                ? `${item.labelEn} / ${item.labelJa} — locked: ${status.requirement} (${status.have} of ${status.need})`
+                : `${item.labelEn} / ${item.labelJa}`;
               return (
                 <Link
                   key={item.href}
@@ -179,10 +202,10 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
                     if (el) itemRefs.current.set(item.href, el);
                     else itemRefs.current.delete(item.href);
                   }}
-                  title={`${item.labelEn} / ${item.labelJa}`}
+                  title={title}
                   className={cn(
                     "group flex items-center gap-3 rounded-[var(--radius-tile)] px-2.5 py-2 text-sub transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
-                    active ? "text-text" : "text-text-muted",
+                    active ? "text-text" : locked ? "text-text-faint" : "text-text-muted",
                     "hover:bg-surface-2 hover:text-text focus-visible:bg-surface-2 focus-visible:text-text",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
                     "justify-center lg:justify-start",
@@ -191,12 +214,19 @@ export function SidebarNav({ user, className }: SidebarNavProps) {
                   <span
                     aria-hidden
                     className="flex h-5 w-5 shrink-0 items-center justify-center leading-none"
-                    style={{ color: active ? activeColor : "var(--color-text-dim)" }}
+                    style={{ color: active ? activeColor : "var(--color-text-dim)", opacity: locked ? 0.5 : 1 }}
                   >
                     <item.Icon className="h-[18px] w-[18px]" />
                   </span>
                   <span className="hidden lg:flex flex-col leading-tight">
-                    <span lang="en">{item.labelEn}</span>
+                    <span lang="en" className="inline-flex items-center gap-1">
+                      {item.labelEn}
+                      {locked && (
+                        <span aria-hidden className="text-micro opacity-60">
+                          🔒
+                        </span>
+                      )}
+                    </span>
                     <span lang="ja" className="text-micro text-text-faint">
                       {item.labelJa}
                     </span>

@@ -2,8 +2,10 @@ import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { isSubjectUnlocked, type SubjectWithComponents } from "@/services/srs/unlock";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
+import { isTypeUnlocked } from "@/services/srs/typeUnlock";
 import { selectLessonBatch, type LessonCandidate, type LessonSubjectType } from "@/services/lessons/batch";
 import { getOrCreateProfile } from "@/server/queries/profile";
+import { getCurriculumLevels, getGuruCounts } from "@/server/queries/curriculum";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 import { getNextRequiredTutorial, type TutorialDetail } from "@/server/queries/tutorials";
 
@@ -85,15 +87,24 @@ export interface LessonSubject {
 /// Candidate subject shape pulled for the unlock check: every ladder subject
 /// at or below the user's level that has no UserSubject row yet, or has one
 /// that has never been started (still a lesson, not a review item).
-async function fetchUnstartedLadderSubjects(userId: string, userLevel: number) {
+async function fetchUnstartedLadderSubjects(userId: string, curriculumLevels: Record<SubjectType, number>) {
+  // Per-type level ceiling: a KANJI candidate must be at or below
+  // curriculumLevels.KANJI, a VOCAB candidate at or below
+  // curriculumLevels.VOCAB, etc. — not the old single shared accountLevel.
+  const typeLevelClauses = LADDER_TYPES.map((type) => ({
+    type,
+    level: { not: null, lte: curriculumLevels[type] },
+  }));
+
   return prisma.subject.findMany({
     where: {
-      type: { in: LADDER_TYPES },
-      level: { not: null, lte: userLevel },
-      OR: [
-        { userSubject: { none: { userId } } },
-        { userSubject: { some: { userId, startedAt: null } } },
-      ],
+      OR: typeLevelClauses,
+      AND: {
+        OR: [
+          { userSubject: { none: { userId } } },
+          { userSubject: { some: { userId, startedAt: null } } },
+        ],
+      },
     },
     select: {
       id: true,
@@ -222,7 +233,18 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
   const settings = profile.settings as { lessonBatchSize?: number } | null;
   const batchSize = settings?.lessonBatchSize ?? undefined;
 
-  const candidates = await fetchUnstartedLadderSubjects(userId, profile.accountLevel);
+  // Per-type curriculum level replaces the old shared accountLevel for
+  // curriculum position — accountLevel keeps driving XP/rank only (see
+  // src/services/xp/rank.ts and profile reads elsewhere). Type-unlock (Guru
+  // counts on a prerequisite type) is a separate, additional gate: a locked
+  // type contributes no lesson items even if some of its subjects would
+  // otherwise be at or below its own curriculum level.
+  const [curriculumLevels, guruCounts] = await Promise.all([
+    getCurriculumLevels(userId),
+    getGuruCounts(userId),
+  ]);
+
+  const candidates = await fetchUnstartedLadderSubjects(userId, curriculumLevels);
   if (candidates.length === 0) return [];
 
   const childIds = Array.from(
@@ -234,6 +256,8 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
   ]);
 
   const unlocked = candidates.filter((c) => {
+    if (!isTypeUnlocked(c.type, guruCounts)) return false;
+
     const subject: SubjectWithComponents = {
       id: c.id,
       type: c.type,
@@ -244,7 +268,7 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
         isGating: link.isGating,
       })),
     };
-    return isSubjectUnlocked(subject, profile.accountLevel, kanaResolved);
+    return isSubjectUnlocked(subject, curriculumLevels[c.type], kanaResolved);
   });
 
   const asLessonCandidates: (LessonCandidate & { source: (typeof unlocked)[number] })[] = unlocked.map((c) => ({

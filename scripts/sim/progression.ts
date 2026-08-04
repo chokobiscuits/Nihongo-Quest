@@ -31,6 +31,7 @@ import { xpForCorrectAnswer } from "../../src/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
 import { rankForLevel } from "../../src/services/xp/rank";
 import { SubjectType } from "../../src/generated/prisma/enums";
+import { KANJI_UNLOCK_RADICAL_GURU, VOCAB_UNLOCK_KANJI_GURU } from "../../src/services/srs/typeUnlock";
 
 const SIM_USER = "sim-test-user";
 const REAL_USER = "local-user";
@@ -310,6 +311,69 @@ async function main() {
     // Guru every level-2 and level-3 radical (a level-3 kanji's components
     // may draw from either level) before evaluating.
     //
+    // KANJI is now additionally gated by the type-unlock threshold
+    // (KANJI_UNLOCK_RADICAL_GURU Guru'd radicals overall, independent of
+    // level or component gating — see typeUnlock.ts), on top of the
+    // per-kanji component gate exercised above/below. Guru'ing level-1's
+    // radicals (20 of them) already clears that threshold on its own, but
+    // the gate itself is asserted explicitly first, immediately below,
+    // before the level-2/3 radical grind that the component-coverage
+    // assertions need.
+    const level1RadicalCount = radicalIds.length;
+    assertTrue(
+      SECTION_A,
+      `type gate: with only ${KANJI_UNLOCK_RADICAL_GURU - 1} of ${level1RadicalCount} radicals Guru'd, KANJI stays locked`,
+      level1RadicalCount > KANJI_UNLOCK_RADICAL_GURU - 1,
+      `not enough level-1 radicals (${level1RadicalCount}) to exercise the ${KANJI_UNLOCK_RADICAL_GURU - 1}-below-threshold case`,
+    );
+    {
+      // Demote every Guru'd radical past the (threshold - 1)th back down to
+      // Apprentice IV (stage 4), so exactly (KANJI_UNLOCK_RADICAL_GURU - 1)
+      // remain Guru'd, and confirm KANJI is still locked at that count.
+      const toDemote = radicalIds.slice(KANJI_UNLOCK_RADICAL_GURU - 1);
+      await prisma.userSubject.updateMany({
+        where: { userId: SIM_USER, subjectId: { in: toDemote } },
+        data: { srsStage: 4 },
+      });
+      const guruCountBelow = await prisma.userSubject.count({
+        where: { userId: SIM_USER, subjectId: { in: radicalIds }, srsStage: { gte: GURU_STAGE } },
+      });
+      assertEqual(SECTION_A, "type gate setup: exactly threshold-1 radicals are Guru'd", guruCountBelow, KANJI_UNLOCK_RADICAL_GURU - 1);
+
+      const batchBelowThreshold = await getLessonBatch(SIM_USER);
+      assertTrue(
+        SECTION_A,
+        `type gate: with ${KANJI_UNLOCK_RADICAL_GURU - 1} Guru'd radicals, kanji stays locked (below the ${KANJI_UNLOCK_RADICAL_GURU} threshold)`,
+        !batchBelowThreshold.some((s) => s.type === "KANJI"),
+        `unexpected kanji lessons: ${batchBelowThreshold.filter((s) => s.type === "KANJI").length}`,
+      );
+
+      // Re-promote one back to Guru so the count is exactly at the threshold.
+      await prisma.userSubject.update({
+        where: { userId_subjectId: { userId: SIM_USER, subjectId: toDemote[0] } },
+        data: { srsStage: GURU_STAGE },
+      });
+      const guruCountAt = await prisma.userSubject.count({
+        where: { userId: SIM_USER, subjectId: { in: radicalIds }, srsStage: { gte: GURU_STAGE } },
+      });
+      assertEqual(SECTION_A, "type gate setup: back to exactly the threshold count", guruCountAt, KANJI_UNLOCK_RADICAL_GURU);
+
+      const batchAtThreshold = await getLessonBatch(SIM_USER);
+      assertTrue(
+        SECTION_A,
+        `type gate: with ${KANJI_UNLOCK_RADICAL_GURU} Guru'd radicals, kanji unlocks (component gate permitting)`,
+        batchAtThreshold.some((s) => s.type === "KANJI"),
+      );
+
+      // Restore the rest to Guru so the subsequent component-coverage
+      // assertions (which assume all 20 level-1 radicals are Guru'd) see
+      // the full set again.
+      await prisma.userSubject.updateMany({
+        where: { userId: SIM_USER, subjectId: { in: toDemote } },
+        data: { srsStage: GURU_STAGE },
+      });
+    }
+
     // Note: account level is pinned to 3 (both accountLevel and totalXp,
     // consistently) AFTER this radical Guru grind, not before — XP earned
     // from guru'ing dozens of radicals is enough on its own to push
@@ -331,6 +395,36 @@ async function main() {
 
     const allGuruedRadicalIds = new Set([...radicalIds, ...level23Radicals.map((r) => r.id)]);
 
+    // KANJI's *curriculum* level (independent of the type-unlock gate just
+    // exercised above) must itself reach 3 before level-3 kanji are
+    // candidates at all — curriculumLevel() advances a type's level once
+    // >=90% of the current level's laddered subjects of that type are
+    // Guru'd (see curriculum.ts). Clear level 1 and level 2 KANJI the same
+    // way to get there, via the ordinary lesson batch (whatever's unlocked
+    // by radical components at levels 1-2, which the just-Guru'd level-1-3
+    // radicals fully cover).
+    for (const targetLevel of [1, 2]) {
+      const levelKanji = await prisma.subject.findMany({ where: { type: SubjectType.KANJI, level: targetLevel }, select: { id: true } });
+      const need = Math.ceil(levelKanji.length * 0.9);
+      let cleared = 0;
+      for (let i = 0; i < 5 && cleared < need; i++) {
+        const b = await getLessonBatch(SIM_USER);
+        const candidates = b.filter((s) => s.type === "KANJI" && s.level === targetLevel).map((s) => s.id);
+        if (candidates.length === 0) break;
+        await learnSubjects(candidates, new Map(candidates.map((id) => [id, "KANJI"])));
+        await guruSubjects(candidates, new Map(candidates.map((id) => [id, "KANJI"])));
+        cleared = await prisma.userSubject.count({
+          where: { userId: SIM_USER, subject: { type: SubjectType.KANJI, level: targetLevel }, srsStage: { gte: GURU_STAGE } },
+        });
+      }
+      assertTrue(
+        SECTION_A,
+        `curriculum setup: >=90% of level-${targetLevel} kanji Guru'd to advance KANJI's curriculum level`,
+        cleared >= need,
+        `cleared ${cleared} of ${need} needed (total ${levelKanji.length})`,
+      );
+    }
+
     // `parentLinks`: rows where this kanji is the parent — i.e. its
     // components (the radicals it's built from). See lessons.ts's own
     // comment on the same distinction.
@@ -348,6 +442,9 @@ async function main() {
         !k.parentLinks.every((l) => allGuruedRadicalIds.has(l.child.id)),
     );
 
+    // Type-level KANJI gate is already cleared (>= KANJI_UNLOCK_RADICAL_GURU
+    // Guru'd radicals, asserted explicitly above); these two checks now
+    // isolate the remaining, per-kanji component gate on top of that.
     const batch1 = await getLessonBatch(SIM_USER);
     if (fullyCoveredKanji) {
       assertTrue(
@@ -369,7 +466,11 @@ async function main() {
       check(SECTION_A, "kanji with only-partially-Guru'd components does NOT unlock", true, "no partial-coverage kanji found in seed data — vacuously fine (nothing wrongly unlocked)");
     }
 
-    // Learn and Guru every unlocked level-<=3 kanji so we can check vocab unlock.
+    // Learn and Guru every unlocked level-<=3 kanji so we can check vocab
+    // unlock. VOCAB additionally needs VOCAB_UNLOCK_KANJI_GURU (10) Guru'd
+    // kanji overall (type gate) on top of its own per-vocab component gate
+    // — Guru enough extra kanji beyond whatever unlocked at level <=3 to
+    // clear that threshold before asserting vocab appears.
     const unlockedKanjiIds = batch1.filter((s) => s.type === "KANJI").map((s) => s.id);
     const kanjiTypeMap = new Map(level3Kanji.map((k) => [k.id, "KANJI"]));
     if (unlockedKanjiIds.length > 0) {
@@ -379,16 +480,61 @@ async function main() {
       const guruedKanji = await prisma.userSubject.findMany({ where: { userId: SIM_USER, subjectId: { in: unlockedKanjiIds } }, select: { srsStage: true } });
       assertTrue(SECTION_A, "learned kanji reach Guru", guruedKanji.every((k) => k.srsStage >= GURU_STAGE), `stages: ${guruedKanji.map((k) => k.srsStage).join(",")}`);
 
+      // Top up Guru'd kanji count to clear VOCAB's type-unlock threshold if
+      // the level-<=3 unlocked set alone isn't enough — pull in further
+      // already-unlocked-component kanji from higher levels as needed.
+      let guruKanjiCount = await prisma.userSubject.count({
+        where: { userId: SIM_USER, subject: { type: SubjectType.KANJI }, srsStage: { gte: GURU_STAGE } },
+      });
+      if (guruKanjiCount < VOCAB_UNLOCK_KANJI_GURU) {
+        const extraNeeded = VOCAB_UNLOCK_KANJI_GURU - guruKanjiCount;
+        // Any kanji with zero component links is unlocked from level 1
+        // regardless of radical coverage (documented residue set / KRADFILE
+        // gaps), so pull unstarted candidates straight from the next
+        // lesson batches until the threshold clears.
+        for (let i = 0; i < 5 && guruKanjiCount < VOCAB_UNLOCK_KANJI_GURU; i++) {
+          const topUpBatch = await getLessonBatch(SIM_USER);
+          const moreKanji = topUpBatch.filter((s) => s.type === "KANJI").map((s) => s.id);
+          if (moreKanji.length === 0) break;
+          const take = moreKanji.slice(0, extraNeeded + 5);
+          await learnSubjects(take, new Map(take.map((id) => [id, "KANJI"])));
+          await guruSubjects(take, new Map(take.map((id) => [id, "KANJI"])));
+          guruKanjiCount = await prisma.userSubject.count({
+            where: { userId: SIM_USER, subject: { type: SubjectType.KANJI }, srsStage: { gte: GURU_STAGE } },
+          });
+        }
+      }
+      assertTrue(
+        SECTION_A,
+        `type gate: at least ${VOCAB_UNLOCK_KANJI_GURU} kanji are Guru'd before checking vocab unlock`,
+        guruKanjiCount >= VOCAB_UNLOCK_KANJI_GURU,
+        `only ${guruKanjiCount} kanji Guru'd`,
+      );
+
+      const allGuruedKanjiIds = (
+        await prisma.userSubject.findMany({
+          where: { userId: SIM_USER, subject: { type: SubjectType.KANJI }, srsStage: { gte: GURU_STAGE } },
+          select: { subjectId: true },
+        })
+      ).map((r) => r.subjectId);
+
+      // VOCAB's own *curriculum* level (independent of the type-unlock gate
+      // just cleared) is still 1 at this point — nothing has advanced it —
+      // so only level-1 vocab is a valid candidate regardless of kanji
+      // coverage; a higher-level vocab composed entirely of Guru'd kanji
+      // would still correctly stay locked by the level ceiling, which would
+      // make this assertion fail for the wrong reason. Restrict the search
+      // to level-1 vocab so this isolates the kanji-component gate alone.
       const batch2 = await getLessonBatch(SIM_USER);
       const vocabUsingGuruedKanji = await prisma.subject.findMany({
         where: {
           type: SubjectType.VOCAB,
-          level: { lte: 3 },
-          parentLinks: { some: { child: { id: { in: unlockedKanjiIds } } } },
+          level: 1,
+          parentLinks: { some: { child: { id: { in: allGuruedKanjiIds } } } },
         },
-        select: { id: true, parentLinks: { select: { child: { select: { id: true } } } } },
+        select: { id: true, level: true, parentLinks: { select: { child: { select: { id: true } } } } },
       });
-      const fullyUnlockedVocab = vocabUsingGuruedKanji.find((v) => v.parentLinks.every((l) => unlockedKanjiIds.includes(l.child.id)));
+      const fullyUnlockedVocab = vocabUsingGuruedKanji.find((v) => v.parentLinks.every((l) => allGuruedKanjiIds.includes(l.child.id)));
       if (fullyUnlockedVocab) {
         assertTrue(SECTION_A, "vocab using fully-Guru'd kanji unlocks", batch2.some((s) => s.id === fullyUnlockedVocab.id));
       } else {
