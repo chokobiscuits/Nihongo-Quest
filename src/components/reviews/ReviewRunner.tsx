@@ -133,7 +133,10 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
 
         <button
           type="button"
-          onClick={() => router.refresh()}
+          onClick={() => {
+            router.push("/");
+            router.refresh();
+          }}
           disabled={committing}
           className="self-start rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
         >

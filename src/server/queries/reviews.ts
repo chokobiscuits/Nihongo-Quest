@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import type { LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
+import { APP_USER_ID } from "@/lib/appUser";
 
 export interface ReviewSubject {
   id: string; // UserSubject id
@@ -30,12 +31,22 @@ export interface ReviewQueueResult {
   dueCounts: ReviewDueCount[];
 }
 
+/// Fisher-Yates, in place on a caller-owned array.
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 /// Fetches the reviewable queue for `userId`: every UserSubject that has
 /// been started and is between Apprentice I and Enlightened (stage 1-8;
 /// stage 9 is Burned and leaves the queue for good). No due-date filter —
 /// `dueAt` is a priority weight (ORDER BY, ascending, overdue-first), never
 /// a WHERE-clause lock. The user can review as much as they want, whenever.
-import { APP_USER_ID } from "@/lib/appUser";
+/// The returned `items` are then shuffled so a session doesn't present the
+/// same order every time; `dueCounts` is unaffected.
 
 export async function getReviewQueue(userId: string = APP_USER_ID): Promise<ReviewQueueResult> {
   const rows = await prisma.userSubject.findMany({
@@ -68,7 +79,7 @@ export async function getReviewQueue(userId: string = APP_USER_ID): Promise<Revi
     },
   });
 
-  const items: ReviewSubject[] = rows.map((row) => ({
+  const items: ReviewSubject[] = shuffle(rows.map((row) => ({
     id: row.id,
     subjectId: row.subject.id,
     type: row.subject.type as ReviewSubject["type"],
@@ -84,7 +95,7 @@ export async function getReviewQueue(userId: string = APP_USER_ID): Promise<Revi
     lastPromotedAt: row.lastPromotedAt,
     furigana: row.subject.furigana as { ruby: string; rt?: string }[] | null,
     furiganaFallback: row.subject.furiganaFallback,
-  }));
+  })));
 
   const countsByType = new Map<SubjectType, number>();
   for (const row of rows) {
