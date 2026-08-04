@@ -7,7 +7,7 @@ import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { rankForLevel } from "@/services/xp/rank";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
-import { accountMasteryLevel, masteryTier, type MasteryTier } from "@/services/xp/mastery";
+import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
 
 // Static denominator for the one content type that still has no Subject
 // rows (readings). Grammar and sentences are now real (seed phases 1-3) and
@@ -94,6 +94,9 @@ export interface DashboardData {
   accountMasteryXp: number;
   accountMasteryLevel: number;
   masteryTier: MasteryTier;
+  /// Progress within the current mastery level, for the dashboard card's bar.
+  masteryXpIntoLevel: number;
+  masteryXpForNextLevel: number;
   progress: DashboardProgressRow[];
   continueCards: DashboardContinueCard[];
   reviewsDue: number;
@@ -141,6 +144,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   const accountMasteryXp = masteryXpAgg._sum.masteryXp ?? 0;
   const accountMasteryLevelValue = accountMasteryLevel(accountMasteryXp);
   const tier = masteryTier(accountMasteryLevelValue);
+  const masteryProgressValue = masteryProgress(accountMasteryXp);
 
   // groupBy above only tells us which subjectIds passed/started; join
   // subject type via a second lookup keyed on those ids to bucket counts.
@@ -234,6 +238,8 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     accountMasteryXp,
     accountMasteryLevel: accountMasteryLevelValue,
     masteryTier: tier,
+    masteryXpIntoLevel: masteryProgressValue.xpIntoLevel,
+    masteryXpForNextLevel: masteryProgressValue.xpForNextLevel,
     progress,
     continueCards,
     reviewsDue,

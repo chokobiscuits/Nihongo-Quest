@@ -88,7 +88,12 @@ export default async function HomePage() {
 
         <ContinueLearningSection cards={dashboard.continueCards} />
 
-        <InfiniteMasteryCard />
+        <InfiniteMasteryCard
+          level={dashboard.accountMasteryLevel}
+          tierName={dashboard.masteryTier.name}
+          xpIntoLevel={dashboard.masteryXpIntoLevel}
+          xpForNextLevel={dashboard.masteryXpForNextLevel}
+        />
 
         <ReviewsCard reviewsDue={dashboard.reviewsDue} byType={dashboard.reviewsByType} />
 

@@ -2,9 +2,14 @@
 
 // §9 Infinite Mastery card: purple-to-indigo night scene with a torii
 // silhouette, moon, and a scattering of stars — 4 of which twinkle on
-// staggered delays. Account mastery has no ceiling, so this card exists to
-// say that plainly rather than imply a hidden cap the way a percent bar
-// would.
+// staggered delays.
+//
+// Shows the user's actual account mastery level and tier, with progress
+// toward the next level. The ∞ motif remains because account mastery has no
+// ceiling: the progress bar fills toward the next level, never toward a
+// final one, and the card says so rather than implying a hidden cap.
+// Rendered without props it degrades to the pure-decoration form it had
+// before, which is what /mastery's closing flourish uses.
 
 // Positions kept clear of the centered content block (roughly x: 15-85,
 // y: 28-78, where the ∞ glyph / "Mastery Level ∞" / tagline text sits) so a
@@ -32,7 +37,30 @@ const STAR_POSITIONS = [
 const TWINKLE_INDICES = [1, 4, 7, 10];
 const TWINKLE_DELAYS_S = [0, 1, 2, 3];
 
-export function InfiniteMasteryCard({ className }: { className?: string }) {
+export interface InfiniteMasteryCardProps {
+  className?: string;
+  /// Current account mastery level. Omit for the decorative-only variant.
+  level?: number;
+  /// Tier name for `level` (e.g. "Adept"), from masteryTier().
+  tierName?: string;
+  /// Mastery XP earned within the current level, and the total needed to
+  /// reach the next one. Drives the progress bar.
+  xpIntoLevel?: number;
+  xpForNextLevel?: number;
+}
+
+export function InfiniteMasteryCard({
+  className,
+  level,
+  tierName,
+  xpIntoLevel,
+  xpForNextLevel,
+}: InfiniteMasteryCardProps) {
+  const hasStats = level !== undefined;
+  const pct =
+    xpIntoLevel !== undefined && xpForNextLevel !== undefined && xpForNextLevel > 0
+      ? Math.min(100, Math.max(0, Math.round((xpIntoLevel / xpForNextLevel) * 100)))
+      : null;
   return (
     <div
       className={className}
@@ -83,15 +111,50 @@ export function InfiniteMasteryCard({ className }: { className?: string }) {
       </svg>
 
       <div className="relative flex h-full flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-        <span className="text-glyph font-bold text-white" style={{ textShadow: "0 0 24px rgba(167,139,250,0.6)" }}>
-          ∞
-        </span>
-        <span className="text-h3 font-semibold text-white" lang="en">
-          Mastery Level ∞
-        </span>
-        <span className="text-sub text-white/70" lang="en">
-          There is no limit. Only growth.
-        </span>
+        {hasStats ? (
+          <>
+            <span
+              className="text-glyph font-bold text-white"
+              style={{ textShadow: "0 0 24px rgba(167,139,250,0.6)" }}
+            >
+              {level}
+            </span>
+            <span className="text-h3 font-semibold text-white" lang="en">
+              Mastery Level {level}
+              {tierName ? <span className="text-white/70"> · {tierName}</span> : null}
+            </span>
+
+            {pct !== null && (
+              <div className="mt-1 flex w-full max-w-xs flex-col gap-1">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+                  <div
+                    className="h-full rounded-full bg-white/85"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-caption text-white/60" lang="en">
+                  {xpIntoLevel!.toLocaleString()} / {xpForNextLevel!.toLocaleString()} to level {level! + 1}
+                </span>
+              </div>
+            )}
+
+            <span className="mt-1 text-caption text-white/55" lang="en">
+              No ceiling — mastery keeps climbing. ∞
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-glyph font-bold text-white" style={{ textShadow: "0 0 24px rgba(167,139,250,0.6)" }}>
+              ∞
+            </span>
+            <span className="text-h3 font-semibold text-white" lang="en">
+              Mastery Level ∞
+            </span>
+            <span className="text-sub text-white/70" lang="en">
+              There is no limit. Only growth.
+            </span>
+          </>
+        )}
       </div>
     </div>
   );
