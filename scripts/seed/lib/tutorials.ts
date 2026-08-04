@@ -143,7 +143,7 @@ This app assumes you can already read hiragana and katakana. It focuses on kanji
     required: true,
     estimatedMinutes: 2,
     trigger: { kind: "before_first", subjectType: "KANJI" },
-    body: "Type meanings in English and readings in hiragana (romaji is auto-converted as you type). Close typos are forgiven, but the wrong reading type is not.",
+    body: "## How to answer a question\n\nReviews ask you one of two things, and the banner above the input always tells you which.\n\n**Meaning questions** want English. Type what the item means: for 山 you would type *mountain*. Minor typos are forgiven, so *mountian* still passes. If you type something the app rejects but you believe is right, use the \"I should have been marked correct\" button. That adds your answer to the accepted list permanently, so you will never be marked wrong for it again.\n\n**Reading questions** want Japanese. Type in romaji and it converts to kana as you go: typing `yama` produces やま. You do not need a Japanese keyboard.\n\n### The two mistakes everyone makes\n\nTyping the meaning when the reading was asked, or the reverse. The app catches this and tells you rather than marking you wrong, so it costs you nothing, but read the banner and it will not happen.\n\nThe other is the wrong reading for the right kanji. 山 alone is やま, but in 火山 it is さん. Reviews ask for the reading in the context they show you, so read the whole item before answering.\n\n### Wrong answers\n\nA wrong answer sends the item back into the queue for the same session, and you have to get it right before the session ends. That is deliberate: the point is to leave having learned it, not to be scored.",
   },
   {
     slug: "rendaku",
@@ -163,7 +163,7 @@ This app assumes you can already read hiragana and katakana. It focuses on kanji
     required: true,
     estimatedMinutes: 2,
     trigger: { kind: "before_first", subjectType: "SENTENCE" },
-    body: "Japanese word order is subject-object-verb, and small particles like は, を, and に mark each word's grammatical role rather than position doing that job.",
+    body: "## Particles and word order\n\nJapanese sentences end with the verb. Where English says *I eat sushi*, Japanese says 私はすしを食べます, literally *I, sushi, eat*. Once you expect the verb last, sentences stop feeling scrambled.\n\nWhat holds the sentence together is not word order but **particles**: small kana that follow a word and label its job.\n\n### The ones you will meet first\n\n**は** marks the topic, what the sentence is about. Written は but pronounced *wa*, which catches everyone once.\n\n**を** marks the direct object, the thing the verb acts on. Written を, pronounced *o*.\n\n**に** marks a destination or a point in time: 学校に行く, go to school. 三時に, at three.\n\n**で** marks where an action happens, or what you did it with: 家で食べる, eat at home.\n\n**の** connects two nouns, usually possession: 私の本, my book.\n\n### Why this matters more than order\n\nBecause the particle carries the role, you can move words around and the meaning holds. すしを私は食べます is unusual but still means I eat sushi, because を still marks the sushi as the thing eaten. English cannot do this: *sushi eats I* is a different sentence entirely.\n\nThe trade is that a wrong particle changes your meaning completely, whereas a wrong word order mostly just sounds odd. Particles are worth more attention than they look.",
   },
   {
     slug: "no-spaces",
