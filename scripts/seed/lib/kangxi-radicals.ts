@@ -109,7 +109,12 @@ export const KANGXI_RADICALS: KangxiRadical[] = [
   { number: 82, character: "毛", name: "fur", romaji: "ke", strokes: 4, variants: [] },
   { number: 83, character: "氏", name: "clan", romaji: "uji", strokes: 4, variants: [] },
   { number: 84, character: "气", name: "steam", romaji: "kigamae", strokes: 4, variants: [] },
-  { number: 85, character: "水", name: "water", romaji: "mizu", strokes: 4, variants: ["氵", "氺"] },
+  // KRADFILE stands "汁" (a real kanji, "juice") in for the water radical's
+  // three-dot shape (氵) in 364 entries — 海, 港, 河, 活, 漢, etc. — instead
+  // of using 氵/水 directly. Folded here as a variant so those kanji resolve
+  // to water like every other 氵-radical kanji rather than losing the
+  // component entirely. See scripts/seed/README.md and the task write-up.
+  { number: 85, character: "水", name: "water", romaji: "mizu", strokes: 4, variants: ["氵", "氺", "汁"] },
   { number: 86, character: "火", name: "fire", romaji: "hi", strokes: 4, variants: ["灬"] },
   { number: 87, character: "爪", name: "claw", romaji: "tsume", strokes: 4, variants: ["爫"] },
   { number: 88, character: "父", name: "father", romaji: "chichi", strokes: 4, variants: [] },
@@ -128,7 +133,11 @@ export const KANGXI_RADICALS: KangxiRadical[] = [
   { number: 101, character: "用", name: "use", romaji: "mochiiru", strokes: 5, variants: [] },
   { number: 102, character: "田", name: "field", romaji: "ta", strokes: 5, variants: [] },
   { number: 103, character: "疋", name: "bolt of cloth", romaji: "hikizukuri", strokes: 5, variants: [] },
-  { number: 104, character: "疒", name: "sickness", romaji: "yamaidare", strokes: 5, variants: [] },
+  // KRADFILE never lists 疒 itself; every sickness-radical kanji (病, 痛,
+  // 症, 癌, ...) decomposes with "疔" (a real kanji, "felon"/boil) as the
+  // stand-in for the 疒 enclosure shape instead. Folded here as a variant
+  // for the same reason as water's "汁" above.
+  { number: 104, character: "疒", name: "sickness", romaji: "yamaidare", strokes: 5, variants: ["疔"] },
   { number: 105, character: "癶", name: "footsteps", romaji: "hatsugashira", strokes: 5, variants: [] },
   { number: 106, character: "白", name: "white", romaji: "shiro", strokes: 5, variants: [] },
   { number: 107, character: "皮", name: "skin", romaji: "kawa", strokes: 5, variants: [] },
@@ -169,7 +178,12 @@ export const KANGXI_RADICALS: KangxiRadical[] = [
   { number: 137, character: "舟", name: "boat", romaji: "fune", strokes: 6, variants: [] },
   { number: 138, character: "艮", name: "stopping", romaji: "kon", strokes: 6, variants: [] },
   { number: 139, character: "色", name: "color", romaji: "iro", strokes: 6, variants: [] },
-  { number: 140, character: "艸", name: "grass", romaji: "kusa", strokes: 6, variants: ["艹"] },
+  // KRADFILE stands "艾" (a real kanji, "mugwort") in for the grass-crown
+  // shape (艹) in 405 entries — 花, 茶, 草, 苦, 若, etc. — never using 艹/艸
+  // directly (艸's own KRADFILE entry decomposes into 艾 + 屮 and is never
+  // itself used as another kanji's listed component). Folded here as a
+  // variant for the same reason as water's "汁" above.
+  { number: 140, character: "艸", name: "grass", romaji: "kusa", strokes: 6, variants: ["艹", "艾"] },
   { number: 141, character: "虍", name: "tiger", romaji: "toragashira", strokes: 6, variants: [] },
   { number: 142, character: "虫", name: "insect", romaji: "mushi", strokes: 6, variants: [] },
   { number: 143, character: "血", name: "blood", romaji: "chi", strokes: 6, variants: [] },
