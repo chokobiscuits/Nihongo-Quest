@@ -40,7 +40,7 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
         </div>
         <Link
           href="/lessons"
-          className="inline-flex h-9 items-center rounded-[var(--radius-chip)] bg-brand px-4 text-caption font-semibold text-text hover:bg-brand-hover transition-colors duration-[var(--duration-fast)]"
+          className="inline-flex h-9 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-caption font-semibold text-on-brand hover:bg-brand-button-hover transition-colors duration-[var(--duration-fast)]"
         >
           Study All
         </Link>

@@ -168,7 +168,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
           />
           <div
             aria-hidden
-            className="absolute inset-y-0 left-0 bg-brand"
+            className="absolute inset-y-0 left-0 bg-brand-button"
             style={{ width: `${Math.min(100, progressFraction * 100)}%` }}
           />
         </div>
@@ -238,14 +238,14 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
             <button
               type="button"
               onClick={continueAfterWrong}
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+              className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
             >
               Continue
             </button>
           ) : (
             <button
               type="submit"
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+              className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
             >
               Answer
             </button>

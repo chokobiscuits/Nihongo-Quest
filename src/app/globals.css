@@ -18,7 +18,15 @@
   --color-brand-hover: oklch(0.665 0.186 296);
   --color-brand-bg: oklch(0.268 0.062 295);
   --color-brand-text: oklch(0.795 0.126 296);
-  --color-on-brand: #000000;
+  /* Filled-button violet. Deliberately darker than --color-brand: at
+     oklch(0.605) the brand accent is light enough that white text only
+     reaches 4.20:1, failing AA. At 0.48 white hits 7.23:1 resting and
+     5.52:1 on hover. --color-brand stays untouched for accents, glows,
+     rings and progress fills, where it sits on dark surfaces and is not
+     carrying text. */
+  --color-brand-button: oklch(0.48 0.196 296);
+  --color-brand-button-hover: oklch(0.54 0.186 296);
+  --color-on-brand: #ffffff;
 
   --color-success: #4ade80;
   --color-danger: #f2555a;
@@ -103,6 +111,8 @@
   --color-brand-hover: var(--color-brand-hover);
   --color-brand-bg: var(--color-brand-bg);
   --color-brand-text: var(--color-brand-text);
+  --color-brand-button: var(--color-brand-button);
+  --color-brand-button-hover: var(--color-brand-button-hover);
   --color-on-brand: var(--color-on-brand);
 
   --color-success: var(--color-success);

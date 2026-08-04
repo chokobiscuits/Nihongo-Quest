@@ -97,7 +97,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="self-start rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+          className="self-start rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
         >
           Continue
         </button>
@@ -147,7 +147,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
             disabled={!allViewed || committing}
             title={!allViewed ? "View all items first" : undefined}
             onClick={() => setPhase("quiz")}
-            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-on-brand disabled:opacity-40 md:min-h-0"
+            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand disabled:opacity-40 md:min-h-0"
           >
             Start Quiz
           </button>
@@ -155,7 +155,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
           <button
             type="button"
             onClick={() => goTo(index + 1)}
-            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-on-brand md:min-h-0"
+            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand md:min-h-0"
           >
             Next
           </button>

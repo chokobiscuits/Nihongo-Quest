@@ -219,14 +219,14 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
             <button
               type="button"
               onClick={continueAfterWrong}
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+              className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
             >
               Continue
             </button>
           ) : (
             <button
               type="submit"
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+              className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
             >
               Answer
             </button>

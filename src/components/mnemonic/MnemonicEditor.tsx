@@ -98,7 +98,7 @@ export function MnemonicEditor({
               setEditing(false);
             });
           }}
-          className="rounded-[var(--radius-chip)] bg-brand px-3 h-8 text-caption font-medium text-on-brand disabled:opacity-50"
+          className="rounded-[var(--radius-chip)] bg-brand-button px-3 h-8 text-caption font-medium text-on-brand disabled:opacity-50"
         >
           {isPending ? "Saving..." : "Save"}
         </button>

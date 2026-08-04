@@ -78,7 +78,7 @@ export function ReviewsCard({ reviewsDue, byType, className }: ReviewsCardProps)
 
         <Link
           href={hasReviews ? "/reviews" : "/lessons"}
-          className="inline-flex h-10 w-full items-center justify-center rounded-[var(--radius-chip)] bg-brand text-sub font-semibold text-text hover:bg-brand-hover transition-colors duration-[var(--duration-fast)]"
+          className="inline-flex h-10 w-full items-center justify-center rounded-[var(--radius-chip)] bg-brand-button text-sub font-semibold text-on-brand hover:bg-brand-button-hover transition-colors duration-[var(--duration-fast)]"
         >
           {hasReviews ? "Start Reviews" : "Start Lessons"}
         </Link>

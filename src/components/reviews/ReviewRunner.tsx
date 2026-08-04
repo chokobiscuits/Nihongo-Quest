@@ -56,7 +56,7 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
         <p className="text-caption text-text-dim">Learn something new to build up your review queue.</p>
         <Link
           href="/lessons"
-          className="mt-2 inline-flex h-10 items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-on-brand"
+          className="mt-2 inline-flex h-10 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand"
         >
           Go to Lessons
         </Link>
@@ -135,7 +135,7 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
           type="button"
           onClick={() => router.refresh()}
           disabled={committing}
-          className="self-start rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
+          className="self-start rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
         >
           Continue
         </button>

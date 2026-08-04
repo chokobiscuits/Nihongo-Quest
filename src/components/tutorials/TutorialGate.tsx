@@ -44,7 +44,7 @@ export function TutorialGate({ tutorial }: TutorialGateProps) {
           type="button"
           onClick={handleAcknowledge}
           disabled={pending}
-          className="self-start rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand disabled:opacity-60"
+          className="self-start rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand disabled:opacity-60"
         >
           {pending ? "Saving..." : "I understand"}
         </button>

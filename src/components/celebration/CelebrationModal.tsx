@@ -212,7 +212,7 @@ function CelebrationCard({
           type="button"
           onClick={onPrimary}
           className={cn(
-            "rounded-[var(--radius-chip)] bg-brand px-8 h-11 text-body font-semibold text-text hover:bg-brand-hover transition-colors duration-[var(--duration-fast)]",
+            "rounded-[var(--radius-chip)] bg-brand-button px-8 h-11 text-body font-semibold text-on-brand hover:bg-brand-button-hover transition-colors duration-[var(--duration-fast)]",
             dismissClass,
           )}
         >
@@ -267,7 +267,7 @@ function CelebrationCard({
           type="button"
           onClick={onPrimary}
           className={cn(
-            "rounded-[var(--radius-chip)] bg-brand px-8 h-11 text-body font-semibold text-text hover:bg-brand-hover transition-colors duration-[var(--duration-fast)]",
+            "rounded-[var(--radius-chip)] bg-brand-button px-8 h-11 text-body font-semibold text-on-brand hover:bg-brand-button-hover transition-colors duration-[var(--duration-fast)]",
             dismissClass,
           )}
         >
