@@ -2,7 +2,8 @@
 // local-user. Creates a profile with some progress, resets it, asserts
 // everything is gone and the profile is back to defaults, then cleans up.
 import { prisma } from "../src/lib/db";
-import { resetProgress, RESET_CONFIRMATION } from "../src/server/actions/reset";
+import { resetProgress } from "../src/server/actions/reset";
+import { RESET_CONFIRMATION } from "../src/server/actions/resetConfirmation";
 
 const TEST_USER = "reset-check-user";
 

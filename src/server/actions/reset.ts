@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { rankForLevel } from "@/services/xp/rank";
+import { RESET_CONFIRMATION } from "./resetConfirmation";
 
 import { APP_USER_ID } from "@/lib/appUser";
 
@@ -14,10 +15,6 @@ export interface ResetProgressResult {
   dailyActivity: number;
   tutorialCompletions: number;
 }
-
-/// The literal string a caller must supply to confirm a reset. Server-side
-/// so the guard cannot be bypassed by editing the client component.
-export const RESET_CONFIRMATION = "RESET";
 
 /// Wipes every trace of learning progress for `userId` and returns the
 /// profile to its starting state. This is irreversible: there is no backup

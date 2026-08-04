@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { resetProgress, RESET_CONFIRMATION } from "@/server/actions/reset";
+import { resetProgress } from "@/server/actions/reset";
+import { RESET_CONFIRMATION } from "@/server/actions/resetConfirmation";
 
 /// Danger-zone control for wiping all learning progress. Two-step by
 /// design: the destructive button only appears after the user opens the
