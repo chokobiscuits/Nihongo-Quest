@@ -2,6 +2,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { storage } from "@/lib/storage";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
+import { ResetProgressControl } from "@/components/settings/ResetProgressControl";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 
 export default async function SettingsPage() {
@@ -35,6 +36,13 @@ export default async function SettingsPage() {
           is passed or skipped.
         </p>
         <KanaSkipControl initialResolved={kanaResolved} />
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-danger/40 bg-surface p-5">
+        <span className="text-micro font-medium uppercase tracking-wide text-danger" lang="en">
+          Danger zone
+        </span>
+        <ResetProgressControl />
       </div>
     </div>
   );
