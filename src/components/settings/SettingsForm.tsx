@@ -188,7 +188,7 @@ function AvatarField({ initialUrl }: { initialUrl: string | null }) {
           </div>
         </div>
         <span className="text-micro text-text-faint" lang="en">
-          PNG, JPEG, WebP, or GIF. Max 2MB — normalized to a 512px square.
+          PNG, JPEG, WebP, or GIF. Max 2MB, normalized to a 512px square.
         </span>
         {error && (
           <span className="text-micro text-danger" lang="en">

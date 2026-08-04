@@ -56,7 +56,7 @@ export default async function SubjectTypePage({
             準備中
           </span>
           <span className="text-micro text-text-faint" lang="en">
-            Coming soon — no content seeded yet
+            Coming soon, no content seeded yet
           </span>
         </div>
       </div>

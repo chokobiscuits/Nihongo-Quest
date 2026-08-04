@@ -58,7 +58,7 @@ export function AccountSummaryCard({ account, className }: AccountSummaryCardPro
           <MasteryBadge tier={{ name: account.masteryTier.name, level: account.masteryTier.level, colorToken: account.masteryTier.colorToken }} size="md" />
           <div className="flex flex-1 flex-col gap-1">
             <span className="text-caption text-text-dim" lang="en">
-              Account Mastery — {account.accountMasteryXp.toLocaleString()} XP
+              Account Mastery: {account.accountMasteryXp.toLocaleString()} XP
             </span>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
               <div

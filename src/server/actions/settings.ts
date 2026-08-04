@@ -137,7 +137,7 @@ export async function uploadAvatar(
       .webp({ quality: 85 })
       .toBuffer();
   } catch {
-    return { ok: false, error: "Could not process image — file may be corrupt or not a real image." };
+    return { ok: false, error: "Could not process image, file may be corrupt or not a real image." };
   }
 
   const profile = await getOrCreateProfile(userId);

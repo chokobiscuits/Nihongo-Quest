@@ -17,7 +17,7 @@ export default async function AchievementsPage() {
       <Panel accent="var(--color-rank-gold)" title="Unlocked" titleJa="達成済み">
         {unlocked.length === 0 ? (
           <p className="py-2 text-caption text-text-faint" lang="en">
-            None yet — every row below is reachable, with real progress tracked toward it.
+            None yet, every row below is reachable, with real progress tracked toward it.
           </p>
         ) : (
           <div className="flex flex-col gap-2">

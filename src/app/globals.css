@@ -18,6 +18,7 @@
   --color-brand-hover: oklch(0.665 0.186 296);
   --color-brand-bg: oklch(0.268 0.062 295);
   --color-brand-text: oklch(0.795 0.126 296);
+  --color-on-brand: #000000;
 
   --color-success: #4ade80;
   --color-danger: #f2555a;
@@ -102,6 +103,7 @@
   --color-brand-hover: var(--color-brand-hover);
   --color-brand-bg: var(--color-brand-bg);
   --color-brand-text: var(--color-brand-text);
+  --color-on-brand: var(--color-on-brand);
 
   --color-success: var(--color-success);
   --color-danger: var(--color-danger);

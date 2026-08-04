@@ -62,7 +62,7 @@ function SentenceWordChip({ component }: { component: LessonComponentSummary }) 
 }
 
 function formatDueAt(dueAt: Date | null): string {
-  if (!dueAt) return "—";
+  if (!dueAt) return "-";
   const diffMs = dueAt.getTime() - Date.now();
   if (diffMs <= 0) return "Due now";
   const hours = Math.round(diffMs / (60 * 60 * 1000));

@@ -60,7 +60,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
   if (batch.length === 0) {
     return (
       <div className="rounded-[var(--radius-card)] border border-line bg-surface p-6 text-body text-text-dim">
-        No lessons available right now — come back once more items unlock.
+        No lessons available right now. Come back once more items unlock.
       </div>
     );
   }
@@ -97,7 +97,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="self-start rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-canvas"
+          className="self-start rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
         >
           Continue
         </button>
@@ -147,7 +147,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
             disabled={!allViewed || committing}
             title={!allViewed ? "View all items first" : undefined}
             onClick={() => setPhase("quiz")}
-            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-canvas disabled:opacity-40 md:min-h-0"
+            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-on-brand disabled:opacity-40 md:min-h-0"
           >
             Start Quiz
           </button>
@@ -155,7 +155,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
           <button
             type="button"
             onClick={() => goTo(index + 1)}
-            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-canvas md:min-h-0"
+            className="flex h-10 min-h-[44px] items-center rounded-[var(--radius-chip)] bg-brand px-4 text-body font-medium text-on-brand md:min-h-0"
           >
             Next
           </button>

@@ -220,11 +220,11 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
         </div>
 
         {feedback === "almost" && (
-          <p className="text-caption text-warn">Close — check your spelling and try again.</p>
+          <p className="text-caption text-warn">Close, check your spelling and try again.</p>
         )}
         {feedback === "wrongType" && (
           <p className="text-caption text-warn">
-            That looks like a {current.kind === "MEANING" ? "reading" : "meaning"} answer — try again.
+            That looks like a {current.kind === "MEANING" ? "reading" : "meaning"} answer, try again.
           </p>
         )}
         {feedback === "incorrect" && (
@@ -238,14 +238,14 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
             <button
               type="button"
               onClick={continueAfterWrong}
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-canvas"
+              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
             >
               Continue
             </button>
           ) : (
             <button
               type="submit"
-              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-canvas"
+              className="rounded-[var(--radius-chip)] bg-brand px-4 h-9 text-body font-medium text-on-brand"
             >
               Answer
             </button>

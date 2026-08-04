@@ -59,7 +59,7 @@ export function LevelProgressCard({ level, className }: LevelProgressCardProps) 
             </div>
             <span className="text-caption text-text-dim" lang="en">
               {level.percentToAdvance >= ADVANCE_THRESHOLD_PCT
-                ? "Threshold reached — the next lesson batch will advance your level."
+                ? "Threshold reached. The next lesson batch will advance your level."
                 : `${remaining} more kanji at Guru+ to reach the ${ADVANCE_THRESHOLD_PCT}% threshold for level ${level.currentLevel + 1}.`}
             </span>
           </>

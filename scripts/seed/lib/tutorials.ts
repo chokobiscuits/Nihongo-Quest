@@ -31,15 +31,15 @@ export const TUTORIALS: TutorialSeed[] = [
     trigger: { kind: "first_launch" },
     body: `# How this app works
 
-This app teaches Japanese using **spaced repetition (SRS)**: instead of drilling everything every day, each item you learn comes back for review right before you're likely to forget it. Answer correctly and the interval grows — 4 hours, 8 hours, a day, two days, a week, and on up through **Guru**, **Master**, **Enlightened**, and finally **Burned**, where an item is retired from review because you've proven you know it long-term. Answer incorrectly and the item drops back down the ladder, so mistakes cost you time but never lock you out.
+This app teaches Japanese using **spaced repetition (SRS)**: instead of drilling everything every day, each item you learn comes back for review right before you're likely to forget it. Answer correctly and the interval grows: 4 hours, 8 hours, a day, two days, a week, and on up through **Guru**, **Master**, **Enlightened**, and finally **Burned**, where an item is retired from review because you've proven you know it long-term. Answer incorrectly and the item drops back down the ladder, so mistakes cost you time but never lock you out.
 
-Content is organized into a **curriculum ladder**: radicals (部首, *bushu*) at the bottom, then kanji built from those radicals, then vocabulary built from those kanji, then example sentences built from that vocabulary. You unlock a new **level** by getting enough of your current level's kanji to Guru — not by waiting out a timer. There are no daily caps and no artificial delays: the pace is entirely set by how consistently you review, not by the calendar.
+Content is organized into a **curriculum ladder**: radicals (部首, *bushu*) at the bottom, then kanji built from those radicals, then vocabulary built from those kanji, then example sentences built from that vocabulary. You unlock a new **level** by getting enough of your current level's kanji to Guru, not by waiting out a timer. There are no daily caps and no artificial delays: the pace is entirely set by how consistently you review, not by the calendar.
 
 Two question types drive most reviews: **meaning** (what does this mean in English?) and **reading** (how is this pronounced?). Radicals only ever ask meaning, since they're building blocks, not real words with pronunciations of their own.
 
-A worked example: 水 (みず, "water") is a level-appropriate kanji built from the radical 水 ("water") itself — some kanji *are* their own radical, which is normal and covered in the next tutorial. Once you've learned 水 the kanji, vocabulary like 水曜日 (すいようび, "Wednesday") becomes available, because every kanji inside it is now something you've started learning.
+A worked example: 水 (みず, "water") is a level-appropriate kanji built from the radical 水 ("water") itself. Some kanji *are* their own radical, which is normal and covered in the next tutorial. Once you've learned 水 the kanji, vocabulary like 水曜日 (すいようび, "Wednesday") becomes available, because every kanji inside it is now something you've started learning.
 
-Nothing here is timed or graded against a clock. Learn at whatever pace keeps reviews manageable — the SRS intervals do the pacing work for you.`,
+Nothing here is timed or graded against a clock. Learn at whatever pace keeps reviews manageable: the SRS intervals do the pacing work for you.`,
   },
   {
     slug: "what-are-radicals",
@@ -51,15 +51,15 @@ Nothing here is timed or graded against a clock. Learn at whatever pace keeps re
     trigger: { kind: "before_first", subjectType: "RADICAL" },
     body: `# What are radicals?
 
-Radicals (部首, *bushu*) are the visual building blocks kanji are made of — strokes and stroke-groups that recur across hundreds of different characters. This app uses the traditional 214 Kangxi radicals, the same set Japanese dictionaries have organized kanji by for centuries.
+Radicals (部首, *bushu*) are the visual building blocks kanji are made of: strokes and stroke-groups that recur across hundreds of different characters. This app uses the traditional 214 Kangxi radicals, the same set Japanese dictionaries have organized kanji by for centuries.
 
 Radicals come first in the curriculum because they make kanji learnable instead of memorizable. A kanji like 語 ("language, word") looks intimidating as a blob of 14 strokes, but it's actually just three familiar pieces stacked together: 言 ("speech"), 五 ("five"), and 口 ("mouth"). Once you know those three radicals, 語 stops being a new shape to memorize from scratch and becomes a shape you already recognize, arranged in a new way. This is the whole point of learning radicals first: it turns "memorize thousands of unique pictures" into "recognize a few hundred pieces and how they combine."
 
-Some radicals are also complete kanji in their own right. 水 ("water"), 火 ("fire"), 木 ("tree"), and 人 ("person") are all real, usable kanji that also function as radicals inside larger characters — 木 alone means "tree," but it also appears inside 林 ("woods," two trees) and 森 ("forest," three trees). When you see a radical that looks exactly like a kanji you'll learn later, that's not a coincidence — it's the same shape doing double duty.
+Some radicals are also complete kanji in their own right. 水 ("water"), 火 ("fire"), 木 ("tree"), and 人 ("person") are all real, usable kanji that also function as radicals inside larger characters. 木 alone means "tree," but it also appears inside 林 ("woods," two trees) and 森 ("forest," three trees). When you see a radical that looks exactly like a kanji you'll learn later, that's not a coincidence: it's the same shape doing double duty.
 
 A few radicals change form depending on where they sit in a kanji. 水 ("water") becomes the three-stroke shape 氵 when it appears on the left side of a character, as in 海 (うみ, "sea") or 泳 (およ-ぐ, "to swim"). This app tracks those variant forms so you can still recognize the radical even when it doesn't look exactly like its standalone form.
 
-You won't be quizzed on how to pronounce a radical, only what it means — pronunciation quizzing starts with kanji, covered next.`,
+You won't be quizzed on how to pronounce a radical, only what it means. Pronunciation quizzing starts with kanji, covered next.`,
   },
   {
     slug: "meaning-vs-reading",
@@ -71,15 +71,15 @@ You won't be quizzed on how to pronounce a radical, only what it means — pronu
     trigger: { kind: "before_first", subjectType: "KANJI" },
     body: `# Meaning vs. reading
 
-Every kanji you learn gets quizzed two different ways: **meaning** (what does it mean?) and **reading** (how do you say it?). These are separate skills that happen to share the same character, and this app tracks your progress on each independently — you can be confident on a kanji's meaning while still shaky on its reading, or the reverse.
+Every kanji you learn gets quizzed two different ways: **meaning** (what does it mean?) and **reading** (how do you say it?). These are separate skills that happen to share the same character, and this app tracks your progress on each independently: you can be confident on a kanji's meaning while still shaky on its reading, or the reverse.
 
 Meaning questions ask for the English gloss: shown 水, you answer "water." Straightforward, and usually the easier half.
 
-Reading questions are harder because, unlike an alphabet, **a single kanji can have multiple valid pronunciations**, and which one is correct depends on context — specifically, on which word the kanji appears in. Take 生, meaning "life" or "birth." It's read せい in 学生 (がくせい, "student"), しょう in 一生 (いっしょう, "a lifetime"), う in 生まれる (うまれる, "to be born"), and い in 生きる (いきる, "to live"). Four different pronunciations, one character, all correct — just for different words.
+Reading questions are harder because, unlike an alphabet, **a single kanji can have multiple valid pronunciations**, and which one is correct depends on context, specifically on which word the kanji appears in. Take 生, meaning "life" or "birth." It's read せい in 学生 (がくせい, "student"), しょう in 一生 (いっしょう, "a lifetime"), う in 生まれる (うまれる, "to be born"), and い in 生きる (いきる, "to live"). Four different pronunciations, one character, all correct, just for different words.
 
-This app always quizzes a kanji's reading using **its most common individual reading** in isolation, but once you move on to vocabulary, you'll see how the *same* kanji shifts pronunciation inside different words — that shift has its own name and its own tutorial (onyomi vs. kunyomi) once you reach vocab. For now, the important habit is: don't assume a kanji has one "true" pronunciation. It has a most-common one, and a set of others that context will teach you.
+This app always quizzes a kanji's reading using **its most common individual reading** in isolation, but once you move on to vocabulary, you'll see how the *same* kanji shifts pronunciation inside different words. That shift has its own name and its own tutorial (onyomi vs. kunyomi) once you reach vocab. For now, the important habit is: don't assume a kanji has one "true" pronunciation. It has a most-common one, and a set of others that context will teach you.
 
-If a reading question stumps you, that's normal — readings take longer to solidify than meanings, especially early on. The SRS will bring it back sooner than an already-solid item, which is exactly the point.`,
+If a reading question stumps you, that's normal: readings take longer to solidify than meanings, especially early on. The SRS will bring it back sooner than an already-solid item, which is exactly the point.`,
   },
   {
     slug: "onyomi-vs-kunyomi",
@@ -91,15 +91,15 @@ If a reading question stumps you, that's normal — readings take longer to soli
     trigger: { kind: "before_first", subjectType: "VOCAB" },
     body: `# Onyomi vs. kunyomi
 
-Now that you're learning vocabulary, you'll notice the same kanji sounds different depending on the word it's in. This isn't random — it comes from Japanese having **two families of readings** for most kanji: *onyomi* (音読み, the "sound reading") and *kunyomi* (訓読み, the "meaning reading").
+Now that you're learning vocabulary, you'll notice the same kanji sounds different depending on the word it's in. This isn't random: it comes from Japanese having **two families of readings** for most kanji: *onyomi* (音読み, the "sound reading") and *kunyomi* (訓読み, the "meaning reading").
 
-**Onyomi** is Japan's borrowing of the original Chinese pronunciation, adapted to Japanese phonetics, brought over along with the character itself around the 5th–9th centuries. Onyomi readings are typically short (often one or two syllables) and show up heavily in **compound words made of two or more kanji**, especially formal, technical, or Chinese-derived vocabulary. 山 ("mountain") read as さん in 富士山 (ふじさん, "Mount Fuji") is onyomi.
+**Onyomi** is Japan's borrowing of the original Chinese pronunciation, adapted to Japanese phonetics, brought over along with the character itself around the 5th to 9th centuries. Onyomi readings are typically short (often one or two syllables) and show up heavily in **compound words made of two or more kanji**, especially formal, technical, or Chinese-derived vocabulary. 山 ("mountain") read as さん in 富士山 (ふじさん, "Mount Fuji") is onyomi.
 
-**Kunyomi** is the native Japanese word for the same *concept*, with the kanji attached to it afterward as a label. Kunyomi readings are often longer and show up when a kanji stands **alone as a native Japanese word**, frequently with trailing hiragana (*okurigana*) attached, like the いく in 行く (いく, "to go") or the たかい in 高い (たかい, "tall/expensive"). 山 read as やま in 山登り (やまのぼり, "mountain climbing" — here as the plain word "mountain") is kunyomi.
+**Kunyomi** is the native Japanese word for the same *concept*, with the kanji attached to it afterward as a label. Kunyomi readings are often longer and show up when a kanji stands **alone as a native Japanese word**, frequently with trailing hiragana (*okurigana*) attached, like the いく in 行く (いく, "to go") or the たかい in 高い (たかい, "tall/expensive"). 山 read as やま in 山登り (やまのぼり, "mountain climbing," here as the plain word "mountain") is kunyomi.
 
-Neither reading is more "correct" — they're both the real pronunciation, just for different situations. Since you already know 生 has readings せい, しょう, う, and い from the previous tutorial: せい and しょう are its onyomi (used in compounds like 学生, 一生), while う and い are its kunyomi (used in native verbs like 生まれる, 生きる).
+Neither reading is more "correct": they're both the real pronunciation, just for different situations. Since you already know 生 has readings せい, しょう, う, and い from the previous tutorial: せい and しょう are its onyomi (used in compounds like 学生, 一生), while う and い are its kunyomi (used in native verbs like 生まれる, 生きる).
 
-There's no shortcut to memorizing which reading applies where — it comes from learning the actual words. That's exactly what vocabulary items in this app are for: each one teaches you a specific kanji-reading pairing in the context it's actually used, so the pattern builds up naturally instead of needing to be memorized as an abstract rule.`,
+There's no shortcut to memorizing which reading applies where. It comes from learning the actual words. That's exactly what vocabulary items in this app are for: each one teaches you a specific kanji-reading pairing in the context it's actually used, so the pattern builds up naturally instead of needing to be memorized as an abstract rule.`,
   },
 
   // ---------------------------------------------------------- Stubs (14)
@@ -111,7 +111,29 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: true,
     estimatedMinutes: 2,
     trigger: { kind: "first_launch" },
-    body: "Japanese is written with three scripts mixed together — hiragana, katakana, and kanji — and this app shows furigana (small reading hints) above unfamiliar kanji so you can read along before you've memorized them.",
+    body: `# Reading Japanese text
+
+Japanese is written with three scripts mixed together in the same sentence: hiragana, katakana, and kanji. Each one does a different job.
+
+**Hiragana** (ひらがな) is a native Japanese script of 46 basic characters, each standing for one syllable sound. It carries the grammar: particles like は and を, verb and adjective endings (*okurigana*), and any native word that doesn't have a kanji assigned to it.
+
+**Katakana** (カタカナ) is a second, separate set of 46 characters that represent the exact same sounds as hiragana, just with different shapes. It's used for loanwords borrowed from other languages, onomatopoeia, and for emphasis, roughly the role italics play in English. コーヒー ("coffee," from English) and わんわん vs. ワンワン (a dog's bark, sometimes written in katakana for emphasis) are typical uses.
+
+So hiragana and katakana are, in effect, two alphabets for the same one sound system: あ and ア are both "a," か and カ are both "ka," さ and サ are both "sa." Learn the sound once and you've learned both scripts for it.
+
+**Kanji** (漢字) are the characters borrowed from Chinese, and unlike hiragana and katakana they carry meaning, not just sound. A single kanji can be a whole word (水, "water") or a meaning-bearing root inside a longer word (水曜日, "Wednesday," literally "water-day"). This app's radical and kanji tracks teach you how to read and recognize these.
+
+Here's why real sentences mix all three. Take 私は猫が好きです ("I like cats"):
+
+- 私 (わたし, "I") and 猫 (ねこ, "cat") are kanji, carrying the core meaning.
+- は and が are hiragana particles marking grammatical role, and です is a hiragana grammar ending.
+- 好き (すき, "to like") pairs a kanji root with okurigana in hiragana.
+
+If this were a sentence about a loanword instead, say "I like coffee," 好き would stay the same but "coffee" would appear in katakana: 私はコーヒーが好きです。
+
+Kanji alone would be unreadable without grammar to connect the pieces, and grammar alone has no compact way to carry specific meanings like "cat" or "water." Katakana flags "this word came from outside Japanese" so a reader instantly knows not to expect a native root. All three together are what makes a Japanese sentence readable at a glance once you know them.
+
+This app assumes you can already read hiragana and katakana. It focuses on kanji, vocabulary, and sentences built from them. If kana isn't solid yet, a dedicated kana practice module is planned as a later addition. Until then, treat the 92 basic kana characters as prerequisite reading, the same way you'd expect to know the alphabet before starting a language course.`,
   },
   {
     slug: "how-to-answer",
@@ -121,7 +143,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: true,
     estimatedMinutes: 2,
     trigger: { kind: "before_first", subjectType: "KANJI" },
-    body: "Type meanings in English and readings in hiragana (romaji is auto-converted as you type) — close typos are forgiven, but the wrong reading type is not.",
+    body: "Type meanings in English and readings in hiragana (romaji is auto-converted as you type). Close typos are forgiven, but the wrong reading type is not.",
   },
   {
     slug: "rendaku",
@@ -131,7 +153,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "first_multi_kanji_word" },
-    body: "Rendaku is when a word's leading consonant softens in a compound — か becomes が, た becomes だ — like 人 (ひと) becoming びと in 若人 (わこうど). It's common and not an error in what you're seeing.",
+    body: "Rendaku is when a word's leading consonant softens in a compound: か becomes が, た becomes だ, like 人 (ひと) becoming びと in 若人 (わこうど). It's common and not an error in what you're seeing.",
   },
   {
     slug: "particles-and-word-order",
@@ -151,7 +173,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "before_first", subjectType: "SENTENCE" },
-    body: "Japanese sentences are written with no spaces between words — the mix of kanji and kana provides enough visual boundary cues that native readers don't need them.",
+    body: "Japanese sentences are written with no spaces between words. The mix of kanji and kana provides enough visual boundary cues that native readers don't need them.",
   },
   {
     slug: "okurigana",
@@ -161,7 +183,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "account_level", level: 3 },
-    body: "Okurigana are the trailing hiragana attached to a kanji, like the く in 書く (かく, \"to write\") — they carry the inflection so the kanji itself can stay fixed across verb forms.",
+    body: "Okurigana are the trailing hiragana attached to a kanji, like the く in 書く (かく, \"to write\"). They carry the inflection so the kanji itself can stay fixed across verb forms.",
   },
   {
     slug: "verb-groups",
@@ -171,7 +193,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "account_level", level: 5 },
-    body: "Japanese verbs fall into three conjugation groups — ichidan, godan, and the two irregulars する/来る — and knowing which group a verb belongs to tells you how it conjugates.",
+    body: "Japanese verbs fall into three conjugation groups: ichidan, godan, and the two irregulars する/来る. Knowing which group a verb belongs to tells you how it conjugates.",
   },
   {
     slug: "politeness-levels",
@@ -181,7 +203,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "account_level", level: 8 },
-    body: "Japanese has distinct plain, polite, and honorific registers — the same sentence can be phrased several ways depending on who you're speaking to.",
+    body: "Japanese has distinct plain, polite, and honorific registers. The same sentence can be phrased several ways depending on who you're speaking to.",
   },
   {
     slug: "transitive-intransitive",
@@ -191,7 +213,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "account_level", level: 12 },
-    body: "Many Japanese verbs come in transitive/intransitive pairs, like 開ける (あける, \"to open something\") and 開く (あく, \"to open by itself\") — the pairing tells you whether the subject acts or is acted upon.",
+    body: "Many Japanese verbs come in transitive/intransitive pairs, like 開ける (あける, \"to open something\") and 開く (あく, \"to open by itself\"). The pairing tells you whether the subject acts or is acted upon.",
   },
   {
     slug: "counters",
@@ -201,7 +223,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "account_level", level: 15 },
-    body: "Japanese uses different counting words depending on what's being counted — flat objects, long objects, people, and more each have their own counter suffix.",
+    body: "Japanese uses different counting words depending on what's being counted. Flat objects, long objects, people, and more each have their own counter suffix.",
   },
   {
     slug: "what-is-guru",
@@ -211,7 +233,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "first_guru" },
-    body: "Guru is the stage where an item graduates from daily review into weekly review — it's the milestone this app treats as \"you know this now,\" even though it keeps coming back to make sure.",
+    body: "Guru is the stage where an item graduates from daily review into weekly review. It's the milestone this app treats as \"you know this now,\" even though it keeps coming back to make sure.",
   },
   {
     slug: "srs-ladder",
@@ -221,7 +243,7 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "first_burn" },
-    body: "Burned means an item has proven long-term retention and drops out of review entirely — congratulations on burning your first item, here's the full stage ladder that got it there.",
+    body: "Burned means an item has proven long-term retention and drops out of review entirely. Congratulations on burning your first item, here's the full stage ladder that got it there.",
   },
   {
     slug: "jlpt-explained",
@@ -241,6 +263,6 @@ There's no shortcut to memorizing which reading applies where — it comes from 
     required: false,
     estimatedMinutes: 2,
     trigger: { kind: "manual" },
-    body: "Furigana are small kana printed above (or beside) a kanji to show its pronunciation in that specific word — this app shows them automatically wherever they help.",
+    body: "Furigana are small kana printed above (or beside) a kanji to show its pronunciation in that specific word. This app shows them automatically wherever they help.",
   },
 ];
