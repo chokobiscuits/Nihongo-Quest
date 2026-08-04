@@ -12,8 +12,19 @@
 
 set -e
 
-# Nothing to check when deleting a branch.
-if [ -z "$(git rev-list --all --max-count=1)" ]; then
+# Skip the build when every ref being pushed is a deletion — there is no new
+# code to validate, and building to delete a merged branch is pure waiting.
+# git feeds "<local ref> <local sha> <remote ref> <remote sha>" on stdin; a
+# deletion has the all-zero local sha.
+any_update=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    *[!0]*) any_update=1 ;;
+  esac
+done
+
+if [ "$any_update" -eq 0 ]; then
+  echo "pre-push: deletion only, skipping build"
   exit 0
 fi
 
