@@ -79,6 +79,15 @@ model Subject {
   /// correct, on top of whatever `meanings` already allows.
   acceptedMeanings Json    @default("[]")
   authored         Boolean @default(false)
+  /// Provenance of the mnemonic/hint fields above: null (never touched),
+  /// "generated" (written by scripts/mnemonics/generate.ts, safe to
+  /// regenerate), or "authored" (hand-edited by the user through the
+  /// mnemonic editor, never overwritten by a regeneration pass). Distinct
+  /// from `authored`, which only tracks acceptedMeanings edits via the
+  /// meaning-accept escape hatch as well as mnemonic edits — this column
+  /// exists so the generator can tell "never generated" apart from "user
+  /// took over" without conflating the two.
+  mnemonicSource   String?
   // ------------------------------------------------------ END USER-AUTHORED
 
   jlpt       Int?

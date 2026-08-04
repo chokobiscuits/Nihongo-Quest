@@ -14,11 +14,13 @@ export interface SaveMnemonicInput {
 
 /// Saves any subset of the user-authored fields on a Subject and marks it
 /// `authored: true`. Fields omitted from `input` are left untouched;
-/// fields explicitly passed as null clear that field.
+/// fields explicitly passed as null clear that field. Also flips
+/// `mnemonicSource` to "authored" so scripts/mnemonics/generate.ts's
+/// --regenerate pass never overwrites what the user just wrote here.
 export async function saveMnemonic(input: SaveMnemonicInput) {
   const { subjectId, ...fields } = input;
 
-  const data: Record<string, unknown> = { authored: true };
+  const data: Record<string, unknown> = { authored: true, mnemonicSource: "authored" };
   if ("meaningMnemonic" in fields) data.meaningMnemonic = fields.meaningMnemonic;
   if ("readingMnemonic" in fields) data.readingMnemonic = fields.readingMnemonic;
   if ("meaningHint" in fields) data.meaningHint = fields.meaningHint;
