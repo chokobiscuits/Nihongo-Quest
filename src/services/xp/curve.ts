@@ -14,6 +14,15 @@ export const REVIEW_CORRECT_PER_STAGE_XP = 3;
 /// to stage.
 export const INCORRECT_ANSWER_XP = 2;
 
+/// Multiplier applied to a review answer that earned no stage progress,
+/// i.e. the 4-hour promotion cooldown blocked the promotion (see
+/// src/services/srs/transition.ts). Without this, an item could be reviewed
+/// back-to-back indefinitely at full XP: the queue never filters by dueAt,
+/// so the same items are always re-servable. Scaling unproductive reviews
+/// down to a token amount keeps "review anything, anytime" intact while
+/// removing the incentive to farm it.
+export const UNPRODUCTIVE_REVIEW_XP_FACTOR = 0.1;
+
 /// Streak multiplier growth rate: +2% per consecutive day active.
 export const STREAK_MULTIPLIER_PER_DAY = 0.02;
 /// Streak multiplier cap, reached at 25 days (1 + 25 * 0.02 = 1.5).
@@ -33,6 +42,19 @@ export function xpForCorrectAnswer(srsStage: number): number {
 
 export function xpForIncorrectAnswer(): number {
   return INCORRECT_ANSWER_XP;
+}
+
+/// Scales a review answer's XP by whether the review actually advanced the
+/// item. `productive` is the transition's `promoted` flag: false means the
+/// cooldown blocked the stage move, so the answer earns a heavily reduced
+/// share. Always floors at 1 XP for a correct answer, so a blocked review is
+/// worth something but never worth farming.
+///
+/// Incorrect answers are not scaled: they already pay a flat token amount,
+/// and reducing them further would push toward zero for genuine mistakes.
+export function scaleXpForProductivity(xp: number, productive: boolean): number {
+  if (productive) return xp;
+  return Math.max(1, Math.round(xp * UNPRODUCTIVE_REVIEW_XP_FACTOR));
 }
 
 /// Multiplier applied to a session's total XP based on the user's current

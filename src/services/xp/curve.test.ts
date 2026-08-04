@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   levelFromTotalXp,
+  scaleXpForProductivity,
   streakMultiplier,
   totalXpToReach,
   xpForCorrectAnswer,
@@ -117,5 +118,31 @@ describe("levelFromTotalXp", () => {
 
   it("local-user's 353 xp still resolves to level 2 (no migration regression)", () => {
     expect(levelFromTotalXp(353)).toBe(2);
+  });
+});
+
+describe("scaleXpForProductivity", () => {
+  it("leaves a productive review's xp untouched", () => {
+    expect(scaleXpForProductivity(32, true)).toBe(32);
+    expect(scaleXpForProductivity(11, true)).toBe(11);
+  });
+
+  it("heavily reduces xp when the cooldown blocked the promotion", () => {
+    // Enlightened (stage 8) pays 32 xp productively, ~3 when farmed.
+    expect(scaleXpForProductivity(32, false)).toBe(3);
+    expect(scaleXpForProductivity(11, false)).toBe(1);
+  });
+
+  it("never drops below 1 xp, so a blocked review still registers", () => {
+    expect(scaleXpForProductivity(1, false)).toBe(1);
+    expect(scaleXpForProductivity(2, false)).toBe(1);
+  });
+
+  it("makes farming strictly worse than waiting out the cooldown", () => {
+    for (let stage = 1; stage <= 8; stage++) {
+      const productive = xpForCorrectAnswer(stage);
+      const farmed = scaleXpForProductivity(productive, false);
+      expect(farmed).toBeLessThan(productive);
+    }
   });
 });
