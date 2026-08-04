@@ -19,6 +19,7 @@ import {
   GrammarIcon,
   SentenceIcon,
   ReadingIcon,
+  LessonIcon,
   ReviewIcon,
   ExamIcon,
   ProgressIcon,
@@ -86,6 +87,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     caption: "Practice",
     items: [
+      // The LEARN group above browses subjects; this is the only nav entry
+      // that actually starts a lesson. Without it /lessons was reachable
+      // solely through the dashboard's "Study All" button.
+      { href: "/lessons", labelEn: "Lessons", labelJa: "レッスン", Icon: LessonIcon },
       { href: "/reviews", labelEn: "Reviews", labelJa: "復習", Icon: ReviewIcon },
       { href: "/exams", labelEn: "Exams", labelJa: "試験", Icon: ExamIcon },
     ],

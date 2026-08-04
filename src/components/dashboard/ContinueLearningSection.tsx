@@ -183,9 +183,13 @@ function ContinueLearningCard({
     );
   }
 
+  // The card body starts a lesson for this type rather than opening the
+  // browse page. It reads "Lesson N" with lesson progress, so a browse link
+  // here was the single most misleading affordance on the dashboard —
+  // /lessons was reachable only via "Study All". Browsing is still one click
+  // away via the corner link and the sidebar.
   return (
-    <Link
-      href={`/subjects/${typeToSlug(card.type)}`}
+    <div
       className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
       style={{
         background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
@@ -196,15 +200,28 @@ function ContinueLearningCard({
           brand glow that the rank-gated glow rule otherwise never triggers. */}
       {isPrimaryCta && <div className="cta-glow-layer" aria-hidden />}
 
+      {/* Full-card click target for the primary action. Sits behind the
+          browse link below, which raises itself above this overlay. */}
+      <Link
+        href={`/lessons?type=${typeToSlug(card.type)}`}
+        aria-label={`Start a ${card.labelEn} lesson`}
+        className="absolute inset-0 z-0"
+      />
+
       <div className="relative flex items-start justify-between">
         <div className="flex flex-col leading-tight">
           <span className="text-caption font-semibold text-text" lang="ja">
             {card.labelJa}
           </span>
         </div>
-        <span aria-hidden className="text-text-faint">
-          ⤢
-        </span>
+        <Link
+          href={`/subjects/${typeToSlug(card.type)}`}
+          aria-label={`Browse ${card.labelEn}`}
+          title={`Browse ${card.labelEn}`}
+          className="relative z-10 -m-2 p-2 text-text-faint hover:text-text"
+        >
+          <span aria-hidden>⤢</span>
+        </Link>
       </div>
 
       <div className="relative flex flex-1 items-center justify-center">
@@ -231,6 +248,6 @@ function ContinueLearningCard({
           />
         </div>
       </div>
-    </Link>
+    </div>
   );
 }

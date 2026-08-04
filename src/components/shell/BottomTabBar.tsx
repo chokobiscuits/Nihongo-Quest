@@ -9,6 +9,9 @@ interface TabItem {
 
 const TABS: TabItem[] = [
   { href: "/", labelJa: "ホーム", icon: "◆" },
+  // Lessons sits beside Reviews: on mobile this and the dashboard cards are
+  // the only ways to reach /lessons at all.
+  { href: "/lessons", labelJa: "レッスン", icon: "学" },
   { href: "/reviews", labelJa: "レビュー", icon: "循" },
   { href: "/progress", labelJa: "進捗", icon: "growth" },
   { href: "/settings", labelJa: "設定", icon: "設" },
