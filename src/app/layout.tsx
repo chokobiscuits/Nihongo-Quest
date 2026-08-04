@@ -7,6 +7,7 @@ import { rankForLevel } from "@/services/xp/rank";
 import { accountMasteryLevel, masteryTier } from "@/services/xp/mastery";
 import { prisma } from "@/lib/db";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
+import { storage } from "@/lib/storage";
 
 const APP_USER_ID = process.env.APP_USER_ID ?? "local-user";
 
@@ -62,7 +63,7 @@ export default async function RootLayout({
         <AppShell
           user={{
             name: profile.displayName,
-            avatarUrl: profile.avatarPath ? `/uploads/${profile.avatarPath}` : null,
+            avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
             masteryTier: tier,
             rank,
           }}

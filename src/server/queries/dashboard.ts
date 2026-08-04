@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { storage } from "@/lib/storage";
 import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { getReviewQueue } from "@/server/queries/reviews";
@@ -222,7 +223,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 
   return {
     displayName: profile.displayName,
-    avatarUrl: profile.avatarPath ? `/uploads/${profile.avatarPath}` : null,
+    avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
     accountLevel: profile.accountLevel,
     totalXp: Number(profile.totalXp),
     xpForCurrentLevel: totalXpToReach(profile.accountLevel + 1),

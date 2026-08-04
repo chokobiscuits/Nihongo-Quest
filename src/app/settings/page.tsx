@@ -1,4 +1,5 @@
 import { getOrCreateProfile } from "@/server/queries/profile";
+import { storage } from "@/lib/storage";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
@@ -17,11 +18,12 @@ export default async function SettingsPage() {
       <SettingsForm
         initial={{
           displayName: profile.displayName,
-          avatarUrl: profile.avatarPath ? `/uploads/${profile.avatarPath}` : null,
+          avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
           lessonBatchSize: settings.lessonBatchSize ?? 5,
           furiganaOverride: settings.furiganaOverride ?? null,
           timezone: profile.timezone,
         }}
+        showLogout={Boolean(process.env.APP_PASSWORD)}
       />
 
       <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-5">

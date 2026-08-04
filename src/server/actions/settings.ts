@@ -2,9 +2,11 @@
 
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { storage } from "@/lib/storage";
+import { SESSION_COOKIE_NAME } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { InputJsonValue } from "@/generated/prisma/internal/prismaNamespace";
 
@@ -105,6 +107,7 @@ export async function updateTimezone(
 
 export interface UploadAvatarResult extends SettingsActionResult {
   avatarPath?: string;
+  avatarUrl?: string;
 }
 
 /// Validates, normalizes (square 512px webp via sharp), and stores an
@@ -152,7 +155,7 @@ export async function uploadAvatar(
 
   await prisma.userProfile.update({ where: { userId }, data: { avatarPath: relativePath } });
   revalidateProfileViews();
-  return { ok: true, avatarPath: relativePath };
+  return { ok: true, avatarPath: relativePath, avatarUrl: storage.publicUrl(relativePath) };
 }
 
 /// Removes the current avatar, both the stored file and the DB reference.
@@ -164,6 +167,14 @@ export async function removeAvatar(userId: string = APP_USER_ID): Promise<Settin
   await prisma.userProfile.update({ where: { userId }, data: { avatarPath: null } });
   revalidateProfileViews();
   return { ok: true };
+}
+
+/// Clears the shared-password session cookie set by /api/login. A no-op if
+/// the password gate isn't configured (APP_PASSWORD unset), since there's
+/// no session to clear in that case.
+export async function logout(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
 function revalidateProfileViews() {

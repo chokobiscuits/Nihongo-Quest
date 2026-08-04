@@ -10,6 +10,7 @@ import {
   updateTimezone,
   uploadAvatar,
   removeAvatar,
+  logout,
 } from "@/server/actions/settings";
 
 export interface SettingsFormProps {
@@ -20,6 +21,7 @@ export interface SettingsFormProps {
     furiganaOverride: boolean | null;
     timezone: string;
   };
+  showLogout?: boolean;
 }
 
 // A short, commonly-relevant list rather than the full ~400-entry IANA
@@ -67,7 +69,7 @@ type SaveStatus = "idle" | "saving" | "saved" | "error";
 /// Client-side settings form. Every field persists independently via its own
 /// server action call on blur/change — no single giant "Save" button, so a
 /// change to one field never risks clobbering another that's mid-edit.
-export function SettingsForm({ initial }: SettingsFormProps) {
+export function SettingsForm({ initial, showLogout }: SettingsFormProps) {
   return (
     <div className="flex flex-col gap-4">
       <DisplayNameField initial={initial.displayName} />
@@ -75,7 +77,40 @@ export function SettingsForm({ initial }: SettingsFormProps) {
       <LessonBatchSizeField initial={initial.lessonBatchSize} />
       <FuriganaField initial={initial.furiganaOverride} />
       <TimezoneField initial={initial.timezone} />
+      {showLogout && <LogoutField />}
     </div>
+  );
+}
+
+/// Only rendered when the shared-password gate is active (APP_PASSWORD set)
+/// — see settings/page.tsx. Clears the session cookie and redirects to
+/// /login via the browser following the server action's redirect.
+function LogoutField() {
+  const [isPending, startTransition] = useTransition();
+
+  function handleLogout() {
+    startTransition(async () => {
+      await logout();
+      window.location.href = "/login";
+    });
+  }
+
+  return (
+    <Panel accent="var(--color-danger)" title="Session" titleJa="セッション">
+      <div className="flex flex-col gap-2">
+        <span className="text-micro text-text-faint" lang="en">
+          Sign out of this device. You&rsquo;ll need the shared password to sign back in.
+        </span>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={isPending}
+          className="w-fit rounded-[var(--radius-chip)] border border-line px-3 py-1.5 text-caption text-danger hover:bg-surface-3"
+        >
+          <span lang="en">Log out</span>
+        </button>
+      </div>
+    </Panel>
   );
 }
 
@@ -129,8 +164,8 @@ function AvatarField({ initialUrl }: { initialUrl: string | null }) {
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
       const result = await uploadAvatar(bytes, file.type);
-      if (result.ok && result.avatarPath) {
-        setPreviewUrl(`/uploads/${result.avatarPath}`);
+      if (result.ok && result.avatarUrl) {
+        setPreviewUrl(result.avatarUrl);
         setStatus("saved");
       } else {
         setError(result.error ?? "Upload failed.");
