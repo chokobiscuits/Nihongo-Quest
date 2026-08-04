@@ -58,7 +58,12 @@ export interface CommitReviewSessionResult {
   newlyUnlockedSubjectIds: string[];
   itemOutcomes: ReviewItemOutcome[];
   itemsReviewed: number;
+  /// Percentage of individual questions answered correctly.
   accuracyPct: number;
+  /// Items answered cleanly (never missed at any point in the session).
+  /// Counted per item rather than per question, which is what a user means
+  /// by "got it right".
+  itemsCorrect: number;
 }
 
 /// Commits a completed review session in one transaction. Mirrors
@@ -307,13 +312,17 @@ export async function commitReviewSession(
     itemOutcomes: result.itemOutcomes,
     itemsReviewed: userSubjectIds.length,
     accuracyPct,
+    itemsCorrect: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
   };
 }
 
 export interface CommitUnrankedSessionResult {
   sessionId: string;
   itemsReviewed: number;
+  /// Percentage of individual questions answered correctly.
   accuracyPct: number;
+  /// Items answered cleanly (never missed at any point in the session).
+  itemsCorrect: number;
   /// Per-item correct/total, so the summary can show what needs work. No
   /// stage data: unranked never moves an item's stage.
   itemResults: { userSubjectId: string; correct: number; total: number }[];
@@ -443,6 +452,7 @@ export async function commitUnrankedReviewSession(
     sessionId: result.sessionId,
     itemsReviewed: userSubjectIds.length,
     accuracyPct,
+    itemsCorrect: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
     itemResults: result.itemResults,
   };
 }

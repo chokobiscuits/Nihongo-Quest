@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ReviewQuiz } from "./ReviewQuiz";
 import { SrsStageChip } from "@/components/srs/SrsStageChip";
+import { SuccessRate } from "./SuccessRate";
 import { commitReviewSession, type CommitReviewSessionResult, type ReviewAnswerRecord } from "@/server/actions/reviews";
 import type { ReviewSubject } from "@/server/queries/reviews";
 import { CelebrationModal } from "@/components/celebration/CelebrationModal";
@@ -27,7 +28,11 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
   const [error, setError] = useState<string | null>(null);
   const celebration = useCelebrationQueue();
 
-  async function handleQuizComplete(answers: ReviewAnswerRecord[]) {
+  // Held so a failed commit can be retried without losing the session's
+  // answers — the quiz component is already unmounted by this point.
+  const [pendingAnswers, setPendingAnswers] = useState<ReviewAnswerRecord[] | null>(null);
+
+  async function commit(answers: ReviewAnswerRecord[]) {
     setCommitting(true);
     setError(null);
     try {
@@ -40,6 +45,11 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
     } finally {
       setCommitting(false);
     }
+  }
+
+  async function handleQuizComplete(answers: ReviewAnswerRecord[]) {
+    setPendingAnswers(answers);
+    await commit(answers);
   }
 
   if (items.length === 0) {
@@ -64,6 +74,31 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
     );
   }
 
+  // See UnrankedRunner: the quiz unmounts as soon as it hands over answers,
+  // so this branch covers the commit round-trip and any failure rather than
+  // leaving a blank page behind.
+  if (phase === "quiz" && pendingAnswers) {
+    return (
+      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+        {committing ? (
+          <p className="text-body text-text-muted">Saving your review session…</p>
+        ) : (
+          <>
+            <h2 className="text-h2 font-semibold text-text">Couldn&apos;t save this session</h2>
+            <p className="text-body text-text-muted">{error}</p>
+            <button
+              type="button"
+              onClick={() => commit(pendingAnswers)}
+              className="h-9 w-fit rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand"
+            >
+              Try again
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (phase === "quiz") {
     return <ReviewQuiz items={items} onComplete={handleQuizComplete} />;
   }
@@ -81,9 +116,14 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
         )}
         <h2 className="text-h2 font-semibold text-text">Review session complete</h2>
         <p className="text-body text-text-muted">
-          Reviewed {result.itemsReviewed} item{result.itemsReviewed === 1 ? "" : "s"}, {result.accuracyPct}% accuracy,
-          earned {result.xpAwarded} XP.
+          Reviewed {result.itemsReviewed} item{result.itemsReviewed === 1 ? "" : "s"}, earned {result.xpAwarded} XP.
         </p>
+
+        <SuccessRate
+          accuracyPct={result.accuracyPct}
+          correctItems={result.itemsCorrect}
+          totalItems={result.itemsReviewed}
+        />
 
         {(promoted.length > 0 || demoted.length > 0) && (
           <div className="flex flex-col gap-2">
