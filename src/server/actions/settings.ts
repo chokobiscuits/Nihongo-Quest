@@ -144,13 +144,31 @@ export async function uploadAvatar(
   }
 
   const profile = await getOrCreateProfile(userId);
-  const relativePath = `avatars/${userId}-${randomUUID()}.webp`;
-  await storage.put(relativePath, outputBuffer);
+  // No "avatars/" prefix: the Supabase driver already writes into a bucket of
+  // that name, so prefixing produced avatars/avatars/... The local-disk
+  // driver keeps its own root, so both stay tidy.
+  const relativePath = `${userId}-${randomUUID()}.webp`;
 
-  // Clean up the previous avatar file so uploads/removals don't accumulate
-  // orphaned files under public/uploads/avatars.
+  // A storage failure must not become an unhandled 500. Supabase rejects
+  // writes from the anon key unless a policy allows them, which is the most
+  // likely cause here, and the user needs to be told that rather than shown
+  // a blank error page.
+  try {
+    await storage.put(relativePath, outputBuffer);
+  } catch (error) {
+    console.error("[uploadAvatar] storage.put failed:", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Could not save the image. ${detail}` };
+  }
+
+  // Clean up the previous avatar so uploads and removals do not accumulate
+  // orphaned files. A failure here is not worth failing the upload over.
   if (profile.avatarPath) {
-    await storage.remove(profile.avatarPath);
+    try {
+      await storage.remove(profile.avatarPath);
+    } catch (error) {
+      console.warn("[uploadAvatar] could not remove previous avatar:", error);
+    }
   }
 
   await prisma.userProfile.update({ where: { userId }, data: { avatarPath: relativePath } });
@@ -162,7 +180,13 @@ export async function uploadAvatar(
 export async function removeAvatar(userId: string = APP_USER_ID): Promise<SettingsActionResult> {
   const profile = await getOrCreateProfile(userId);
   if (profile.avatarPath) {
-    await storage.remove(profile.avatarPath);
+    // Clearing the pointer is what the user asked for. If the object cannot
+    // be deleted we leave it orphaned rather than failing the whole action.
+    try {
+      await storage.remove(profile.avatarPath);
+    } catch (error) {
+      console.warn("[removeAvatar] could not remove stored file:", error);
+    }
   }
   await prisma.userProfile.update({ where: { userId }, data: { avatarPath: null } });
   revalidateProfileViews();
