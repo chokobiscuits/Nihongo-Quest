@@ -1,0 +1,29 @@
+#!/bin/sh
+# Blocks a push if the production build fails.
+#
+# Why this exists: `tsc --noEmit` and vitest both pass on code that Next
+# refuses to build. A "use server" module exporting a non-async const is the
+# case that actually reached production — typecheck is clean, tests are
+# clean, and the Vercel build dies with "the module has no exports at all".
+# The only thing that catches that class of error is the real build.
+#
+# Skip deliberately with `git push --no-verify` when you know the build is
+# broken and are pushing to a preview branch on purpose.
+
+set -e
+
+# Nothing to check when deleting a branch.
+if [ -z "$(git rev-list --all --max-count=1)" ]; then
+  exit 0
+fi
+
+printf '\npre-push: running production build (skip with --no-verify)\n\n'
+
+if ! npm run build; then
+  printf '\npre-push: BUILD FAILED — push aborted.\n'
+  printf 'Fix the build, or re-run with --no-verify if this is intentional.\n\n'
+  exit 1
+fi
+
+printf '\npre-push: build OK\n\n'
+exit 0
