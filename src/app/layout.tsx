@@ -35,7 +35,7 @@ const fontJaDisplay = Noto_Serif_JP({
 });
 
 export const metadata: Metadata = {
-  title: "Nihon Quest | 日本クエスト",
+  title: "Nihongo Quest | 日本語クエスト",
   description: "A single-user Japanese learning platform.",
   manifest: "/manifest.webmanifest",
 };

@@ -1,11 +1,11 @@
 {
-  "name": "Choko Japan",
-  "short_name": "Choko",
-  "description": "A single-user Japanese learning platform.",
+  "name": "Nihongo Quest",
+  "short_name": "Nihongo Quest",
+  "description": "A single-user Japanese learning platform: SRS lessons and reviews over kana, radicals, kanji, vocabulary, grammar and sentences.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#111111",
+  "background_color": "#0d0b14",
+  "theme_color": "#0d0b14",
   "icons": [
     {
       "src": "/icons/icon-192.png",

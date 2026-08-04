@@ -13,7 +13,8 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center bg-surface-2 px-4">
       <div className="w-full max-w-sm rounded-[var(--radius-card)] border border-line bg-surface p-6">
         <h1 className="text-h1 font-semibold text-text">
-          <span lang="en">Choko Japan</span>
+          <span lang="en">Nihongo Quest</span>{" "}
+          <span lang="ja" className="text-text-muted">日本語クエスト</span>
         </h1>
         <p className="mt-1 text-caption text-text-dim" lang="en">
           Sign in to continue.

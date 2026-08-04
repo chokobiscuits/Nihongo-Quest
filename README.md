@@ -1,4 +1,4 @@
-# Choko Japan
+# Nihongo Quest
 
 A single-user Japanese learning platform: SRS-driven lessons and reviews over
 radicals, kanji, vocab, grammar, sentences, and reading passages, with an XP
