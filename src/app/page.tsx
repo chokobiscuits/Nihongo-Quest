@@ -75,7 +75,7 @@ export default async function HomePage() {
         {/* Right-rail cards move into a 4-up row below xl */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:hidden">
           <DayStreakCard currentStreak={dashboard.currentStreak} days={dashboard.streakDays} />
-          <RankLevelCard accountLevel={dashboard.accountLevel} totalXp={dashboard.totalXp} />
+          <RankLevelCard rank={dashboard.rank} lp={dashboard.lp} />
           <ProgressOverviewCard rows={dashboard.progress} />
           <JlptProgressCard
             currentLevel={jlpt.currentLevel}
@@ -103,7 +103,7 @@ export default async function HomePage() {
       {/* Sticky right rail, ≥1280px only */}
       <div className="hidden xl:flex xl:flex-col xl:gap-4 xl:sticky xl:top-6">
         <DayStreakCard currentStreak={dashboard.currentStreak} days={dashboard.streakDays} />
-        <RankLevelCard accountLevel={dashboard.accountLevel} totalXp={dashboard.totalXp} />
+        <RankLevelCard rank={dashboard.rank} lp={dashboard.lp} />
         <ProgressOverviewCard rows={dashboard.progress} />
         <JlptProgressCard
           currentLevel={jlpt.currentLevel}

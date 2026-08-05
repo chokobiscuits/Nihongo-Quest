@@ -2,7 +2,7 @@
 
 import { InsetPanel } from "@/components/panel/Panel";
 import { RankBadge } from "@/components/rank/RankBadge";
-import type { Rank } from "@/services/xp/rank";
+import type { Rank } from "@/services/rank/tiers";
 import type { MasteryTier } from "@/services/xp/mastery";
 import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";

@@ -222,11 +222,22 @@ model UserProfile {
   displayName  String
   avatarPath   String?
 
+  /// EXP track: time invested. Monotonic, unbounded, and the sole driver of
+  /// accountLevel (see src/services/xp/curve.ts).
   totalXp      BigInt @default(0)
   accountLevel Int    @default(1)
 
+  /// LP track: current performance. Independent of totalXp — moved only by
+  /// ranked reviews and exams, and able to fall. See src/services/rank/lp.ts.
+  /// `rankDivision` is null for Master and above, which share one unbounded
+  /// LP pool instead of divisions.
   rank         String @default("IRON")
-  rankDivision Int?
+  rankDivision Int?   @default(4)
+  lp           Int    @default(0)
+
+  /// High-water mark, so a demotion can still show what was achieved.
+  peakRank         String @default("IRON")
+  peakRankDivision Int?   @default(4)
 
   currentStreak Int       @default(0)
   longestStreak Int       @default(0)
@@ -255,6 +266,31 @@ model XpEvent {
   amount    Int
   reason    String
   sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Mirrors XpEvent for the LP track. LP is the only progression value that
+/// can decrease, so without a log a drop is unexplainable and unauditable —
+/// this is what lets the UI answer "why did I lose rank?".
+model LpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int
+  reason    String // "review" | "exam"
+  sessionId String?
+
+  /// Session shape that produced `delta`, kept so the formula can be
+  /// re-derived (and retuned) against real history.
+  accuracy  Float
+  itemCount Int
+
+  /// Ladder position after applying `delta`.
+  tierAfter     String
+  divisionAfter Int?
+  lpAfter       Int
+
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])

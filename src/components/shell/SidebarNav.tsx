@@ -7,7 +7,7 @@ import { RankBadge } from "@/components/rank/RankBadge";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { typeToSlug } from "@/components/subject/typeSlug";
 import { SubjectType } from "@/generated/prisma/enums";
-import type { Rank } from "@/services/xp/rank";
+import type { Rank } from "@/services/rank/tiers";
 import type { MasteryTier } from "@/services/xp/mastery";
 import { cn } from "@/lib/utils";
 import {

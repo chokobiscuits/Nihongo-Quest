@@ -1,4 +1,4 @@
-import type { Rank, RankTier } from "@/services/xp/rank";
+import type { Rank, RankTier } from "@/services/rank/tiers";
 import { cn } from "@/lib/utils";
 
 export type RankBadgeSize = "xs" | "sm" | "md" | "lg" | "hero";

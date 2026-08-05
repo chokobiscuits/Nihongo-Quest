@@ -30,7 +30,8 @@ import { GURU_STAGE, BURNED_STAGE, intervalForStage, STAGES } from "../../src/se
 import { xpForCorrectAnswer, levelFromTotalXp } from "../../src/services/xp/curve";
 import { getCurriculumLevels } from "../../src/server/queries/curriculum";
 import { masteryXpForAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
-import { rankForLevel } from "../../src/services/xp/rank";
+import { parseTier } from "../../src/services/rank/tiers";
+import { lpDeltaFor, applyLp, startingRank } from "../../src/services/rank/lp";
 import { SubjectType } from "../../src/generated/prisma/enums";
 import { KANJI_UNLOCK_RADICAL_GURU, VOCAB_UNLOCK_KANJI_GURU } from "../../src/services/srs/typeUnlock";
 
@@ -771,11 +772,8 @@ async function main() {
 
       void profileBefore;
 
-      // Cross the Iron -> Bronze rank boundary (level 5) by injecting enough
-      // XP directly on the profile row (rank/level recompute is exercised via
-      // the action's own levelFromTotalXp/rankForLevel logic on the next
-      // commit, not by this direct write — this only seeds totalXp so the
-      // next tiny review session crosses the boundary through real code).
+      // Levelling is XP-driven and unbounded. Seed enough XP to cross a
+      // level boundary through real code on the next commit.
       const { totalXpToReach, levelFromTotalXp } = await import("../../src/services/xp/curve");
       const xpForLevel5 = totalXpToReach(5);
       const preBoundaryXp = xpForLevel5 - 1;
@@ -784,20 +782,23 @@ async function main() {
         data: { totalXp: BigInt(preBoundaryXp), accountLevel: levelFromTotalXp(preBoundaryXp) },
       });
 
-      const preBoundaryProfile = await getOrCreateProfile(SIM_USER);
-      const preBoundaryRank = rankForLevel(preBoundaryProfile.accountLevel);
-      assertEqual(SECTION_E, "pre-boundary rank is Iron", preBoundaryRank.tier, "IRON");
-
       const boundaryRadical = await prisma.subject.findFirst({
         where: { type: SubjectType.RADICAL, level: 5, id: { not: testRadical2.id } },
         select: { id: true },
       });
-      if (!boundaryRadical) throw new Error("no second level-5 radical found for rank-boundary test");
+      if (!boundaryRadical) throw new Error("no second level-5 radical found for level-boundary test");
+      const rankBeforeLesson = await getOrCreateProfile(SIM_USER);
       const boundaryResult = await learnSubjects([boundaryRadical.id], new Map([[boundaryRadical.id, "RADICAL"]]));
 
       assertTrue(SECTION_E, "account level derives correctly from accumulated XP (crossed into level 5+)", boundaryResult.newLevel >= 5, `newLevel: ${boundaryResult.newLevel}`);
-      assertEqual(SECTION_E, "rank string changes Iron -> Bronze crossing level 5", boundaryResult.newRank.tier, "BRONZE");
-      assertTrue(SECTION_E, "rank division changes on the tier crossing", boundaryResult.rankPromoted);
+
+      // Rank is now independent of level: a lesson that levels you up must
+      // leave rank and LP completely untouched, because lessons have no
+      // failure mode and so cannot measure performance.
+      const rankAfterLesson = await getOrCreateProfile(SIM_USER);
+      assertEqual(SECTION_E, "a lesson never changes rank tier", rankAfterLesson.rank, rankBeforeLesson.rank);
+      assertEqual(SECTION_E, "a lesson never changes LP", rankAfterLesson.lp, rankBeforeLesson.lp);
+      assertEqual(SECTION_E, "lesson commit reports no rank promotion", boundaryResult.rankPromoted, false);
     }
 
     // === F. Streak and daily rollover ========================================
@@ -984,6 +985,99 @@ async function main() {
         `before: ${xpLevelBefore}, after: ${profileAfterTrigger.accountLevel}`,
       );
       void triggerCommit;
+    }
+
+    // -------------------------------------------------------------------
+    // I. LP and rank (independent of XP/level)
+    // -------------------------------------------------------------------
+    const SECTION_I = "I. LP and rank";
+    {
+      // Earlier sections ran many real ranked sessions, so the sim user has
+      // legitimately climbed by this point — assert on deltas, not on a
+      // fresh-account position.
+      const lpBaseline = await getOrCreateProfile(SIM_USER);
+
+      // A single-item session is below MIN_RANKED_ITEMS and must not move LP.
+      const tinySubject = await prisma.userSubject.findFirst({
+        where: { userId: SIM_USER, srsStage: { gte: 1, lte: 8 } },
+        select: { id: true, subjectId: true },
+      });
+      if (tinySubject) {
+        await backdate([tinySubject.subjectId], 200);
+        const tiny = await commitReviewSession(
+          { answers: [{ userSubjectId: tinySubject.id, questionType: "MEANING", correct: true, incorrectCount: 0 }] },
+          SIM_USER,
+        );
+        assertEqual(SECTION_I, "a sub-3-item session awards no LP", tiny.lpDelta, 0);
+        const afterTiny = await getOrCreateProfile(SIM_USER);
+        assertEqual(SECTION_I, "a sub-3-item session leaves stored LP unchanged", afterTiny.lp, lpBaseline.lp);
+      }
+
+      // Build a large clean review session: perfect accuracy over enough
+      // items to clear MIN_RANKED_ITEMS and earn a bonus.
+      const rankedSubjects = await prisma.userSubject.findMany({
+        where: { userId: SIM_USER, srsStage: { gte: 1, lte: 8 } },
+        select: { id: true, subjectId: true, subject: { select: { type: true } } },
+        take: 30,
+      });
+
+      if (rankedSubjects.length >= 3) {
+        await backdate(rankedSubjects.map((r) => r.subjectId), 200);
+        const answers: ReviewAnswerRecord[] = [];
+        for (const row of rankedSubjects) {
+          answers.push({ userSubjectId: row.id, questionType: "MEANING", correct: true, incorrectCount: 0 });
+          if (!MEANING_ONLY_TYPES.includes(row.subject.type)) {
+            answers.push({ userSubjectId: row.id, questionType: "READING", correct: true, incorrectCount: 0 });
+          }
+        }
+        const before = await getOrCreateProfile(SIM_USER);
+        const lpBefore = before.lp;
+        const perfect = await commitReviewSession({ answers }, SIM_USER);
+
+        assertTrue(
+          SECTION_I,
+          "a perfect ranked session gains LP",
+          perfect.lpDelta > 0,
+          `delta: ${perfect.lpDelta}, items: ${perfect.itemsReviewed}`,
+        );
+        assertEqual(
+          SECTION_I,
+          "reported LP matches the pure model",
+          perfect.lpDelta,
+          lpDeltaFor({ itemsCorrect: perfect.itemsCorrect, itemsTotal: perfect.itemsReviewed }).delta,
+        );
+
+        const afterPerfect = await getOrCreateProfile(SIM_USER);
+        const expected = applyLp(
+          { tier: parseTier(before.rank), division: before.rankDivision, lp: lpBefore },
+          perfect.lpDelta,
+        ).after;
+        assertEqual(SECTION_I, "stored tier matches the model", parseTier(afterPerfect.rank), expected.tier);
+        assertEqual(SECTION_I, "stored division matches the model", afterPerfect.rankDivision, expected.division);
+        assertEqual(SECTION_I, "stored LP matches the model", afterPerfect.lp, expected.lp);
+
+        const lpEvents = await prisma.lpEvent.count({ where: { userId: SIM_USER } });
+        assertTrue(SECTION_I, "an LpEvent is logged for a non-zero delta", lpEvents > 0, `events: ${lpEvents}`);
+
+        // A tier must never be lost, however badly a session goes.
+        await prisma.userProfile.update({
+          where: { userId: SIM_USER },
+          data: { rank: "GOLD", rankDivision: 4, lp: 5 },
+        });
+        await backdate(rankedSubjects.map((r) => r.subjectId), 200);
+        const wrongAnswers: ReviewAnswerRecord[] = [];
+        for (const row of rankedSubjects) {
+          wrongAnswers.push({ userSubjectId: row.id, questionType: "MEANING", correct: false, incorrectCount: 1 });
+        }
+        await commitReviewSession({ answers: wrongAnswers }, SIM_USER);
+        const afterDisaster = await getOrCreateProfile(SIM_USER);
+        assertEqual(SECTION_I, "a terrible session never drops the tier", parseTier(afterDisaster.rank), "GOLD");
+        assertTrue(SECTION_I, "LP floors at 0 in division IV", afterDisaster.lp >= 0, `lp: ${afterDisaster.lp}`);
+      } else {
+        check(SECTION_I, "large ranked session available", false, "not enough reviewable rows");
+      }
+
+      void startingRank;
     }
   } finally {
     await wipeSimUser();

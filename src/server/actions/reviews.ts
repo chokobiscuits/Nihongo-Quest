@@ -6,7 +6,8 @@ import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { computeTransition } from "@/services/srs/transition";
 import { xpForCorrectAnswer, xpForIncorrectAnswer, scaleXpForProductivity, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
-import { rankForLevel } from "@/services/xp/rank";
+import { resolveSession, outranks, type RankState } from "@/services/rank/lp";
+import { parseTier } from "@/services/rank/tiers";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { isSubjectUnlocked } from "@/services/srs/unlock";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
@@ -56,6 +57,13 @@ export interface CommitReviewSessionResult {
   previousRank: { tier: string; division: number | null };
   newRank: { tier: string; division: number | null };
   rankPromoted: boolean;
+  rankDemoted: boolean;
+  /// LP gained (positive) or lost (negative) this session. Zero for sessions
+  /// too small to be ranked, or exactly at the neutral accuracy.
+  lpDelta: number;
+  lpAfter: number;
+  /// Set when an over-achievement multiplier applied.
+  lpBonus: "s-rank" | "perfect" | null;
   newlyUnlockedSubjectIds: string[];
   itemOutcomes: ReviewItemOutcome[];
   itemsReviewed: number;
@@ -154,8 +162,6 @@ export async function commitReviewSession(
   const newTotalXp = previousTotalXp + xpAwarded;
   const previousLevel = profile.accountLevel;
   const newLevel = levelFromTotalXp(newTotalXp);
-  const previousRank = rankForLevel(previousLevel);
-  const newRank = rankForLevel(newLevel);
 
   const streak = applyDailyActivity({
     currentStreak: profile.currentStreak,
@@ -166,6 +172,28 @@ export async function commitReviewSession(
 
   const correctAnswers = answers.filter((a) => a.correct).length;
   const accuracyPct = answers.length === 0 ? 100 : Math.round((correctAnswers / answers.length) * 100);
+  const itemsCorrect = userSubjectIds.filter((id) => !itemEverWrong.get(id)).length;
+
+  // LP moves on how well the session went, independently of XP. Accuracy is
+  // measured per *item* (clean pass, never missed) rather than per question:
+  // that is what "got it right" means to a user, and an item you missed once
+  // then recovered is not a clean pass.
+  const rankBefore: RankState = {
+    tier: parseTier(profile.rank),
+    division: profile.rankDivision,
+    lp: profile.lp,
+  };
+  const lpOutcome = resolveSession(rankBefore, {
+    itemsCorrect,
+    itemsTotal: userSubjectIds.length,
+  });
+  const rankAfter = lpOutcome.after;
+  const peakBefore: RankState = {
+    tier: parseTier(profile.peakRank),
+    division: profile.peakRankDivision,
+    lp: 0,
+  };
+  const newPeak = outranks(rankAfter, peakBefore) ? rankAfter : peakBefore;
 
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.session.create({
@@ -264,13 +292,32 @@ export async function commitReviewSession(
       data: {
         totalXp: BigInt(newTotalXp),
         accountLevel: newLevel,
-        rank: newRank.tier,
-        rankDivision: newRank.division,
+        rank: rankAfter.tier,
+        rankDivision: rankAfter.division,
+        lp: rankAfter.lp,
+        peakRank: newPeak.tier,
+        peakRankDivision: newPeak.division,
         currentStreak: streak.currentStreak,
         longestStreak: streak.longestStreak,
         lastActiveDay: streak.lastActiveDay,
       },
     });
+
+    if (lpOutcome.delta !== 0) {
+      await tx.lpEvent.create({
+        data: {
+          userId,
+          delta: lpOutcome.delta,
+          reason: "review",
+          sessionId: session.id,
+          accuracy: userSubjectIds.length === 0 ? 0 : itemsCorrect / userSubjectIds.length,
+          itemCount: userSubjectIds.length,
+          tierAfter: rankAfter.tier,
+          divisionAfter: rankAfter.division,
+          lpAfter: rankAfter.lp,
+        },
+      });
+    }
 
     return { sessionId: session.id, itemOutcomes };
   });
@@ -301,14 +348,18 @@ export async function commitReviewSession(
     previousLevel,
     newLevel,
     leveledUp: newLevel > previousLevel,
-    previousRank,
-    newRank,
-    rankPromoted: newRank.tier !== previousRank.tier || newRank.division !== previousRank.division,
+    previousRank: { tier: rankBefore.tier, division: rankBefore.division },
+    newRank: { tier: rankAfter.tier, division: rankAfter.division },
+    rankPromoted: lpOutcome.change === "promoted",
+    rankDemoted: lpOutcome.change === "demoted",
+    lpDelta: lpOutcome.delta,
+    lpAfter: rankAfter.lp,
+    lpBonus: lpOutcome.bonus,
     newlyUnlockedSubjectIds,
     itemOutcomes: result.itemOutcomes,
     itemsReviewed: userSubjectIds.length,
     accuracyPct,
-    itemsCorrect: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
+    itemsCorrect,
   };
 }
 

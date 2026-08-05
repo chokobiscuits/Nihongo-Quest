@@ -2,19 +2,22 @@
 
 import { Panel, InsetPanel } from "@/components/panel/Panel";
 import { RankCrest } from "@/components/rank/RankCrest";
-import { RANK_BANDS, rankForLevel, type Rank, type RankTier } from "@/services/xp/rank";
-import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
+import { RANK_TIERS, type Rank, type RankTier } from "@/services/rank/tiers";
+import { LP_PER_DIVISION, lpFraction as lpFractionFor } from "@/services/rank/lp";
 import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useMountedFraction } from "@/hooks/useMountedFraction";
 
 export interface RankLevelCardProps {
-  accountLevel: number;
-  totalXp: number;
+  /// Stored rank and LP. Rank is no longer derived from level: it is
+  /// independent state moved by ranked review performance, so this card no
+  /// longer needs accountLevel or totalXp at all.
+  rank: Rank;
+  lp: number;
   className?: string;
 }
 
-const TIER_ORDER: RankTier[] = RANK_BANDS.map((b) => b.tier);
+const TIER_ORDER: RankTier[] = RANK_TIERS.map((b) => b.tier);
 
 const TIER_LABEL: Record<RankTier, string> = {
   IRON: "Iron",
@@ -30,31 +33,17 @@ const TIER_LABEL: Record<RankTier, string> = {
 
 const DIVISION_NUMERAL: Record<number, string> = { 1: "I", 2: "II", 3: "III", 4: "IV" };
 
-// LP is a display convenience layered on top of the level/XP model: each
-// account level is worth 25 LP, so "Next: Iron III (25 LP)" reads as one
-// full level's climb, and progress within the current level scales linearly
-// to a 0-25 LP bar.
-const LP_PER_LEVEL = 25;
-
-export function lpProgress(accountLevel: number, totalXp: number) {
-  const xpAtLevelStart = totalXpToReach(accountLevel);
-  const xpForThisLevel = xpForLevel(accountLevel);
-  const xpIntoLevel = Math.max(0, totalXp - xpAtLevelStart);
-  const fraction = xpForThisLevel > 0 ? Math.min(1, xpIntoLevel / xpForThisLevel) : 0;
-  return Math.round(fraction * LP_PER_LEVEL);
-}
-
 /// Human label for the rank one step better than `rank`, e.g. Iron IV ->
 /// Iron III, Iron I -> Bronze IV, Challenger -> null (open-ended, no "next").
 function nextRankLabel(rank: Rank): string | null {
   const bandIndex = TIER_ORDER.indexOf(rank.tier);
-  const band = RANK_BANDS[bandIndex];
+  const band = RANK_TIERS[bandIndex];
 
   if (band.hasDivisions && rank.division !== null && rank.division > 1) {
     return `${TIER_LABEL[rank.tier]} ${DIVISION_NUMERAL[rank.division - 1]}`;
   }
 
-  const nextBand = RANK_BANDS[bandIndex + 1];
+  const nextBand = RANK_TIERS[bandIndex + 1];
   if (!nextBand) return null;
   return nextBand.hasDivisions ? `${TIER_LABEL[nextBand.tier]} IV` : TIER_LABEL[nextBand.tier];
 }
@@ -63,11 +52,9 @@ function nextRankLabel(rank: Rank): string | null {
 /// and a nine-tier ladder showing where the current tier sits among all
 /// nine. Rank, division, and LP are all derived from `xp/rank.ts` and
 /// `xp/curve.ts` — nothing here is hardcoded per tier.
-export function RankLevelCard({ accountLevel, totalXp, className }: RankLevelCardProps) {
-  const rank = rankForLevel(accountLevel);
+export function RankLevelCard({ rank, lp, className }: RankLevelCardProps) {
   const accentToken = `var(--color-rank-${rank.tier.toLowerCase()})`;
-  const lp = lpProgress(accountLevel, totalXp);
-  const lpFraction = lp / LP_PER_LEVEL;
+  const lpFraction = lpFractionFor({ tier: rank.tier, division: rank.division, lp });
   const sweptLpFraction = useMountedFraction(lpFraction, 160);
   const displayedLp = useCountUp(lp);
   const nextLabel = nextRankLabel(rank);
@@ -111,7 +98,7 @@ export function RankLevelCard({ accountLevel, totalXp, className }: RankLevelCar
         </div>
 
         <span className="text-caption text-text-dim" lang="en">
-          {nextLabel ? `Next: ${nextLabel} (${LP_PER_LEVEL} LP)` : "Top rank reached"}
+          {nextLabel ? `Next: ${nextLabel} (${Math.max(0, LP_PER_DIVISION - lp)} LP to go)` : "Top rank reached"}
         </span>
       </div>
 

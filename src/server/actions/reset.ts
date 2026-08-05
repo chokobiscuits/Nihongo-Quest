@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { rankForLevel } from "@/services/xp/rank";
+import { startingRank } from "@/services/rank/lp";
 import { RESET_CONFIRMATION } from "./resetConfirmation";
 
 import { APP_USER_ID } from "@/lib/appUser";
@@ -12,6 +12,7 @@ export interface ResetProgressResult {
   reviewLogs: number;
   sessions: number;
   xpEvents: number;
+  lpEvents: number;
   dailyActivity: number;
   tutorialCompletions: number;
 }
@@ -45,6 +46,7 @@ export async function resetProgress(
     });
     const userSubjects = await tx.userSubject.deleteMany({ where: { userId } });
     const xpEvents = await tx.xpEvent.deleteMany({ where: { userId } });
+    const lpEvents = await tx.lpEvent.deleteMany({ where: { userId } });
     const sessions = await tx.session.deleteMany({ where: { userId } });
     const dailyActivity = await tx.dailyActivity.deleteMany({ where: { userId } });
     const tutorialCompletions = await tx.tutorialCompletion.deleteMany({ where: { userId } });
@@ -52,14 +54,17 @@ export async function resetProgress(
     // Return the profile to its schema defaults, but keep displayName,
     // avatarPath, timezone and settings: those are identity and preferences,
     // not progress, and losing them is a surprise rather than a reset.
-    const startingRank = rankForLevel(1);
+    const start = startingRank();
     await tx.userProfile.update({
       where: { userId },
       data: {
         totalXp: BigInt(0),
         accountLevel: 1,
-        rank: startingRank.tier,
-        rankDivision: startingRank.division,
+        rank: start.tier,
+        rankDivision: start.division,
+        lp: start.lp,
+        peakRank: start.tier,
+        peakRankDivision: start.division,
         currentStreak: 0,
         longestStreak: 0,
         lastActiveDay: null,
@@ -71,6 +76,7 @@ export async function resetProgress(
       reviewLogs: reviewLogs.count,
       sessions: sessions.count,
       xpEvents: xpEvents.count,
+      lpEvents: lpEvents.count,
       dailyActivity: dailyActivity.count,
       tutorialCompletions: tutorialCompletions.count,
     };

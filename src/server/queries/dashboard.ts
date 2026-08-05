@@ -4,7 +4,7 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { getReviewQueue } from "@/server/queries/reviews";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
-import { rankForLevel } from "@/services/xp/rank";
+import { parseTier, type Rank } from "@/services/rank/tiers";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
@@ -90,7 +90,9 @@ export interface DashboardData {
   xpForCurrentLevel: number;
   xpIntoCurrentLevel: number;
   currentStreak: number;
-  rank: ReturnType<typeof rankForLevel>;
+  rank: Rank;
+  /// LP within the current division (or the apex pool for Master+).
+  lp: number;
   accountMasteryXp: number;
   accountMasteryLevel: number;
   masteryTier: MasteryTier;
@@ -153,7 +155,8 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
   const passedByType = await bucketByType(passedSubjectIds);
   const startedByType = await bucketByType(startedSubjectIds);
 
-  const rank = rankForLevel(profile.accountLevel);
+  // Rank is stored state driven by LP, not a projection of level.
+  const rank: Rank = { tier: parseTier(profile.rank), division: profile.rankDivision };
 
   const progress: DashboardProgressRow[] = [
     { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", learned: passedByType.KANA, started: startedByType.KANA, total: KANA_TOTAL },
@@ -235,6 +238,7 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     xpIntoCurrentLevel: Number(profile.totalXp),
     currentStreak: profile.currentStreak,
     rank,
+    lp: profile.lp,
     accountMasteryXp,
     accountMasteryLevel: accountMasteryLevelValue,
     masteryTier: tier,
