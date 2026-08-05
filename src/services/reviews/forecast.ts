@@ -5,7 +5,6 @@
 // already scheduled.
 
 const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
 
 /// Bucket boundaries, in hours from `now`, in ascending order. Each entry is
 /// the *start* of a bucket; the bucket runs up to (but not including) the
