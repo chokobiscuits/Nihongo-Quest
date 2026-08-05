@@ -39,13 +39,20 @@ export async function getAchievements(userId: string = APP_USER_ID): Promise<Ach
   const profile = await getOrCreateProfile(userId);
 
   const [passedCounts, stageCounts, sessions, masteryXpAgg, lpEvents] = await Promise.all([
+    // Same reasoning as stageCounts below: a skipped kana has passedAt set
+    // but was never actually studied, so it must not count as "learned".
     prisma.userSubject.groupBy({
       by: ["subjectId"],
-      where: { userId, passedAt: { not: null } },
+      where: { userId, passedAt: { not: null }, reviewLogs: { some: {} } },
       _count: true,
     }),
+    // Only items with real review history count toward stage milestones.
+    // "I already know kana" writes 208 rows straight to Burned without a
+    // single review, which would otherwise instantly award "Burn 100 items",
+    // "Reach Master" and "Reach Guru" — achievements that are supposed to
+    // represent study, not a declaration of prior knowledge.
     prisma.userSubject.findMany({
-      where: { userId },
+      where: { userId, reviewLogs: { some: {} } },
       select: { srsStage: true },
     }),
     prisma.session.findMany({
