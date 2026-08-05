@@ -51,6 +51,7 @@ export function ContinueLearningSection({ cards }: ContinueLearningSectionProps)
           <ContinueLearningCard
             key={`${card.type}-${index}`}
             card={card}
+            index={index}
             accent={CARD_ACCENTS[index % CARD_ACCENTS.length]}
             // The first seeded, unlocked card is the primary CTA — it's the
             // one that gets the breathing glow, since it's the most likely
@@ -69,11 +70,16 @@ function ContinueLearningCard({
   card,
   accent,
   isPrimaryCta,
+  index,
 }: {
   card: DashboardContinueCard;
   accent: string;
   isPrimaryCta: boolean;
+  index: number;
 }) {
+  // Drives the staggered entrance so the row cascades in rather than
+  // appearing as one block.
+  const entranceStyle = { "--entrance-index": index } as React.CSSProperties;
   // Hooks run unconditionally regardless of `card.seeded` — the unseeded
   // early-return branch below just never reads their output.
   const percent = card.percent ?? 0;
@@ -83,8 +89,8 @@ function ContinueLearningCard({
   if (!card.seeded) {
     return (
       <div
-        className="flex min-w-[76vw] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-line bg-surface p-4 min-h-[190px] sm:min-w-0"
-        style={{ "--accent": accent } as React.CSSProperties}
+        className="entrance-staggered flex min-w-[76vw] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-line bg-surface p-4 min-h-[190px] sm:min-w-0"
+        style={{ "--accent": accent, ...entranceStyle } as React.CSSProperties}
       >
         <span className="text-glyph-sm opacity-30" aria-hidden style={{ color: accent }}>
           {card.glyph}
@@ -106,9 +112,10 @@ function ContinueLearningCard({
     return (
       <Link
         href="/reviews"
-        className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
+        className="card-lift entrance-staggered group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] hover:border-line-strong sm:min-w-0"
         style={{
           background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
+          ...entranceStyle,
         }}
       >
         <div className="relative flex items-start justify-between">
@@ -148,7 +155,8 @@ function ContinueLearningCard({
       <Link
         href={`/subjects/${typeToSlug(card.type)}`}
         title={card.requirement ?? undefined}
-        className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-dashed border-line p-4 min-h-[190px] transition-colors duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
+        className="card-lift entrance-staggered group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-dashed border-line p-4 min-h-[190px] hover:border-line-strong sm:min-w-0"
+        style={entranceStyle}
       >
         <div className="relative flex items-start justify-between">
           <span className="text-caption font-semibold text-text" lang="ja">
@@ -190,9 +198,10 @@ function ContinueLearningCard({
   // away via the corner link and the sidebar.
   return (
     <div
-      className="group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-line-strong sm:min-w-0"
+      className="card-lift entrance-staggered group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] hover:border-line-strong sm:min-w-0"
       style={{
         background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
+        ...entranceStyle,
       }}
     >
       {/* Ambient CTA glow: this is the most reachable "next action" card for

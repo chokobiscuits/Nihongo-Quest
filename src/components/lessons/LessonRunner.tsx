@@ -71,7 +71,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
 
   if (phase === "done" && result) {
     return (
-      <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+      <div className="entrance flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
         {celebration.active && (
           <CelebrationModal events={celebration.events} onDismissAll={celebration.dismiss} />
         )}

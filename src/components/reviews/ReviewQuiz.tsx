@@ -217,7 +217,12 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
             placeholder={current.kind === "MEANING" ? "Meaning" : "Reading"}
             className={cn(
               "w-full rounded-[var(--radius-input)] border bg-surface-2 p-3 text-body text-text outline-none disabled:opacity-70",
-              justWrong ? "border-danger" : "border-line-strong",
+              // `.shake` plays once when justWrong flips true. Deliberately
+              // no `key` remount to force a replay: that would blur the
+              // input mid-quiz, which costs far more than a repeated
+              // animation gains. The reduced-motion override swaps the
+              // movement for a border treatment.
+              justWrong ? "shake border-danger" : "border-line-strong",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
             )}
           />
