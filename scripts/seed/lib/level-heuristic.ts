@@ -79,7 +79,39 @@ export const VOCAB_LADDER_TARGET = VOCAB_PER_LEVEL * LEVEL_COUNT; // ~5,400
 // vocab it contains — see strictDependsOn's doc comment above for why
 // "strict" means "no ties" throughout this pipeline). Kept modest so
 // sentences don't swamp any one level's lesson queue.
-export const SENTENCE_PER_LEVEL = 30;
+export const SENTENCE_PER_LEVEL = 60;
+
+// Length band for SENTENCE placement, in characters. Level 1 prefers
+// sentences up to SENTENCE_LENGTH_MIN_CEILING; the ceiling widens linearly to
+// SENTENCE_LENGTH_MAX_CEILING at LEVEL_COUNT, so longer sentences arrive only
+// once a learner has the vocabulary to carry them. Without a band, the
+// eligible pool (~1,291 sentences at level 1 alone, against a quota of 30)
+// is so much larger than any workable quota that easy-first selection skims
+// the short tail and the whole ladder ends up uniformly trivial.
+//
+// These bounds are chosen from the corpus's own distribution: unsorted
+// laddered sentences ran a mean of 16.9 chars (p90 24, max 59), so a band of
+// 12 -> 32 keeps early levels well under that mean while still admitting the
+// long tail before the ladder ends.
+export const SENTENCE_LENGTH_MIN_CEILING = 12;
+export const SENTENCE_LENGTH_MAX_CEILING = 32;
+
+// Granularity of the within-band length preference. Sentences are ordered by
+// floor(charLength / BUCKET) so that everything within a few characters of
+// each other ties and falls back to corpus order, mixing length variety into
+// each level instead of stacking the shortest sentences first.
+export const SENTENCE_LENGTH_BUCKET = 5;
+
+/// The preferred maximum sentence length at `level`, interpolating linearly
+/// from SENTENCE_LENGTH_MIN_CEILING at level 1 to SENTENCE_LENGTH_MAX_CEILING
+/// at LEVEL_COUNT. A preference, not a hard filter — see assignSentenceLevels,
+/// which falls back to over-length sentences rather than leave a level short.
+export function sentenceLengthCeiling(level: number): number {
+  if (level <= 1) return SENTENCE_LENGTH_MIN_CEILING;
+  if (level >= LEVEL_COUNT) return SENTENCE_LENGTH_MAX_CEILING;
+  const span = SENTENCE_LENGTH_MAX_CEILING - SENTENCE_LENGTH_MIN_CEILING;
+  return Math.round(SENTENCE_LENGTH_MIN_CEILING + (span * (level - 1)) / (LEVEL_COUNT - 1));
+}
 
 // Per-level quota for GRAMMAR subjects. Grammar has no dependsOn edges (it is
 // deliberately not gated behind vocab/kanji — see transform.ts's grammar
@@ -466,6 +498,26 @@ export interface SentenceLevelInput {
   /// vocab is entirely off-ladder has no laddered dependency to be strictly
   /// after, so it defaults to level 1 eligibility.
   vocabTempIds: string[];
+  /// Character count of the sentence text, used to prefer shorter (easier to
+  /// read) sentences when a level's eligible pool exceeds its quota. The
+  /// eligible pool is far larger than the quota at every level — level 1
+  /// alone has ~1,291 eligible sentences against a quota of
+  /// SENTENCE_PER_LEVEL — so without a sort the fill takes whatever happens
+  /// to come first in Tatoeba corpus order. That ordering is arbitrary with
+  /// respect to difficulty, and the sentences it admits skew hard: a
+  /// sentence is ungated (level-1 eligible) precisely when its content vocab
+  /// is off-ladder, and vocab is off-ladder because it is rare, not because
+  /// it is simple. Shortest-first is the same preference matchGrammarExamples
+  /// already applies when picking illustrative examples.
+  ///
+  /// Length is a proxy for difficulty, not a measure of it — a short sentence
+  /// built from rare kanji still outranks a long plain one. A real
+  /// per-sentence difficulty score would be better and does not exist yet.
+  ///
+  /// Optional so existing callers and tests that only exercise level gating
+  /// need not supply it; absent, it sorts as 0 and ordering falls back to
+  /// input order.
+  charLength?: number;
 }
 
 /// Assigns levels to SENTENCE subjects in a third pass, after `assignLevels`
@@ -498,11 +550,48 @@ export function assignSentenceLevels(
     levels.set(input.tempId, null);
   }
 
+  // Input order, captured once, as the final deterministic tiebreak between
+  // sentences in the same length bucket.
+  const inputOrder = new Map(inputs.map((input, index) => [input.tempId, index]));
+
   for (let level = 1; level <= LEVEL_COUNT; level += 1) {
     const quota = quotaForType("SENTENCE", level);
-    const eligibleNow = inputs.filter(
+    const ceiling = sentenceLengthCeiling(level);
+    const unplaced = inputs.filter(
       (i) => levels.get(i.tempId) === null && minLevelByTempId.get(i.tempId) !== null && minLevelByTempId.get(i.tempId)! <= level,
     );
+    // Prefer sentences within this level's length band. The band is a
+    // preference, not a filter: if it can't fill the quota (late levels, or a
+    // thin eligible pool), over-length sentences still get placed rather than
+    // leaving the level short. Sorting by band membership first achieves both
+    // in one pass.
+    const eligibleNow = [...unplaced].sort((a, b) => {
+      const aWithin = (a.charLength ?? 0) <= ceiling;
+      const bWithin = (b.charLength ?? 0) <= ceiling;
+      if (aWithin !== bWithin) return aWithin ? -1 : 1;
+      // Within the band, order by coarse length bucket rather than exact
+      // length. A strict shortest-first sort skims only the very shortest tail
+      // of a pool this much larger than the quota (measured: every laddered
+      // sentence came out <= 13 chars, with no length progression anywhere on
+      // the ladder). Bucketing keeps the easy-first bias while letting corpus
+      // order mix real length variety into each level.
+      //
+      // Buckets are measured against the level's own ceiling, not absolute
+      // length, so the granularity coarsens as the band widens: early levels
+      // discriminate finely between short sentences, while late levels — where
+      // the band is already doing the gating — collapse toward pure corpus
+      // order and admit the corpus's genuinely long sentences. With absolute
+      // buckets the shortest two buckets oversupply every level and the
+      // laddered maximum flatlines far below the late-level ceiling.
+      const bucketSize = Math.max(
+        SENTENCE_LENGTH_BUCKET,
+        Math.ceil(ceiling / SENTENCE_LENGTH_BUCKET),
+      );
+      const bucketDelta =
+        Math.floor((a.charLength ?? 0) / bucketSize) - Math.floor((b.charLength ?? 0) / bucketSize);
+      if (bucketDelta !== 0) return bucketDelta;
+      return inputOrder.get(a.tempId)! - inputOrder.get(b.tempId)!;
+    });
     let placed = levelCounts.get(level) ?? 0;
     for (const item of eligibleNow) {
       if (placed >= quota) break;

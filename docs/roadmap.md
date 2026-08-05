@@ -30,12 +30,22 @@ Real numbers, not approximations. Derived from the schema's content sources and 
 | RADICAL | 214 | ~192 | 192 | 22 | Done |
 | KANJI | 10,384 | ~1,980 | 1,980 | 8,404 | Done |
 | VOCAB | 29,911 | ~5,400 | 5,400 | 24,511 | Done |
-| SENTENCE | 7,705 | 7,705 | 1,800 | 5,905 | 1,800/7,705 in ladder (23%) |
+| SENTENCE | 7,705 | 3,600 | 3,600 | 4,105 | Done |
 | GRAMMAR | 107 | 107 | 107 | 0 | Done |
 
-The "ladder target" column shows the intended size if fully fleshed out at the quota rates in `scripts/seed/lib/level-heuristic.ts`. The "ladder actual" is what's currently on the ladder (the difference is the authoring gap). Counts are derived from `data/processed/subjects.jsonl` by whether a subject carries a non-null `level`.
+The "ladder target" column shows the intended size at the quota rates in `scripts/seed/lib/level-heuristic.ts` (`SENTENCE_PER_LEVEL` × `LEVEL_COUNT`, and so on). The "ladder actual" is what's currently on the ladder. Counts are derived from `data/processed/subjects.jsonl` by whether a subject carries a non-null `level`.
 
-Kanji and vocabulary are both fully laddered to target. The remaining gap is sentences, where 5,905 of 7,705 seeded rows carry no level and so never appear in a lesson batch. Unladdered rows are not lost: they are seeded and browsable, just not on the curriculum ladder.
+Every type is laddered to target. Unladdered rows are not a gap and not lost: they are seeded and browsable, just not on the curriculum ladder. The seeded pool is deliberately much larger than the ladder for every corpus-sourced type (10,384 kanji seeded vs ~1,980 laddered, 29,911 vocab vs 5,400, 7,705 sentences vs 3,600) — the ladder is a curated slice, not an authoring shortfall.
+
+### Sentence ladder sizing and selection
+
+Sentences were previously listed here as a 23% authoring gap against a 7,705 target. That was a documentation error: the target column had copied the total seeded count rather than deriving from the quota, and the ladder was already quota-full at `SENTENCE_PER_LEVEL = 30` × 60 levels = 1,800.
+
+`SENTENCE_PER_LEVEL` is now 60 (3,600 laddered). Measured against the corpus, the eligible pool is far larger than any workable quota — ~1,291 sentences are eligible at level 1 alone — so quota values from 30 through 100 all fill every level with no starvation. 130 is the first value that starves levels; 7,593 is the hard ceiling (112 sentences have a min-eligible level above 60 and can never be placed).
+
+Because the pool so far exceeds the quota, *which* sentences get picked matters more than how many. Selection now prefers a per-level length band (`sentenceLengthCeiling`, widening from 12 to 32 characters across the ladder) and orders within it by coarse length bucket, falling back to corpus order. A strict shortest-first sort was tried first and rejected: it drove every laddered sentence to ≤13 characters with no variety anywhere on the ladder.
+
+**Known limit:** this yields a genuinely easy start (level 1 mean 8.2 characters vs 16.9 unsorted) but only weak progression (level 60 mean 17.1). Tatoeba has little length-vs-difficulty correlation to extract — median length runs 14 characters among level-1-eligible sentences vs 17 among level 41-60, and 79% of the corpus is ≤20 characters. Real difficulty progression needs a signal other than sentence length, and likely a different corpus. Length is a proxy for difficulty, not a measure of it.
 
 ## Tutorials
 

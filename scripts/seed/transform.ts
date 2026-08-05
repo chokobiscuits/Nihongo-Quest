@@ -854,7 +854,13 @@ async function main() {
     // level-heuristic.ts). Function words are excluded here entirely — they
     // still get a rendering edge above, but must never block or delay a
     // sentence's unlock/level.
-    sentenceLevelInputs.push({ tempId: candidate.tempId, vocabTempIds: contentVocabTempIds });
+    // charLength drives the shortest-first preference when a level's eligible
+    // pool exceeds its quota (see SentenceLevelInput's doc comment).
+    sentenceLevelInputs.push({
+      tempId: candidate.tempId,
+      vocabTempIds: contentVocabTempIds,
+      charLength: candidate.characters.length,
+    });
   }
 
   // Per-level quota cap: if selection overshoots the target band, still seed

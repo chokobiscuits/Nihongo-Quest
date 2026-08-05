@@ -28,11 +28,12 @@ Last verified 2026-08-02 from real source files:
 |---|---|---|
 | KANA | 208 | 46 hiragana + 46 katakana basic + dakuten/handakuten variants (20+20) + youon combinations (36+36) |
 | RADICAL | 214 | Kangxi set, every radical has a real English name |
-| KANJI (ladder) | ~192 | Part of the 60-level curriculum |
+| KANJI (ladder) | ~1,980 | Part of the 60-level curriculum |
 | KANJI (total seeded) | 10,384 | Of KANJIDIC2's 13,108; the rest have no English meaning |
 | VOCAB (ladder) | ~5,400 | Part of the 60-level curriculum |
 | VOCAB (total seeded) | 10,000 | Common entries only, capped at 10,000 |
-| SENTENCE | 7,705 | Seeded from Tatoeba; all have good-example markers and translations |
+| SENTENCE (ladder) | 3,600 | 60 per level via `SENTENCE_PER_LEVEL`; see the sentence sizing section in `docs/roadmap.md` |
+| SENTENCE (total seeded) | 7,705 | Seeded from Tatoeba; all have good-example markers and translations |
 | GRAMMAR | 107 | Hand-authored: 38 N5, 34 N4, 35 N3 |
 
 The "ladder" counts are approximate and depend on the current level assignments in `scripts/seed/lib/level-heuristic.ts`.

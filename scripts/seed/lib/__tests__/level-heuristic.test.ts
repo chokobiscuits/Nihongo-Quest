@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assignLevels,
   assignSentenceLevels,
+  sentenceLengthCeiling,
+  SENTENCE_LENGTH_MIN_CEILING,
+  SENTENCE_LENGTH_MAX_CEILING,
   KANJI_LADDER_TARGET,
   KANJI_PER_LEVEL,
   LEVEL_COUNT,
@@ -246,6 +249,62 @@ describe("assignSentenceLevels", () => {
     }
     expect(byLevel.get(2)).toBe(SENTENCE_PER_LEVEL);
     expect(byLevel.get(3)).toBe(2);
+  });
+
+  it("prefers in-band sentences over long ones when a level is over-subscribed", () => {
+    const vocabLevels = new Map<string, number | null>([["v1", null]]);
+    // Every sentence is level-1 eligible, so the quota alone decides who gets
+    // in. The first 5 in input order are far outside level 1's band; the rest
+    // sit inside it. Corpus order and band membership disagree completely.
+    const inputs = Array.from({ length: SENTENCE_PER_LEVEL + 5 }, (_, i) => ({
+      tempId: `s${i}`,
+      vocabTempIds: ["v1"],
+      charLength: i < 5 ? 90 : 8,
+    }));
+    const levels = assignSentenceLevels(inputs, vocabLevels);
+    // The 5 over-length ones lose their level-1 slots despite coming first.
+    for (const tempId of ["s0", "s1", "s2", "s3", "s4"]) {
+      expect(levels.get(tempId)).toBe(2);
+    }
+    expect(levels.get(`s${SENTENCE_PER_LEVEL + 4}`)).toBe(1);
+  });
+
+  it("keeps corpus order within a length bucket rather than stacking shortest first", () => {
+    const vocabLevels = new Map<string, number | null>([["v1", null]]);
+    // All lengths sit inside level 1's band AND inside one bucket (floor(n/5)
+    // is 0 for 1..4), so nothing reorders: pure input order decides.
+    const inputs = Array.from({ length: SENTENCE_PER_LEVEL + 2 }, (_, i) => ({
+      tempId: `s${i}`,
+      vocabTempIds: ["v1"],
+      // Descending lengths: a strict shortest-first sort would invert these.
+      charLength: 4 - (i % 4),
+    }));
+    const levels = assignSentenceLevels(inputs, vocabLevels);
+    expect(levels.get("s0")).toBe(1);
+    expect(levels.get(`s${SENTENCE_PER_LEVEL}`)).toBe(2);
+    expect(levels.get(`s${SENTENCE_PER_LEVEL + 1}`)).toBe(2);
+  });
+
+  it("still fills a level to quota when the band cannot supply enough sentences", () => {
+    const vocabLevels = new Map<string, number | null>([["v1", null]]);
+    // Every sentence is far over level 1's ceiling. The band is a preference,
+    // not a filter, so the level must still fill rather than starve.
+    const inputs = Array.from({ length: SENTENCE_PER_LEVEL }, (_, i) => ({
+      tempId: `s${i}`,
+      vocabTempIds: ["v1"],
+      charLength: 200,
+    }));
+    const levels = assignSentenceLevels(inputs, vocabLevels);
+    const atLevelOne = [...levels.values()].filter((l) => l === 1).length;
+    expect(atLevelOne).toBe(SENTENCE_PER_LEVEL);
+  });
+
+  it("widens the length ceiling monotonically across the ladder", () => {
+    expect(sentenceLengthCeiling(1)).toBe(SENTENCE_LENGTH_MIN_CEILING);
+    expect(sentenceLengthCeiling(LEVEL_COUNT)).toBe(SENTENCE_LENGTH_MAX_CEILING);
+    for (let level = 2; level <= LEVEL_COUNT; level += 1) {
+      expect(sentenceLengthCeiling(level)).toBeGreaterThanOrEqual(sentenceLengthCeiling(level - 1));
+    }
   });
 
   it("never places a sentence at or before the level of any vocab it contains (strict invariant)", () => {
