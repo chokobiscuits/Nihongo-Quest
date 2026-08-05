@@ -1,4 +1,4 @@
-import type { RankTier } from "@/services/xp/rank";
+import type { RankTier } from "@/services/rank/tiers";
 
 export interface LevelUpEvent {
   kind: "levelup";
@@ -21,14 +21,32 @@ export interface NewRankEvent {
   lp: number;
 }
 
-export type CelebrationEvent = LevelUpEvent | PromotionEvent | NewRankEvent;
+/// Rank can fall now that it is LP-driven rather than a projection of an
+/// ever-increasing level, so a demotion needs its own event.
+export interface DemotionEvent {
+  kind: "demotion";
+  previousTier: RankTier;
+  previousDivision: number | null;
+  newTier: RankTier;
+  newDivision: number | null;
+  /// Negative.
+  lpDelta: number;
+}
 
-/// Fixed queue order per spec: Level Up -> Promotion -> New Rank, so the
-/// session always ends on its biggest moment.
+export type CelebrationEvent = LevelUpEvent | DemotionEvent | PromotionEvent | NewRankEvent;
+
+/// Fixed queue order: Level Up -> Demotion -> Promotion -> New Rank, so the
+/// session always ends on its biggest moment. Demotion sits early so a
+/// session that both lost a division and gained a level still closes on the
+/// level-up rather than the setback.
+///
+/// Every kind MUST appear here — a missing entry yields undefined
+/// comparisons and a silently broken sort.
 const KIND_ORDER: Record<CelebrationEvent["kind"], number> = {
   levelup: 0,
-  promotion: 1,
-  newrank: 2,
+  demotion: 1,
+  promotion: 2,
+  newrank: 3,
 };
 
 export function sortCelebrationEvents(events: CelebrationEvent[]): CelebrationEvent[] {

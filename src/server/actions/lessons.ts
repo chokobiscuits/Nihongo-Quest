@@ -5,7 +5,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { LESSON_STAGE, intervalForStage } from "@/services/srs/stages";
 import { xpForLesson, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
-import { rankForLevel } from "@/services/xp/rank";
+import { parseTier, type Rank } from "@/services/rank/tiers";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { isSubjectUnlocked } from "@/services/srs/unlock";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
@@ -77,8 +77,11 @@ export async function commitLessonSession(
   const newTotalXp = previousTotalXp + xpAwarded;
   const previousLevel = profile.accountLevel;
   const newLevel = levelFromTotalXp(newTotalXp);
-  const previousRank = rankForLevel(previousLevel);
-  const newRank = rankForLevel(newLevel);
+  // Lessons award XP but never LP: they have no failure mode, so any LP
+  // award could only ratchet rank upward and would make rank a measure of
+  // time served rather than performance. Rank is reported unchanged so the
+  // summary can still display it.
+  const rank: Rank = { tier: parseTier(profile.rank), division: profile.rankDivision };
 
   const streak = applyDailyActivity({
     currentStreak: profile.currentStreak,
@@ -169,8 +172,6 @@ export async function commitLessonSession(
       data: {
         totalXp: BigInt(newTotalXp),
         accountLevel: newLevel,
-        rank: newRank.tier,
-        rankDivision: newRank.division,
         currentStreak: streak.currentStreak,
         longestStreak: streak.longestStreak,
         lastActiveDay: streak.lastActiveDay,
@@ -206,9 +207,9 @@ export async function commitLessonSession(
     previousLevel,
     newLevel,
     leveledUp: newLevel > previousLevel,
-    previousRank,
-    newRank,
-    rankPromoted: newRank.tier !== previousRank.tier || newRank.division !== previousRank.division,
+    previousRank: rank,
+    newRank: rank,
+    rankPromoted: false,
     newlyUnlockedSubjectIds,
   };
 }

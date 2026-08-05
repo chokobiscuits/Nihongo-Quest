@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
-import { rankForLevel } from "@/services/xp/rank";
+import { parseTier } from "@/services/rank/tiers";
 import { accountMasteryLevel } from "@/services/xp/mastery";
 import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { ACHIEVEMENTS, type AchievementDefinition, type AchievementStats } from "@/services/achievements/definitions";
@@ -71,7 +71,7 @@ export async function getAchievements(userId: string = APP_USER_ID): Promise<Ach
     if (session.totalItems > largestSessionItemCount) largestSessionItemCount = session.totalItems;
   }
 
-  const rank = rankForLevel(profile.accountLevel);
+  const rank = { tier: parseTier(profile.rank), division: profile.rankDivision };
   const masteryLevel = accountMasteryLevel(masteryXpAgg._sum.masteryXp ?? 0);
 
   const stats: AchievementStats = {

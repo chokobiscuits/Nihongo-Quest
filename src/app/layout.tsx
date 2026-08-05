@@ -3,7 +3,7 @@ import { Inter, Noto_Sans_JP, Noto_Serif_JP } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/shell/AppShell";
 import { getOrCreateProfile } from "@/server/queries/profile";
-import { rankForLevel } from "@/services/xp/rank";
+import { parseTier } from "@/services/rank/tiers";
 import { accountMasteryLevel, masteryTier } from "@/services/xp/mastery";
 import { prisma } from "@/lib/db";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
@@ -57,7 +57,7 @@ async function loadShellData() {
   return {
     name: profile.displayName,
     avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
-    rank: rankForLevel(profile.accountLevel),
+    rank: { tier: parseTier(profile.rank), division: profile.rankDivision },
     tier: masteryTier(accountMasteryLevel(masteryXpAgg._sum.masteryXp ?? 0)),
     unlockStatuses,
   };
@@ -68,7 +68,7 @@ async function loadShellData() {
 const FALLBACK_SHELL: Awaited<ReturnType<typeof loadShellData>> = {
   name: "Learner",
   avatarUrl: null,
-  rank: rankForLevel(1),
+  rank: { tier: "IRON", division: 4 },
   tier: masteryTier(0),
   unlockStatuses: {
     KANJI: { type: "KANJI", unlocked: false, requirement: null, have: 0, need: 0 },

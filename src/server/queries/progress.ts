@@ -3,7 +3,7 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
 import { STAGES, GURU_STAGE } from "@/services/srs/stages";
-import { rankForLevel } from "@/services/xp/rank";
+import { parseTier, type Rank } from "@/services/rank/tiers";
 import { totalXpToReach } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
 
@@ -97,7 +97,8 @@ export interface ProgressData {
     accountLevel: number;
     xpIntoCurrentLevel: number;
     xpForCurrentLevel: number;
-    rank: ReturnType<typeof rankForLevel>;
+    rank: Rank;
+    lp: number;
     accountMasteryXp: number;
     accountMasteryLevel: number;
     masteryTier: MasteryTier;
@@ -224,7 +225,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
     lessonCount: row.lessonCount,
   }));
 
-  const rank = rankForLevel(profile.accountLevel);
+  const rank: Rank = { tier: parseTier(profile.rank), division: profile.rankDivision };
   const accountMasteryXp = masteryXpAgg._sum.masteryXp ?? 0;
   const accountMasteryLevelValue = accountMasteryLevel(accountMasteryXp);
   const tier = masteryTier(accountMasteryLevelValue);
@@ -244,6 +245,7 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
       xpIntoCurrentLevel: Number(profile.totalXp) - totalXpToReach(profile.accountLevel),
       xpForCurrentLevel: totalXpToReach(profile.accountLevel + 1) - totalXpToReach(profile.accountLevel),
       rank,
+      lp: profile.lp,
       accountMasteryXp,
       accountMasteryLevel: accountMasteryLevelValue,
       masteryTier: tier,

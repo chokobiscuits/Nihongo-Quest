@@ -222,6 +222,56 @@ function CelebrationCard({
     );
   }
 
+  // Demotion: deliberately understated. No particles, no glow, no
+  // exclamation — this is information, not a celebration, and the tone
+  // should not punish a learner for a bad session.
+  if (event.kind === "demotion") {
+    return (
+      <div className="relative flex flex-col items-center gap-5 text-center">
+        <div className={cn("relative flex flex-col items-center gap-4", heroClass)}>
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-center gap-1">
+              <RankCrest tier={event.previousTier} division={event.previousDivision} size="lg" />
+            </div>
+            <span aria-hidden className="text-h2 text-text-faint">
+              →
+            </span>
+            <div className="flex flex-col items-center gap-1" style={{ opacity: 0.55 }}>
+              <RankCrest tier={event.newTier} division={event.newDivision} size="lg" />
+            </div>
+          </div>
+
+          <h2
+            id={headingId}
+            className={cn("text-h1 font-semibold text-text", bodyLineClass())}
+            style={bodyLineStyle(480)}
+            lang="en"
+          >
+            Rank down
+          </h2>
+          <p className={cn("text-body text-text-muted", bodyLineClass())} style={bodyLineStyle(550)} lang="en">
+            {rankLine(event.previousTier, event.previousDivision)} → {rankLine(event.newTier, event.newDivision)}
+          </p>
+          <p className={cn("text-caption text-text-dim", bodyLineClass())} style={bodyLineStyle(620)} lang="en">
+            {event.lpDelta} LP. Your tier is safe — you can only lose divisions.
+          </p>
+        </div>
+
+        <button
+          ref={dismissButtonRef}
+          type="button"
+          onClick={onPrimary}
+          className={cn(
+            "rounded-[var(--radius-chip)] border border-line px-8 h-11 text-body font-semibold text-text hover:bg-surface-2 transition-colors duration-[var(--duration-fast)]",
+            dismissClass,
+          )}
+        >
+          Keep going
+        </button>
+      </div>
+    );
+  }
+
   if (event.kind === "promotion") {
     return (
       <div className="relative flex flex-col items-center gap-5 text-center">

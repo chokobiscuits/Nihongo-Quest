@@ -1,4 +1,4 @@
-import type { RankTier } from "@/services/xp/rank";
+import type { RankTier } from "@/services/rank/tiers";
 
 /// Real, live-computed stats an achievement's progress function reads from.
 /// Everything here is a plain number/string so `definitions.ts` stays pure
