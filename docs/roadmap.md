@@ -6,11 +6,15 @@ These are design decisions, not oversights.
 
 ### Exams
 
-No exam mode or test feature exists. The entire app is built on continuous learning (lessons and spaced-repetition reviews), not on time-bounded exams or checkpoints. The Session table has `EXAM` as an enum value but it is never instantiated.
+No exam mode or test feature is implemented. The entire app is built on continuous learning (lessons and spaced-repetition reviews), not on time-bounded exams or checkpoints. The Session table has `EXAM` as an enum value but it is never instantiated, and `src/services/rank/lp.ts` carries an exam LP multiplier that nothing currently invokes.
+
+Note that `src/app/exams/page.tsx` ships as a placeholder route rendering "Exam sessions coming soon." The route exists; the feature does not.
 
 ### Audio
 
-No audio or pronunciation recordings. The app teaches reading (how to parse text, what words mean) and writing (how to input text), not listening or speaking. All examples are written text with furigana alignment.
+No pronunciation recordings. The app teaches reading (how to parse text, what words mean) and writing (how to input text), not listening or speaking. All examples are written text with furigana alignment.
+
+This is separate from the UI sound kit in `public/sounds/`, which is interface feedback (correct/wrong answer, level-up, promotion, achievement) and contains no spoken Japanese.
 
 ### Text readings (読解)
 
@@ -20,34 +24,39 @@ Deliberately not built (not an oversight). The `READING` SubjectType exists in t
 
 Real numbers, not approximations. Derived from the schema's content sources and the level-heuristic quota constants.
 
-| Type | Complete | Total seeded | Ladder target | Ladder actual | Unladdered | Status |
-|---|---|---|---|---|---|---|
-| KANA | 208 | 208 | 208 | 208 | 0 | Done |
-| RADICAL | 214 | 214 | ~192 | ~192 | 22 | Done |
-| KANJI | 2000+ | 10,384 | ~1980 | ~192 | 10,192 | 79/1980 in ladder (4%) |
-| VOCAB | 5400+ | 10,000 | ~5400 | ~5400 | 4,600 | 0/5400 in ladder (0%) |
-| SENTENCE | 7705+ | 7,705 | 7,705 | 7,705 | 0 | Done |
-| GRAMMAR | 107 | 107 | 107 | 107 | 0 | Done |
+| Type | Total seeded | Ladder target | Ladder actual | Unladdered | Status |
+|---|---|---|---|---|---|
+| KANA | 208 | 208 | 208 | 0 | Done |
+| RADICAL | 214 | ~192 | 192 | 22 | Done |
+| KANJI | 10,384 | ~1,980 | 1,980 | 8,404 | Done |
+| VOCAB | 29,911 | ~5,400 | 5,400 | 24,511 | Done |
+| SENTENCE | 7,705 | 7,705 | 1,800 | 5,905 | 1,800/7,705 in ladder (23%) |
+| GRAMMAR | 107 | 107 | 107 | 0 | Done |
 
-The "ladder target" column shows the intended size if fully fleshed out at the quota rates in `scripts/seed/lib/level-heuristic.ts`. The "ladder actual" is what's currently on the ladder (the difference is the authoring gap).
+The "ladder target" column shows the intended size if fully fleshed out at the quota rates in `scripts/seed/lib/level-heuristic.ts`. The "ladder actual" is what's currently on the ladder (the difference is the authoring gap). Counts are derived from `data/processed/subjects.jsonl` by whether a subject carries a non-null `level`.
 
-## Tutorial stubs
+Kanji and vocabulary are both fully laddered to target. The remaining gap is sentences, where 5,905 of 7,705 seeded rows carry no level and so never appear in a lesson batch. Unladdered rows are not lost: they are seeded and browsable, just not on the curriculum ladder.
 
-11 tutorial markdown files are stubbed but not written:
+## Tutorials
+
+All 18 tutorial bodies are written. They live as a hand-encoded constant in `scripts/seed/lib/tutorials.ts` (not as separate markdown files), loaded by `scripts/seed/load-tutorials.ts`. The tutorial system (trigger logic, completion tracking, UI) is fully built. See `src/services/tutorials/` for the infrastructure.
+
+Every tutorial covers a Japanese-language topic: scripts and reading, radicals, meaning vs. reading, onyomi/kunyomi, rendaku, okurigana, particles, verb groups, politeness, transitivity, counters, plus SRS mechanics (Guru, the stage ladder) and reference entries (JLPT, furigana).
+
+**Reseed caveat:** `body` is seeded on create only and is never overwritten on update, the same treatment as Subject's USER-AUTHORED block. Rewriting a tutorial body does not reach an existing database without a deliberate update path. See the header comment in `scripts/seed/lib/tutorials.ts`.
+
+### Not covered: app mechanics
+
+No tutorial explains the app's own interface or flows. Candidates, none written:
 
 1. How to use the lessons page.
-2. How to use the reviews page.
-3. Understanding mastery vs. SRS stage.
+2. How to use the reviews page (ranked vs. unranked practice).
+3. Mastery vs. SRS stage (they are separate; stage demotes, mastery does not).
 4. How to edit mnemonics.
-5. How to skip ahead (the kana skip flow).
-6. Understanding radicals (component gating).
-7. Understanding kanji (multiple readings).
-8. Understanding vocabulary (composition).
-9. Understanding sentences (function-word tolerance).
-10. Understanding grammar (patterns and examples).
-11. Keyboard shortcuts.
+5. The kana skip flow, and that skipping kana does not accelerate kanji (radicals gate kanji, not kana).
+6. Keyboard shortcuts.
 
-The tutorial system (trigger logic, completion tracking, UI) is fully built. The bodies are there for reference; most just need fuller content. See `scripts/seed/lib/tutorials.ts` and `src/services/tutorials/` for the infrastructure.
+Item 3 and item 5 are the two most worth writing: both describe behavior that is genuinely counterintuitive from the UI alone.
 
 ## Optional features not built
 
