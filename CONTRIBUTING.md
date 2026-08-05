@@ -79,6 +79,10 @@ this must never write to `local-user`:
   `local-user` is byte-identical afterwards
 - `npm run verify:reset` — exercises the destructive reset on a throwaway
   user, same safety assertion
+- `npm run verify:practice-cap` — validates the 150 XP/day practice cap
+  enforcement against real DailyActivity rows
+- `npm run verify:achievements` — validates achievement unlock detection and
+  the UserAchievement table consistency
 
 Follow that pattern for anything new that touches user rows.
 

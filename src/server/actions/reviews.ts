@@ -157,9 +157,8 @@ export async function commitReviewSession(
   // XP: one award per logged answer (correct or incorrect), scaled by the
   // stage the item was *at* when that answer was given, then scaled again by
   // whether the review actually moved the item. An item whose promotion the
-  // 4-hour cooldown blocked pays a token amount: the queue never filters by
-  // dueAt, so without this the same items could be re-reviewed back-to-back
-  // at full XP indefinitely.
+  // 4-hour cooldown blocked pays a token amount: without this the cooldown
+  // itself could be exploited by cycling between ranked and unranked queues.
   const answerXp = answers.reduce((sum, a) => {
     const row = bySubjectRow.get(a.userSubjectId);
     const stage = row?.srsStage ?? 1;

@@ -50,10 +50,11 @@ Demotion happens immediately; XP is awarded regardless of correctness.
 
 **What it scales down:** XP and mastery for a correct answer whose promotion
 was blocked are multiplied by `UNPRODUCTIVE_REVIEW_XP_FACTOR` (0.1, floored at
-1 XP). Because the queue never filters by `dueAt`, the same items are always
-re-servable, so without this an item could be reviewed back-to-back
-indefinitely at full XP. Incorrect answers keep their flat participation
-award. See `scaleXpForProductivity` in `src/services/xp/curve.ts`.
+1 XP). Without this, the cooldown itself could be exploited by cycling items
+between ranked (due-filtered) and unranked (unfiltered) practice queues. The
+unranked queue's practice cap is the primary defense; the XP scaling is
+secondary. Incorrect answers keep their flat participation award. See
+`scaleXpForProductivity` in `src/services/xp/curve.ts`.
 
 **Implementation:** `lastPromotedAt` is stored per UserSubject and updated only when `promoted = true`. `isPromotionBlocked(lastPromotedAt, now)` checks if now is within 4 hours of `lastPromotedAt`. See `src/services/srs/transition.ts`.
 
@@ -63,11 +64,11 @@ award. See `scaleXpForProductivity` in `src/services/xp/curve.ts`.
 
 There are two review modes.
 
-**Ranked** (`/reviews`) is the SRS proper. The queue is filtered to items that are actually due (`dueAt <= now`), so a session is finite and completable: you clear what's due and you're done. This is the only mode that awards XP and mastery or moves an item's SRS stage. When nothing is due the page says so and shows how long until the next item comes up.
+**Ranked** (`/reviews`) is the SRS proper. The queue is filtered to items that are actually due (`dueAt <= now`), so a session is finite and completable: you clear what's due and you're done. This is the only mode that awards mastery or moves an item's SRS stage. It awards XP and LP. When nothing is due the page says so and shows how long until the next item comes up.
 
-**Unranked** (`/reviews/practice`) is free practice. Pick any subject types and curriculum levels you've unlocked and drill them regardless of due date. It awards no XP and no mastery, and it never changes `srsStage`, `dueAt`, or `lastPromotedAt` — it cannot promote *or* demote. Answers are still written to `ReviewLog` (with `startedStage == endedStage`) and the per-item correct/incorrect counters still update, so accuracy stats stay honest.
+**Unranked** (`/reviews/practice`) is free practice. Pick any subject types and curriculum levels you've unlocked and drill them regardless of due date. It awards capped XP only (1 per correct, hard cap of 150/day) and no mastery. It never changes `srsStage`, `dueAt`, or `lastPromotedAt` — it cannot promote *or* demote. It never awards LP. Answers are still written to `ReviewLog` (with `startedStage == endedStage`) and the per-item correct/incorrect counters still update, so accuracy stats stay honest.
 
-The split exists because an unfiltered queue does not scale: with a few hundred started items, every session serves the entire collection and the queue can never empty. It also removes the XP exploit at the root, since the only mode that pays is the one you cannot re-enter at will.
+The split exists because an unfiltered queue does not scale: with a few hundred started items, every session serves the entire collection and the queue can never empty. The practice cap and lack of LP award remove the exploit, since the only mode that drives rank is the one you cannot re-enter at will.
 
 See `getReviewQueue` / `getUnrankedReviewQueue` in `src/server/queries/reviews.ts` and `commitReviewSession` / `commitUnrankedReviewSession` in `src/server/actions/reviews.ts`.
 
@@ -106,35 +107,21 @@ See `src/services/srs/typeUnlock.ts` for the constants and the status UI.
 
 ## XP and levels
 
-**XP events** are tracked as a log in the XpEvent table, keyed by session and reason (lesson, review, streak multiplier, etc.). The UI derives total XP from UserProfile.totalXp.
+See `docs/progression.md` for the complete XP and account level system. Summary: account level is a pure function of total XP via an unbounded, sublinear curve. XP awards are: 25 for lessons, 8 + 3*srsStage for correct ranked reviews (scaled to 10% if blocked by the 4-hour cooldown), 2 for incorrect, and 1 per correct unranked practice answer (capped at 150/day). Streak multiplier (+2% per day, capped at 1.5x) applies to ranked reviews only.
 
-**XP rewards:**
-- Lesson (stage 0 to 1): 25 XP, flat (learning is the highest-value act).
-- Correct review: 8 + 3 * srsStage XP. (Apprentice I: 11 XP; Enlightened: 32 XP.) Scaled to 10% (min 1 XP) if the 4-hour cooldown blocked the promotion.
-- Incorrect review: 2 XP (participation reward, not stage-scaled).
-- Streak multiplier: +2% per consecutive day active, capped at 1.5x at 25+ days. Applied to the session's total.
+See `src/services/xp/curve.ts` for the constants and formulas. The level cost table is printed by `npm run curve-report`.
 
-See `src/services/xp/curve.ts` for the constants and formulas.
+## Ranks (LP-driven)
 
-**Account level** progresses via an XP curve: quadratic early (levels 1-24), then linear (levels 25+), with a floor so no level costs less than ~160 XP. The inflection at level 24 smooths the transition. See `src/services/xp/curve.ts` for `xpForLevel(level)` and `levelFromTotalXp(totalXp)`.
+Rank is independent of account level and is driven by LP (League Points), not XP. See `docs/progression.md` for the complete LP system.
 
-## Ranks
+Nine tiers (IRON through CHALLENGER, in order). The first six are divided into four divisions each (IV lowest, I highest). MASTER and above share one unbounded LP pool with no divisions.
 
-Eight tiers (IRON through CHALLENGER) covering levels 1-100+:
+A user starts at IRON IV with 0 LP. Tiers are never lost — at division IV, LP floors at 0 and prevents demotion out of the tier. Apex tiers (MASTER+) have no demotion risk at all.
 
-| Tier | Levels | Divisions | Notes |
-|---|---|---|---|
-| IRON | 1-4 | IV to I | Lowest |
-| BRONZE | 5-12 | IV to I | |
-| SILVER | 13-22 | IV to I | |
-| GOLD | 23-34 | IV to I | |
-| PLATINUM | 35-48 | IV to I | |
-| DIAMOND | 49-64 | IV to I | |
-| MASTER | 65-79 | None | No divisions |
-| GRANDMASTER | 80-99 | None | |
-| CHALLENGER | 100+ | None | Open-ended |
+Only ranked reviews and exams move LP. Lessons and unranked practice do not.
 
-Each divided tier splits evenly into four divisions (IV, III, II, I); remainders go to I. Levels 0 or below clamp to IRON IV. See `src/services/xp/rank.ts`.
+See `src/services/rank/lp.ts` and `src/services/rank/tiers.ts`.
 
 ## Mastery
 
