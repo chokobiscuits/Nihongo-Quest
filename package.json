@@ -15,6 +15,7 @@
     "verify:reset": "tsx --env-file=.env scripts/verify-reset.ts",
     "verify:practice-cap": "tsx --env-file=.env scripts/verify-practice-cap.ts",
     "verify:achievements": "tsx --env-file=.env scripts/verify-achievements.ts",
+    "curve-report": "tsx scripts/curve-report.ts",
     "seed:download": "tsx scripts/seed/download.ts",
     "seed:transform": "tsx scripts/seed/transform.ts",
     "seed:load": "tsx scripts/seed/load.ts",

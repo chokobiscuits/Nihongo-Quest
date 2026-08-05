@@ -55,9 +55,6 @@ The tutorial system (trigger logic, completion tracking, UI) is fully built. The
 
 The dashboard shows items due today, this week, and "eventually," but does not project forward (e.g., "if you complete 20 reviews daily, you'll unlock kanji level 3 in 5 days"). Forecast is computable from the SRS stage distribution, but UI/UX design work is needed.
 
-### Achievement notifications
-
-Achievements are defined and checked (see `src/services/achievements/definitions.ts`), but there is no notification UI when they're earned. They're visible on the profile page only.
 
 ### Offline support
 

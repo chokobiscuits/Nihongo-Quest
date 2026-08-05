@@ -16,11 +16,11 @@ export const INCORRECT_ANSWER_XP = 2;
 
 /// Multiplier applied to a review answer that earned no stage progress,
 /// i.e. the 4-hour promotion cooldown blocked the promotion (see
-/// src/services/srs/transition.ts). Without this, an item could be reviewed
-/// back-to-back indefinitely at full XP: the queue never filters by dueAt,
-/// so the same items are always re-servable. Scaling unproductive reviews
-/// down to a token amount keeps "review anything, anytime" intact while
-/// removing the incentive to farm it.
+/// src/services/srs/transition.ts). Without this, the cooldown itself would
+/// be exploitable: the ranked queue filters by dueAt and empties normally,
+/// but an item at the cooldown boundary could re-enter the unranked practice
+/// queue indefinitely. Scaling unproductive reviews down to a token amount
+/// removes the incentive to cycle between the two.
 export const UNPRODUCTIVE_REVIEW_XP_FACTOR = 0.1;
 
 /// Unranked practice XP. Practice is deliberately worth far less than a
