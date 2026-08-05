@@ -148,14 +148,27 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
       where: { userId, startedAt: { not: null } },
       _count: true,
     }),
+    // KANJI and GRAMMAR are the only types that actually carry a jlpt tag.
+    // VOCAB was included here historically but contributes nothing: the JLPT
+    // source (davidluzgouveia/kanji-data) is kanji-only, so every one of the
+    // ~30k vocab rows has jlpt = null. Grammar was the real omission -- all
+    // 107 points are hand-authored with an explicit N-level, which is the one
+    // place the tag is authoritative rather than inferred from a kanji list.
     prisma.subject.groupBy({
       by: ["jlpt"],
-      where: { jlpt: { not: null }, type: { in: [SubjectType.KANJI, SubjectType.VOCAB] } },
+      where: { jlpt: { not: null }, type: { in: [SubjectType.KANJI, SubjectType.GRAMMAR] } },
       _count: true,
     }),
-    // JLPT-tagged items the user has passed — joined below via subjectId set.
+    // JLPT-tagged items the user has passed. Type filter mirrors the
+    // denominator groupBy above: without it the numerator would silently
+    // count a type the denominator excludes the moment anything else gains a
+    // jlpt tag, and the card would show progress above 100%.
     prisma.userSubject.findMany({
-      where: { userId, passedAt: { not: null }, subject: { jlpt: { not: null } } },
+      where: {
+        userId,
+        passedAt: { not: null },
+        subject: { jlpt: { not: null }, type: { in: [SubjectType.KANJI, SubjectType.GRAMMAR] } },
+      },
       select: { subject: { select: { jlpt: true } } },
     }),
     prisma.userSubject.findMany({
@@ -194,9 +207,10 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
   }));
   const srsDistributionTotal = srsDistribution.reduce((acc, r) => acc + r.count, 0);
 
-  // JLPT: denominators only count kanji+vocab rows that actually carry a
-  // jlpt tag (~2,211 kanji; most vocab is tagged too) — never the full
-  // laddered total, which would silently overstate coverage.
+  // JLPT: denominators only count rows that actually carry a jlpt tag (2,211
+  // kanji and 107 grammar points) — never the full laddered total, which
+  // would silently overstate coverage. Vocab carries no tag at all; see the
+  // groupBy above.
   const totalByLevel = new Map<number, number>();
   for (const row of jlptTotals) {
     if (row.jlpt !== null) totalByLevel.set(row.jlpt, (totalByLevel.get(row.jlpt) ?? 0) + row._count);
@@ -238,7 +252,8 @@ export async function getProgress(userId: string = APP_USER_ID): Promise<Progres
     srsDistribution,
     srsDistributionTotal,
     jlpt,
-    jlptTaggedNote: "Counts only JLPT-tagged kanji and vocabulary — most content has no N-level assigned.",
+    jlptTaggedNote:
+      "Counts JLPT-tagged kanji and grammar only. Vocabulary carries no N-level, so it is not included here.",
     level,
     activity,
     account: {
