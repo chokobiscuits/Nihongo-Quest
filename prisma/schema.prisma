@@ -257,6 +257,12 @@ model DailyActivity {
   lessonCount Int @default(0)
   xpEarned    Int @default(0)
 
+  /// Portion of `xpEarned` that came from unranked practice. Tracked
+  /// separately because practice is capped per day: its queue has no
+  /// due-date filter, so the same items are re-servable forever and an
+  /// uncapped award would be farmable. See UNRANKED_DAILY_XP_CAP.
+  unrankedXpEarned Int @default(0)
+
   @@id([userId, day])
 }
 

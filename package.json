@@ -13,6 +13,7 @@
     "postinstall": "prisma generate && git config core.hooksPath .githooks || true",
     "verify": "npm run typecheck && npm run test && npm run build",
     "verify:reset": "tsx --env-file=.env scripts/verify-reset.ts",
+    "verify:practice-cap": "tsx --env-file=.env scripts/verify-practice-cap.ts",
     "seed:download": "tsx scripts/seed/download.ts",
     "seed:transform": "tsx scripts/seed/transform.ts",
     "seed:load": "tsx scripts/seed/load.ts",

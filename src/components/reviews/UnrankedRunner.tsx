@@ -145,7 +145,13 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
         })()}
 
         <p className="text-caption text-text-faint">
-          Unranked practice: no XP, no mastery, and no change to any item&apos;s SRS stage.
+          {result.xpAwarded > 0 ? `+${result.xpAwarded} XP. ` : ""}
+          Practice never changes an item&apos;s SRS stage, mastery, or rank.
+          {result.xpCapped
+            ? " You've hit today's practice XP cap — keep drilling, it just won't pay XP until tomorrow."
+            : result.practiceXpRemaining > 0
+              ? ` ${result.practiceXpRemaining} practice XP left today.`
+              : ""}
         </p>
 
         {error && <p className="text-caption text-danger">{error}</p>}

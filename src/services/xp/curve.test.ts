@@ -14,6 +14,9 @@ import {
   LEVEL_COST_BASE,
   LEVEL_COST_K,
   LEVEL_COST_P,
+  xpForPracticeAnswer,
+  capPracticeXp,
+  UNRANKED_DAILY_XP_CAP,
 } from "./curve";
 
 describe("xpForLesson", () => {
@@ -172,5 +175,27 @@ describe("scaleXpForProductivity", () => {
       const farmed = scaleXpForProductivity(productive, false);
       expect(farmed).toBeLessThan(productive);
     }
+  });
+});
+
+describe("practice XP cap", () => {
+  it("awards the flat per-answer rate below the cap", () => {
+    expect(xpForPracticeAnswer()).toBe(1);
+    expect(capPracticeXp(20, 0)).toBe(20);
+  });
+
+  it("clamps to what remains of the daily cap", () => {
+    expect(capPracticeXp(50, UNRANKED_DAILY_XP_CAP - 10)).toBe(10);
+  });
+
+  it("awards nothing once the cap is spent", () => {
+    expect(capPracticeXp(50, UNRANKED_DAILY_XP_CAP)).toBe(0);
+    expect(capPracticeXp(50, UNRANKED_DAILY_XP_CAP + 100)).toBe(0);
+  });
+
+  it("is worth far less than a ranked review, so farming is never optimal", () => {
+    // A whole day of capped practice must not exceed a single modest
+    // ranked session, or the incentive inverts.
+    expect(UNRANKED_DAILY_XP_CAP).toBeLessThan(20 * 2 * xpForCorrectAnswer(2));
   });
 });
