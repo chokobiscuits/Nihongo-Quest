@@ -222,13 +222,24 @@ export type LessonBatchResult =
 /// items — one at a time, ordered by `Tutorial.order` ascending (see
 /// getNextRequiredTutorial). Optional triggered tutorials never block here;
 /// they surface as dismissible dashboard cards instead.
-export async function getLessonBatchOrTutorial(userId: string = APP_USER_ID): Promise<LessonBatchResult> {
+export async function getLessonBatchOrTutorial(
+  userId: string = APP_USER_ID,
+  onlyType?: SubjectType,
+): Promise<LessonBatchResult> {
   const tutorial = await getNextRequiredTutorial(userId);
   if (tutorial) return { kind: "tutorial", tutorial };
-  return { kind: "lessons", batch: await getLessonBatch(userId) };
+  return { kind: "lessons", batch: await getLessonBatch(userId, onlyType) };
 }
 
-export async function getLessonBatch(userId: string = APP_USER_ID): Promise<LessonSubject[]> {
+/// `onlyType` narrows the batch to a single subject type, backing
+/// `/lessons?type=kana` so a user can choose what to study rather than
+/// accepting whatever the algorithm picks. It is applied *after* every
+/// unlock rule, so it can only ever narrow what was already legitimately
+/// available — it can never surface a locked or out-of-level item.
+export async function getLessonBatch(
+  userId: string = APP_USER_ID,
+  onlyType?: SubjectType,
+): Promise<LessonSubject[]> {
   const profile = await getOrCreateProfile(userId);
   const settings = profile.settings as { lessonBatchSize?: number } | null;
   const batchSize = settings?.lessonBatchSize ?? undefined;
@@ -271,7 +282,9 @@ export async function getLessonBatch(userId: string = APP_USER_ID): Promise<Less
     return isSubjectUnlocked(subject, curriculumLevels[c.type], kanaResolved);
   });
 
-  const asLessonCandidates: (LessonCandidate & { source: (typeof unlocked)[number] })[] = unlocked.map((c) => ({
+  const scoped = onlyType ? unlocked.filter((c) => c.type === onlyType) : unlocked;
+
+  const asLessonCandidates: (LessonCandidate & { source: (typeof scoped)[number] })[] = scoped.map((c) => ({
     id: c.id,
     type: c.type as LessonSubjectType,
     level: c.level,

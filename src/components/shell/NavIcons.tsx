@@ -89,6 +89,19 @@ export function ReadingIcon(props: IconProps) {
   );
 }
 
+/// Graduation cap: learning something new. Deliberately not a book — the
+/// ReadingIcon above already owns that shape — and not a cycle, which is
+/// ReviewIcon's.
+export function LessonIcon(props: IconProps) {
+  return (
+    <svg {...BASE_PROPS} {...props}>
+      <path d="M12 4 2.5 9 12 14l9.5-5L12 4Z" />
+      <path d="M6.5 11.2V16c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-4.8" />
+      <path d="M21.5 9v5" />
+    </svg>
+  );
+}
+
 export function ReviewIcon(props: IconProps) {
   return (
     <svg {...BASE_PROPS} {...props}>
