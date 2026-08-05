@@ -23,6 +23,31 @@ export const INCORRECT_ANSWER_XP = 2;
 /// removing the incentive to farm it.
 export const UNPRODUCTIVE_REVIEW_XP_FACTOR = 0.1;
 
+/// Unranked practice XP. Practice is deliberately worth far less than a
+/// ranked review and is capped per day.
+///
+/// The reason is structural: getUnrankedReviewQueue has no `dueAt` filter
+/// (that is the whole point — you can drill anything, any time), so the same
+/// items are re-servable indefinitely. A per-answer award with no ceiling
+/// would therefore be farmable without limit. The cap is the load-bearing
+/// defence and is absolute regardless of how many items are re-served; the
+/// low per-answer rate and the absence of a streak multiplier are secondary.
+export const UNRANKED_XP_PER_CORRECT = 1;
+export const UNRANKED_DAILY_XP_CAP = 150;
+
+/// XP for one correct unranked practice answer, before the daily cap is
+/// applied by the caller.
+export function xpForPracticeAnswer(): number {
+  return UNRANKED_XP_PER_CORRECT;
+}
+
+/// Clamps a practice session's raw XP to what remains of today's cap.
+/// Returns 0 once the cap is spent.
+export function capPracticeXp(rawXp: number, alreadyEarnedToday: number): number {
+  const remaining = UNRANKED_DAILY_XP_CAP - alreadyEarnedToday;
+  return Math.max(0, Math.min(rawXp, remaining));
+}
+
 /// Streak multiplier growth rate: +2% per consecutive day active.
 export const STREAK_MULTIPLIER_PER_DAY = 0.02;
 /// Streak multiplier cap, reached at 25 days (1 + 25 * 0.02 = 1.5).

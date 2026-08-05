@@ -4,7 +4,16 @@ import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { computeTransition } from "@/services/srs/transition";
-import { xpForCorrectAnswer, xpForIncorrectAnswer, scaleXpForProductivity, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
+import {
+  xpForCorrectAnswer,
+  xpForIncorrectAnswer,
+  scaleXpForProductivity,
+  streakMultiplier,
+  levelFromTotalXp,
+  xpForPracticeAnswer,
+  capPracticeXp,
+  UNRANKED_DAILY_XP_CAP,
+} from "@/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { resolveSession, outranks, type RankState } from "@/services/rank/lp";
 import { parseTier } from "@/services/rank/tiers";
@@ -373,20 +382,28 @@ export interface CommitUnrankedSessionResult {
   /// Per-item correct/total, so the summary can show what needs work. No
   /// stage data: unranked never moves an item's stage.
   itemResults: { userSubjectId: string; correct: number; total: number }[];
+  /// XP actually awarded, after today's practice cap. Zero once the cap is
+  /// spent.
+  xpAwarded: number;
+  /// True when the cap swallowed some or all of this session's XP, so the
+  /// summary can explain why practice stopped paying.
+  xpCapped: boolean;
+  /// Practice XP remaining today after this session.
+  practiceXpRemaining: number;
 }
 
 /// Commits an UNRANKED (practice) session. Deliberately does far less than
-/// commitReviewSession: it records that the practice happened and nothing
-/// else.
+/// commitReviewSession: it records that the practice happened, awards a
+/// small capped amount of XP, and nothing else.
 ///
 /// Specifically it does NOT touch:
-/// - XP or account level (unranked is not a progression path)
 /// - masteryXp or masteryLevel (mastery never decreases, so awarding it here
 ///   would be farmable by simply practicing the same item repeatedly)
 /// - srsStage, dueAt, lastPromotedAt, passedAt, burnedAt (no promotion, and
 ///   crucially no demotion — practicing a weak item must be risk-free, or
 ///   users avoid the items they most need to drill)
-/// - streak / DailyActivity XP
+/// - LP or rank (performance is measured on the ranked ladder only)
+/// - the streak multiplier (practice XP is flat, so it cannot compound)
 ///
 /// It DOES log each answer to ReviewLog with startedStage == endedStage, so
 /// per-item accuracy stats stay honest, and it records a Session row for
@@ -413,6 +430,18 @@ export async function commitUnrankedReviewSession(
   });
   const stageById = new Map(userSubjects.map((u) => [u.id, u.srsStage]));
 
+  // Practice XP is flat per correct answer and clamped to what remains of
+  // today's cap. Read the day's row first so the cap is enforced against
+  // real history rather than this session alone.
+  const todayActivity = await prisma.dailyActivity.findUnique({
+    where: { userId_day: { userId, day: today } },
+    select: { unrankedXpEarned: true },
+  });
+  const practiceXpAlready = todayActivity?.unrankedXpEarned ?? 0;
+  const rawPracticeXp = answers.filter((a) => a.correct).length * xpForPracticeAnswer();
+  const xpAwarded = capPracticeXp(rawPracticeXp, practiceXpAlready);
+  const xpCapped = xpAwarded < rawPracticeXp;
+
   const correctAnswers = answers.filter((a) => a.correct).length;
   const accuracyPct = answers.length === 0 ? 100 : Math.round((correctAnswers / answers.length) * 100);
   const itemEverWrong = new Map<string, boolean>();
@@ -433,7 +462,7 @@ export async function commitUnrankedReviewSession(
         totalItems: userSubjectIds.length,
         correctItems: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
         scorePct: accuracyPct,
-        xpAwarded: 0,
+        xpAwarded,
       },
     });
 
@@ -476,13 +505,36 @@ export async function commitUnrankedReviewSession(
       });
     }
 
-    // Practice still counts as showing up for the day's activity, but
-    // contributes no XP.
+    // Practice counts as showing up for the day, and its XP is tracked
+    // separately from ranked XP so the daily cap can be enforced against it.
     await tx.dailyActivity.upsert({
       where: { userId_day: { userId, day: today } },
-      update: { reviewCount: { increment: userSubjectIds.length } },
-      create: { userId, day: today, reviewCount: userSubjectIds.length, xpEarned: 0 },
+      update: {
+        reviewCount: { increment: userSubjectIds.length },
+        xpEarned: { increment: xpAwarded },
+        unrankedXpEarned: { increment: xpAwarded },
+      },
+      create: {
+        userId,
+        day: today,
+        reviewCount: userSubjectIds.length,
+        xpEarned: xpAwarded,
+        unrankedXpEarned: xpAwarded,
+      },
     });
+
+    if (xpAwarded > 0) {
+      await tx.userProfile.update({
+        where: { userId },
+        data: {
+          totalXp: BigInt(Number(profile.totalXp) + xpAwarded),
+          accountLevel: levelFromTotalXp(Number(profile.totalXp) + xpAwarded),
+        },
+      });
+      await tx.xpEvent.create({
+        data: { userId, amount: xpAwarded, reason: "practice", sessionId: session.id },
+      });
+    }
 
     return { sessionId: session.id, itemResults };
   });
@@ -501,6 +553,9 @@ export async function commitUnrankedReviewSession(
     accuracyPct,
     itemsCorrect: userSubjectIds.filter((id) => !itemEverWrong.get(id)).length,
     itemResults: result.itemResults,
+    xpAwarded,
+    xpCapped,
+    practiceXpRemaining: Math.max(0, UNRANKED_DAILY_XP_CAP - (practiceXpAlready + xpAwarded)),
   };
 }
 
