@@ -11,6 +11,8 @@ import {
   type ReviewAnswerRecord,
 } from "@/server/actions/reviews";
 import type { ReviewSubject } from "@/server/queries/reviews";
+import { CelebrationModal } from "@/components/celebration/CelebrationModal";
+import { useCelebrationQueue } from "@/components/celebration/useCelebrationQueue";
 
 export interface UnrankedRunnerProps {
   items: ReviewSubject[];
@@ -31,6 +33,7 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
   const [result, setResult] = useState<CommitUnrankedSessionResult | null>(null);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const celebration = useCelebrationQueue();
 
   // Held so a failed commit can be retried without losing the session's
   // answers — the quiz component is already unmounted by this point.
@@ -43,6 +46,11 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
       const res = await commitUnrankedReviewSession({ answers });
       setResult(res);
       setPhase("done");
+      // Practice moves no rank and no level, but it can still cross an
+      // achievement (first practice session, item-count milestones).
+      celebration.enqueue(
+        res.newAchievements.map((a) => ({ kind: "achievement" as const, ...a })),
+      );
     } catch {
       setError("Something went wrong saving this practice session. Nothing was lost — your SRS progress is untouched either way.");
     } finally {
@@ -111,6 +119,9 @@ export function UnrankedRunner({ items, pickerHref }: UnrankedRunnerProps) {
   if (phase === "done" && result) {
     return (
       <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+        {celebration.active && (
+          <CelebrationModal events={celebration.events} onDismissAll={celebration.dismiss} />
+        )}
         <h2 className="text-h2 font-semibold text-text">Practice complete</h2>
         <p className="text-body text-text-muted">
           Practiced {result.itemsReviewed} item{result.itemsReviewed === 1 ? "" : "s"}.

@@ -33,7 +33,21 @@ export interface DemotionEvent {
   lpDelta: number;
 }
 
-export type CelebrationEvent = LevelUpEvent | DemotionEvent | PromotionEvent | NewRankEvent;
+export interface AchievementEvent {
+  kind: "achievement";
+  id: string;
+  titleJa: string;
+  titleEn: string;
+  description: string;
+  accent: string;
+}
+
+export type CelebrationEvent =
+  | LevelUpEvent
+  | DemotionEvent
+  | AchievementEvent
+  | PromotionEvent
+  | NewRankEvent;
 
 /// Fixed queue order: Level Up -> Demotion -> Promotion -> New Rank, so the
 /// session always ends on its biggest moment. Demotion sits early so a
@@ -45,8 +59,9 @@ export type CelebrationEvent = LevelUpEvent | DemotionEvent | PromotionEvent | N
 const KIND_ORDER: Record<CelebrationEvent["kind"], number> = {
   levelup: 0,
   demotion: 1,
-  promotion: 2,
-  newrank: 3,
+  achievement: 2,
+  promotion: 3,
+  newrank: 4,
 };
 
 export function sortCelebrationEvents(events: CelebrationEvent[]): CelebrationEvent[] {

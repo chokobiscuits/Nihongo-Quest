@@ -16,6 +16,15 @@ const ZERO_STATS: AchievementStats = {
   accountMasteryLevel: 0,
   bestSessionAccuracyPct: 0,
   largestSessionItemCount: 0,
+  lessonSessionCount: 0,
+  reviewSessionCount: 0,
+  practiceSessionCount: 0,
+  activeDayCount: 0,
+  lpGainedTotal: 0,
+  divisionPromotionCount: 0,
+  tierPromotionCount: 0,
+  hasRecoveredDivision: false,
+  bestLargeSessionAccuracyPct: 0,
 };
 
 /// A stats object with generous values for every axis, so every achievement's
@@ -35,6 +44,15 @@ const MAX_STATS: AchievementStats = {
   accountMasteryLevel: 100,
   bestSessionAccuracyPct: 100,
   largestSessionItemCount: 500,
+  lessonSessionCount: 500,
+  reviewSessionCount: 500,
+  practiceSessionCount: 500,
+  activeDayCount: 500,
+  lpGainedTotal: 10000,
+  divisionPromotionCount: 100,
+  tierPromotionCount: 20,
+  hasRecoveredDivision: true,
+  bestLargeSessionAccuracyPct: 100,
 };
 
 describe("ACHIEVEMENTS", () => {

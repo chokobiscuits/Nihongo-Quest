@@ -20,6 +20,27 @@ export interface AchievementStats {
   /// Best single-session accuracy/size seen, from Session rows.
   bestSessionAccuracyPct: number; // 0-100, from any completed session
   largestSessionItemCount: number; // items in the largest completed session
+
+  // ------------------------------------------------- Early-game / activity
+  /// Completed sessions by kind, so the first of each can be celebrated.
+  lessonSessionCount: number;
+  reviewSessionCount: number;
+  practiceSessionCount: number;
+  /// Distinct days with any completed session — a gentler habit signal than
+  /// a consecutive streak, which resets on a single missed day.
+  activeDayCount: number;
+
+  // ------------------------------------------------------------- LP / rank
+  /// Total LP ever gained (losses excluded), so the first gain is catchable.
+  lpGainedTotal: number;
+  /// Division and tier promotions recorded in LpEvent history.
+  divisionPromotionCount: number;
+  tierPromotionCount: number;
+  /// True once a division has been regained after losing one — the
+  /// "bounce back" moment, which only exists now that rank can fall.
+  hasRecoveredDivision: boolean;
+  /// Best clean-item accuracy over a session of at least 20 items.
+  bestLargeSessionAccuracyPct: number;
 }
 
 export type AchievementAccent =
@@ -327,5 +348,140 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     target: 50,
     accent: "silver",
     progress: (s) => s.largestSessionItemCount,
+  },
+
+  // ------------------------------------------------------------ Onboarding
+  // The roster skewed heavily late (kanji-1000, vocab-5000, streak-365):
+  // between "learn one item" and level 10 there was almost nothing to hit.
+  // These cover the first hour rather than the first year.
+  {
+    id: "first-lesson",
+    titleJa: "初授業",
+    titleEn: "Complete your first lesson",
+    description: "Finish a lesson session. This is where every item starts.",
+    target: 1,
+    accent: "bronze",
+    progress: (s) => s.lessonSessionCount,
+  },
+  {
+    id: "first-review",
+    titleJa: "初復習",
+    titleEn: "Complete your first review session",
+    description: "Reviews are the ranked track — they move your XP and your rank.",
+    target: 1,
+    accent: "bronze",
+    progress: (s) => s.reviewSessionCount,
+  },
+  {
+    id: "first-practice",
+    titleJa: "初自主練",
+    titleEn: "Complete your first practice session",
+    description: "Unranked practice: drill anything, any time, with nothing at stake.",
+    target: 1,
+    accent: "bronze",
+    progress: (s) => s.practiceSessionCount,
+  },
+  {
+    id: "items-10",
+    titleJa: "十歩",
+    titleEn: "Learn 10 items",
+    description: "Reach Guru on ten radicals, kanji or vocabulary.",
+    target: 10,
+    accent: "bronze",
+    progress: (s) => s.itemsLearned,
+  },
+  {
+    id: "items-50",
+    titleJa: "五十歩",
+    titleEn: "Learn 50 items",
+    description: "Reach Guru on fifty radicals, kanji or vocabulary.",
+    target: 50,
+    accent: "silver",
+    progress: (s) => s.itemsLearned,
+  },
+  {
+    id: "first-radical",
+    titleJa: "部首の一歩",
+    titleEn: "Learn your first radical",
+    description: "Radicals are the components every kanji is built from.",
+    target: 1,
+    accent: "bronze",
+    progress: (s) => s.radicalsLearned,
+  },
+  {
+    id: "radicals-10-guru",
+    titleJa: "漢字への鍵",
+    titleEn: "Guru 10 radicals",
+    description: "Ten radicals at Guru unlocks kanji lessons.",
+    target: 10,
+    accent: "silver",
+    progress: (s) => s.radicalsLearned,
+  },
+  {
+    id: "active-3-days",
+    titleJa: "三日坊主脱出",
+    titleEn: "Study on 3 separate days",
+    description: "Any three days with a completed session — they need not be consecutive.",
+    target: 3,
+    accent: "bronze",
+    progress: (s) => s.activeDayCount,
+  },
+  {
+    id: "streak-3",
+    titleJa: "三日連続",
+    titleEn: "Reach a 3-day streak",
+    description: "Three consecutive days of study, on the way to seven.",
+    target: 3,
+    accent: "bronze",
+    progress: (s) => s.currentStreak,
+  },
+
+  // ------------------------------------------------------------- LP / rank
+  // New axes, only meaningful since rank became performance-driven rather
+  // than a projection of level.
+  {
+    id: "first-lp",
+    titleJa: "初昇点",
+    titleEn: "Gain your first LP",
+    description: "Beat 80% accuracy on a ranked review to earn League Points.",
+    target: 1,
+    accent: "bronze",
+    progress: (s) => s.lpGainedTotal,
+  },
+  {
+    id: "first-promotion",
+    titleJa: "初昇格",
+    titleEn: "Earn your first promotion",
+    description: "Climb a division by keeping your review accuracy above 80%.",
+    target: 1,
+    accent: "silver",
+    progress: (s) => s.divisionPromotionCount,
+  },
+  {
+    id: "first-tier",
+    titleJa: "階級突破",
+    titleEn: "Reach a new tier",
+    description: "Promote out of Iron. Tiers are never lost once earned.",
+    target: 1,
+    accent: "gold",
+    progress: (s) => s.tierPromotionCount,
+  },
+  {
+    id: "bounce-back",
+    titleJa: "巻き返し",
+    titleEn: "Regain a lost division",
+    description: "Drop a division, then win it back. Rank can fall — and recover.",
+    target: 1,
+    accent: "silver",
+    progress: (s) => (s.hasRecoveredDivision ? 1 : 0),
+  },
+  {
+    id: "clean-sweep",
+    titleJa: "完全制覇",
+    titleEn: "100% on a 20-item review",
+    description: "A perfect clean pass over twenty or more items in one session.",
+    target: 100,
+    accent: "gold",
+    progress: (s) => s.bestLargeSessionAccuracyPct,
   },
 ];
