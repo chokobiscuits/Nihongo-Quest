@@ -11,10 +11,9 @@ import {
   LESSON_XP,
   REVIEW_CORRECT_BASE_XP,
   REVIEW_CORRECT_PER_STAGE_XP,
+  LEVEL_COST_BASE,
   LEVEL_COST_K,
   LEVEL_COST_P,
-  LEVEL_COST_INFLECTION,
-  LEVEL_COST_FLOOR,
 } from "./curve";
 
 describe("xpForLesson", () => {
@@ -54,39 +53,49 @@ describe("streakMultiplier", () => {
 });
 
 describe("xpForLevel", () => {
-  it("matches the piecewise cost curve constants", () => {
-    expect(LEVEL_COST_K).toBe(95);
-    expect(LEVEL_COST_P).toBe(1.38);
-    expect(LEVEL_COST_INFLECTION).toBe(24);
-    expect(LEVEL_COST_FLOOR).toBe(160);
+  it("matches the cost curve constants", () => {
+    expect(LEVEL_COST_BASE).toBe(400);
+    expect(LEVEL_COST_K).toBe(12);
+    expect(LEVEL_COST_P).toBe(0.85);
   });
 
-  it("never costs less than the floor", () => {
-    for (let level = 1; level <= 150; level++) {
-      expect(xpForLevel(level)).toBeGreaterThanOrEqual(LEVEL_COST_FLOOR);
-    }
+  it("is base + K * L^P", () => {
+    expect(xpForLevel(1)).toBe(Math.round(400 + 12 * Math.pow(1, 0.85)));
+    expect(xpForLevel(10)).toBe(Math.round(400 + 12 * Math.pow(10, 0.85)));
+    expect(xpForLevel(500)).toBe(Math.round(400 + 12 * Math.pow(500, 0.85)));
   });
 
-  it("is quadratic-ish (Math.round(K * L^P)) up to the inflection point, floored", () => {
-    expect(xpForLevel(1)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(1, 1.38))));
-    expect(xpForLevel(10)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(10, 1.38))));
-    expect(xpForLevel(24)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(95 * Math.pow(24, 1.38))));
-  });
-
-  it("is linear past the inflection point, continuing the tangent slope", () => {
-    const atInflection = 95 * Math.pow(24, 1.38);
-    const slope = 95 * 1.38 * Math.pow(24, 0.38);
-    expect(xpForLevel(25)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(atInflection + slope * 1)));
-    expect(xpForLevel(50)).toBe(Math.max(LEVEL_COST_FLOOR, Math.round(atInflection + slope * 26)));
+  // Pinned table: retuning the curve should be a visible, deliberate diff
+  // rather than a silent drift in pacing.
+  it("costs a pinned amount at representative levels", () => {
+    expect(xpForLevel(1)).toBe(412);
+    expect(xpForLevel(10)).toBe(485);
+    expect(xpForLevel(50)).toBe(734);
+    expect(xpForLevel(100)).toBe(1001);
+    expect(xpForLevel(500)).toBe(2762);
   });
 
   it("is monotonically non-decreasing", () => {
     let previous = 0;
-    for (let level = 1; level <= 200; level++) {
+    for (let level = 1; level <= 2000; level++) {
       const cost = xpForLevel(level);
       expect(cost).toBeGreaterThanOrEqual(previous);
       previous = cost;
     }
+  });
+
+  // The defining property of "no hard scaling": each level costs more than
+  // the last, but by a *shrinking* amount, so the curve never walls off.
+  it("has a decaying growth rate (sublinear, never a wall)", () => {
+    const delta = (l: number) => xpForLevel(l + 1) - xpForLevel(l);
+    expect(delta(100)).toBeLessThan(delta(10));
+    expect(delta(1000)).toBeLessThan(delta(100));
+  });
+
+  it("keeps very high levels reachable", () => {
+    // A level should never cost more than a few days of solid play.
+    // ~2925 XP is an active day; level 1000 must stay under a week of that.
+    expect(xpForLevel(1000)).toBeLessThan(2925 * 7);
   });
 });
 
@@ -116,8 +125,27 @@ describe("levelFromTotalXp", () => {
     expect(levelFromTotalXp(0)).toBe(1);
   });
 
-  it("local-user's 353 xp still resolves to level 2 (no migration regression)", () => {
-    expect(levelFromTotalXp(353)).toBe(2);
+  it("resolves partial progress to the level actually paid for", () => {
+    // 412 XP buys exactly level 2 (xpForLevel(1) === 412); one short does not.
+    expect(levelFromTotalXp(411)).toBe(1);
+    expect(levelFromTotalXp(412)).toBe(2);
+  });
+
+  it("handles very large totals without walking level by level", () => {
+    // Guards the prefix-sum/binary-search implementation: the old linear
+    // walk was O(n^2) and would crawl here. Levels are unbounded now.
+    const deep = totalXpToReach(5000);
+    expect(levelFromTotalXp(deep)).toBe(5000);
+    expect(levelFromTotalXp(deep - 1)).toBe(4999);
+  });
+
+  it("is monotonic in totalXp", () => {
+    let previous = 1;
+    for (let xp = 0; xp < 200_000; xp += 997) {
+      const level = levelFromTotalXp(xp);
+      expect(level).toBeGreaterThanOrEqual(previous);
+      previous = level;
+    }
   });
 });
 

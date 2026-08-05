@@ -63,45 +63,80 @@ export function streakMultiplier(streakDays: number): number {
   return Math.min(1 + streakDays * STREAK_MULTIPLIER_PER_DAY, STREAK_MULTIPLIER_CAP);
 }
 
-// Level cost curve: quadratic-ish early (levels 1..INFLECTION), linear after
-// the inflection point (matching the tangent slope at INFLECTION so the
-// curve has no kink), with a floor so no level ever costs less than roughly
-// one session's worth of XP.
-export const LEVEL_COST_K = 95;
-export const LEVEL_COST_P = 1.38;
-export const LEVEL_COST_INFLECTION = 24;
-export const LEVEL_COST_FLOOR = 160;
+// Level cost curve. Levels are unbounded and deliberately do NOT hard-scale:
+// cost is a flat base plus a *sublinear* term, so the per-level price rises
+// but its rate of rise decays. There is no cap, no inflection point and no
+// wall — level 1000 is a long grind, never an impossibility.
+//
+// The shape is chosen so one solid session is roughly one level early on and
+// still a meaningful fraction of a level much later. Against a modest day
+// (~685 XP: a 5-item lesson batch plus 20 reviews) that is ~1.7 levels at
+// L1, ~0.9 at L50 and ~0.25 at L500.
+//
+// The previous curve was quadratic to L24 then linear, which had the
+// opposite problem at both ends: level 10 arrived in under two weeks while
+// level 100 needed 1.9M XP and was effectively unreachable.
+export const LEVEL_COST_BASE = 400;
+export const LEVEL_COST_K = 12;
+export const LEVEL_COST_P = 0.85;
 
-/// XP required to go from level L to level L+1.
+/// XP required to go from level L to level L+1. Defined for every L >= 1;
+/// there is no maximum level.
 export function xpForLevel(level: number): number {
-  if (level <= LEVEL_COST_INFLECTION) {
-    return Math.max(LEVEL_COST_FLOOR, Math.round(LEVEL_COST_K * Math.pow(level, LEVEL_COST_P)));
+  return Math.round(LEVEL_COST_BASE + LEVEL_COST_K * Math.pow(level, LEVEL_COST_P));
+}
+
+// Prefix sums of xpForLevel, extended lazily. PREFIX[i] is the total XP
+// needed to reach level i+1, so PREFIX[0] === 0 (level 1 costs nothing to
+// reach). Cached because levels are unbounded now: the old implementation
+// re-summed from level 1 on every call and levelFromTotalXp called it in a
+// loop, making the pair O(n^2) in the level. That was survivable with a
+// hard cap and is not without one.
+const PREFIX: number[] = [0];
+
+function extendPrefixTo(level: number): void {
+  for (let l = PREFIX.length; l < level; l++) {
+    // PREFIX[l] = PREFIX[l-1] + cost of level l (1-indexed levels).
+    PREFIX[l] = PREFIX[l - 1] + xpForLevel(l);
   }
-  const atInflection = LEVEL_COST_K * Math.pow(LEVEL_COST_INFLECTION, LEVEL_COST_P);
-  const slopeAtInflection = LEVEL_COST_K * LEVEL_COST_P * Math.pow(LEVEL_COST_INFLECTION, LEVEL_COST_P - 1);
-  const cost = atInflection + slopeAtInflection * (level - LEVEL_COST_INFLECTION);
-  return Math.max(LEVEL_COST_FLOOR, Math.round(cost));
 }
 
 /// Total XP needed to reach level L from level 1, i.e. the sum of
 /// xpForLevel(1..L-1). totalXpToReach(1) === 0.
 export function totalXpToReach(level: number): number {
-  let total = 0;
-  for (let l = 1; l < level; l++) {
-    total += xpForLevel(l);
-  }
-  return total;
+  if (level <= 1) return 0;
+  extendPrefixTo(level);
+  return PREFIX[level - 1];
 }
 
 /// Inverse of totalXpToReach: the highest level whose XP requirement has
-/// been fully met by `totalXp`.
+/// been fully met by `totalXp`. Binary search over the cached prefix sums.
 export function levelFromTotalXp(totalXp: number): number {
-  let level = 1;
-  // totalXpToReach grows, so a linear walk is fine at these level counts;
-  // switch to a closed-form/binary search first if this ever needs to run
-  // hot over very high levels.
-  while (totalXpToReach(level + 1) <= totalXp) {
-    level += 1;
+  if (totalXp <= 0) return 1;
+
+  // Grow the cache by doubling until it covers totalXp, then binary search
+  // it. Doubling keeps this O(log n) amortised rather than walking level by
+  // level.
+  let hi = Math.max(2, PREFIX.length);
+  extendPrefixTo(hi);
+  while (PREFIX[hi - 1] <= totalXp) {
+    hi *= 2;
+    extendPrefixTo(hi);
   }
-  return level;
+
+  // PREFIX[i] is the cost to reach level i+1; find the largest i with
+  // PREFIX[i] <= totalXp.
+  let lo = 0;
+  let best = 0;
+  let high = hi - 1;
+  while (lo <= high) {
+    const mid = (lo + high) >>> 1;
+    if (PREFIX[mid] <= totalXp) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return best + 1;
 }
