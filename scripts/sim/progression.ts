@@ -27,7 +27,8 @@ import { commitReviewSession, type ReviewAnswerRecord } from "../../src/server/a
 import { skipKana, unskipKana } from "../../src/server/actions/kana";
 import { isKanaResolvedFor } from "../../src/services/srs/kana-gate";
 import { GURU_STAGE, BURNED_STAGE, intervalForStage, STAGES } from "../../src/services/srs/stages";
-import { xpForCorrectAnswer } from "../../src/services/xp/curve";
+import { xpForCorrectAnswer, levelFromTotalXp } from "../../src/services/xp/curve";
+import { getCurriculumLevels } from "../../src/server/queries/curriculum";
 import { masteryXpForAnswer, masteryLevelFromXp } from "../../src/services/xp/mastery";
 import { rankForLevel } from "../../src/services/xp/rank";
 import { SubjectType } from "../../src/generated/prisma/enums";
@@ -917,19 +918,12 @@ async function main() {
     // === H. Level advancement ================================================
     const SECTION_H = "H. Level advancement";
     {
-      // Reuse the account's current level and check that guru'ing 90% of that
-      // level's kanji advances it. Use a fresh, high level to avoid
-      // interference with earlier sections' state.
-      const targetLevel = 9;
-      const { totalXpToReach: totalXpToReachForLevel } = await import("../../src/services/xp/curve");
-      // Set both accountLevel and totalXp consistently: any subsequent
-      // commit recomputes accountLevel from totalXp via levelFromTotalXp, so
-      // leaving totalXp at its old (lower-level) value would immediately
-      // regress accountLevel back down on the very next commit.
-      await prisma.userProfile.update({
-        where: { userId: SIM_USER },
-        data: { accountLevel: targetLevel, totalXp: BigInt(totalXpToReachForLevel(targetLevel)) },
-      });
+      // Guru'ing 90% of a level's kanji advances the KANJI *curriculum*
+      // level, which is what gates access to the next level's content.
+      // It deliberately does NOT touch accountLevel: that is a pure function
+      // of totalXp. The two used to share one column, which let a review
+      // raise accountLevel and a later lesson commit silently roll it back.
+      const targetLevel = 1;
 
       const levelKanji = await prisma.subject.findMany({ where: { type: SubjectType.KANJI, level: targetLevel }, select: { id: true } });
       const need = Math.ceil(levelKanji.length * 0.9);
@@ -949,12 +943,24 @@ async function main() {
         });
       }
 
-      // Trigger recomputeLevelFromMastery by committing a trivial review on
-      // one of the just-guru'd items (any commit re-checks the level).
+      const levelsAfter = await getCurriculumLevels(SIM_USER);
+      assertTrue(
+        SECTION_H,
+        "kanji curriculum level advances when 90% of that level's kanji are at Guru+",
+        levelsAfter[SubjectType.KANJI] > targetLevel,
+        `level ${targetLevel} -> ${levelsAfter[SubjectType.KANJI]} (${need}/${levelKanji.length} at Guru)`,
+      );
+
+      // The XP level must be untouched by that: accountLevel is a pure
+      // function of totalXp. This is the regression guard for the bug where
+      // the two shared a column and a later lesson commit would roll the
+      // level back down.
+      const profileBeforeXpCheck = await getOrCreateProfile(SIM_USER);
+      const xpLevelBefore = profileBeforeXpCheck.accountLevel;
       const trigger = toGuru[0];
       await backdate([trigger], 5);
       const triggerRow = await prisma.userSubject.findUniqueOrThrow({ where: { userId_subjectId: { userId: SIM_USER, subjectId: trigger } } });
-      await commitReviewSession(
+      const triggerCommit = await commitReviewSession(
         {
           answers: [
             { userSubjectId: triggerRow.id, questionType: "MEANING", correct: true, incorrectCount: 0 },
@@ -964,13 +970,20 @@ async function main() {
         SIM_USER,
       );
 
-      const profileAfterLevelUp = await getOrCreateProfile(SIM_USER);
+      const profileAfterTrigger = await getOrCreateProfile(SIM_USER);
+      assertEqual(
+        SECTION_H,
+        "accountLevel stays a pure function of totalXp (curriculum rule never writes it)",
+        profileAfterTrigger.accountLevel,
+        levelFromTotalXp(Number(profileAfterTrigger.totalXp)),
+      );
       assertTrue(
         SECTION_H,
-        "user level advances when 90% of that level's kanji are at Guru+",
-        profileAfterLevelUp.accountLevel > targetLevel,
-        `before: ${targetLevel}, after: ${profileAfterLevelUp.accountLevel}`,
+        "accountLevel never regresses across a commit",
+        profileAfterTrigger.accountLevel >= xpLevelBefore,
+        `before: ${xpLevelBefore}, after: ${profileAfterTrigger.accountLevel}`,
       );
+      void triggerCommit;
     }
   } finally {
     await wipeSimUser();

@@ -8,7 +8,8 @@ import { xpForCorrectAnswer, xpForIncorrectAnswer, scaleXpForProductivity, strea
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
-import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
+import { isSubjectUnlocked } from "@/services/srs/unlock";
+import { getCurriculumLevels } from "@/server/queries/curriculum";
 import { SubjectType } from "@/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
 
@@ -274,17 +275,14 @@ export async function commitReviewSession(
     return { sessionId: session.id, itemOutcomes };
   });
 
-  // Re-evaluate the account level off freshly-Guru'd kanji (nextUserLevel),
-  // then find newly-unlocked subjects at whichever level is now current.
-  const levelAfterMastery = await recomputeLevelFromMastery(userId, newLevel);
-  const newlyUnlockedSubjectIds = await findNewlyUnlockedSubjects(userId, levelAfterMastery);
-
-  if (levelAfterMastery !== newLevel) {
-    await prisma.userProfile.update({
-      where: { userId },
-      data: { accountLevel: levelAfterMastery, rank: rankForLevel(levelAfterMastery).tier, rankDivision: rankForLevel(levelAfterMastery).division },
-    });
-  }
+  // Freshly-Guru'd kanji may have just pushed the KANJI *curriculum* level
+  // forward (the 90%-at-Guru rule), which is what gates newly-unlocked
+  // subjects. This is deliberately kept separate from `accountLevel`:
+  // accountLevel is a pure function of totalXp and nothing else writes it.
+  // Conflating the two used to let a review raise accountLevel and a later
+  // lesson commit — recomputing from totalXp alone — silently roll it back.
+  const unlockLevel = await curriculumLevelForUnlocks(userId);
+  const newlyUnlockedSubjectIds = await findNewlyUnlockedSubjects(userId, unlockLevel);
 
   try {
     revalidatePath("/lessons");
@@ -296,18 +294,16 @@ export async function commitReviewSession(
     // what actually matters.
   }
 
-  const finalRank = rankForLevel(levelAfterMastery);
-
   return {
     sessionId: result.sessionId,
     xpAwarded,
     totalXp: String(newTotalXp),
     previousLevel,
-    newLevel: levelAfterMastery,
-    leveledUp: levelAfterMastery > previousLevel,
+    newLevel,
+    leveledUp: newLevel > previousLevel,
     previousRank,
-    newRank: finalRank,
-    rankPromoted: finalRank.tier !== previousRank.tier || finalRank.division !== previousRank.division,
+    newRank,
+    rankPromoted: newRank.tier !== previousRank.tier || newRank.division !== previousRank.division,
     newlyUnlockedSubjectIds,
     itemOutcomes: result.itemOutcomes,
     itemsReviewed: userSubjectIds.length,
@@ -457,23 +453,22 @@ export async function commitUnrankedReviewSession(
   };
 }
 
-/// After a review commit, some items may have just reached Guru at the
-/// user's *current* level — re-check whether that pushes the account level
-/// forward (90% of the level's kanji at Guru+), independent of whatever the
-/// XP curve alone produced.
-async function recomputeLevelFromMastery(userId: string, currentLevel: number): Promise<number> {
-  const levelKanji = await prisma.subject.findMany({
-    where: { type: SubjectType.KANJI, level: currentLevel },
-    select: { id: true },
-  });
-  if (levelKanji.length === 0) return currentLevel;
-
-  const stages = await prisma.userSubject.findMany({
-    where: { userId, subjectId: { in: levelKanji.map((k) => k.id) } },
-    select: { srsStage: true },
-  });
-
-  return nextUserLevel(currentLevel, stages.map((s) => ({ srsStage: s.srsStage })));
+/// The level to gate newly-unlocked subjects against, after this commit.
+///
+/// This is the KANJI *curriculum* level (see getCurriculumLevels), not the
+/// account level. The 90%-of-this-level's-kanji-at-Guru rule that
+/// `nextUserLevel` implements is a curriculum concept: it decides which
+/// level's content you have earned access to. Account level is XP, and the
+/// two must not be conflated.
+///
+/// `getCurriculumLevels` already walks the ladder from level 1 and returns
+/// the highest contiguous level whose 90% threshold is met, so it subsumes
+/// the single-level `nextUserLevel` step this used to do by hand — and it
+/// grades the right level's kanji, which the old code did not when the
+/// account level had drifted away from the curriculum level.
+async function curriculumLevelForUnlocks(userId: string): Promise<number> {
+  const levels = await getCurriculumLevels(userId);
+  return levels[SubjectType.KANJI];
 }
 
 /// Same shape as the lesson commit's unlock check: candidates at or below

@@ -7,7 +7,8 @@ import { xpForLesson, streakMultiplier, levelFromTotalXp } from "@/services/xp/c
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { rankForLevel } from "@/services/xp/rank";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
-import { nextUserLevel, isSubjectUnlocked } from "@/services/srs/unlock";
+import { isSubjectUnlocked } from "@/services/srs/unlock";
+import { getCurriculumLevels } from "@/server/queries/curriculum";
 import { SubjectType } from "@/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
 
@@ -179,7 +180,15 @@ export async function commitLessonSession(
     return { sessionId: session.id };
   });
 
-  const newlyUnlockedSubjectIds = await findNewlyUnlockedSubjects(userId, newLevel, subjectIds);
+  // Unlocks are gated on the KANJI curriculum level, not the XP-derived
+  // account level — see the note in commitReviewSession's
+  // curriculumLevelForUnlocks.
+  const curriculumLevels = await getCurriculumLevels(userId);
+  const newlyUnlockedSubjectIds = await findNewlyUnlockedSubjects(
+    userId,
+    curriculumLevels[SubjectType.KANJI],
+    subjectIds,
+  );
 
   try {
     revalidatePath("/lessons");
@@ -204,22 +213,23 @@ export async function commitLessonSession(
   };
 }
 
-/// After committing, some subjects may have just become unlocked: either
-/// because a just-Guru'd... no — lessons only ever set stage 1, so no
-/// component reaches Guru here. What *can* change is the user's account
-/// level (via `nextUserLevel` off newly-Guru'd kanji from earlier review
-/// sessions this call doesn't touch) — so this only surfaces newly-unlocked
-/// level-N radicals/kanji when the account level itself moved up in this
-/// commit. Cheap best-effort: only runs the check when `newLevel` changed.
+/// Surfaces subjects that are unlocked but not yet started, so the lesson
+/// summary can report "N new items unlocked".
+///
+/// Lessons only ever set stage 1, so nothing reaches Guru here and no
+/// component gate opens as a direct result of this commit. What this catches
+/// is content already unlocked by *earlier* review sessions that the user
+/// hasn't started yet — gated on the KANJI curriculum level, which is the
+/// level that actually governs access.
 async function findNewlyUnlockedSubjects(
   userId: string,
-  newLevel: number,
+  unlockLevel: number,
   justTaughtIds: string[],
 ): Promise<string[]> {
   const candidates = await prisma.subject.findMany({
     where: {
       type: { in: [SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB] },
-      level: { not: null, lte: newLevel },
+      level: { not: null, lte: unlockLevel },
       id: { notIn: justTaughtIds },
       OR: [{ userSubject: { none: { userId } } }, { userSubject: { some: { userId, startedAt: null } } }],
     },
@@ -256,12 +266,8 @@ async function findNewlyUnlockedSubjects(
             isGating: l.isGating,
           })),
         },
-        newLevel,
+        unlockLevel,
       ),
     )
     .map((c) => c.id);
 }
-
-// Re-exported for callers that need to recompute the account level after a
-// batch of review sessions (out of scope here, kept for parity/tests).
-export { nextUserLevel };
