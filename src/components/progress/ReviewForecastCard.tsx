@@ -7,32 +7,8 @@ import { cn } from "@/lib/utils";
 
 export interface ReviewForecastCardProps {
   buckets: ForecastBucket[];
-  /// Renders the "Sample data" badge. See MOCK_FORECAST for why this exists.
-  isMock?: boolean;
   className?: string;
 }
-
-// MOCKUP DATA -- not wired to getReviewForecast.
-//
-// The forecast query and its pure bucketing service are built and tested
-// (src/services/reviews/forecast.ts), but the database holds almost no
-// ReviewLog history yet, so a live card would render as an empty state with
-// nothing to lay out against. These numbers exist so the card can be
-// designed and reviewed on the dev server before there is real data.
-//
-// To go live: delete this constant, call getReviewForecast(userId) in the
-// page, and drop the isMock prop. The component itself needs no changes --
-// it already takes the real ForecastBucket[] shape.
-export const MOCK_FORECAST: ForecastBucket[] = [
-  { offsetHours: 0, labelEn: "Next 4 hours", count: 23, cumulative: 23 },
-  { offsetHours: 4, labelEn: "Next 8 hours", count: 11, cumulative: 34 },
-  { offsetHours: 8, labelEn: "Tomorrow", count: 38, cumulative: 72 },
-  { offsetHours: 24, labelEn: "In 2 days", count: 19, cumulative: 91 },
-  { offsetHours: 48, labelEn: "In a week", count: 64, cumulative: 155 },
-  { offsetHours: 168, labelEn: "In 2 weeks", count: 27, cumulative: 182 },
-  { offsetHours: 336, labelEn: "In a month", count: 41, cumulative: 223 },
-  { offsetHours: 720, labelEn: "Later", count: 86, cumulative: 309 },
-];
 
 /// Column chart of reviews already scheduled to come due, by window.
 ///
@@ -40,7 +16,7 @@ export const MOCK_FORECAST: ForecastBucket[] = [
 /// `dueAt` values, so the card answers "what is coming and when" rather than
 /// "if you review N per day you will reach level X", which would require
 /// modeling future behavior. See the forecast section in docs/roadmap.md.
-export function ReviewForecastCard({ buckets, isMock, className }: ReviewForecastCardProps) {
+export function ReviewForecastCard({ buckets, className }: ReviewForecastCardProps) {
   const sweep = useMountedFraction(1, 160);
   const peak = Math.max(...buckets.map((b) => b.count), 1);
   const total = buckets.reduce((sum, b) => sum + b.count, 0);
@@ -55,16 +31,6 @@ export function ReviewForecastCard({ buckets, isMock, className }: ReviewForecas
       title="Review Forecast"
       titleJa="復習予定"
       className={className}
-      action={
-        isMock ? (
-          <span
-            className="rounded-[var(--radius-chip)] bg-surface-3 px-2 py-0.5 text-micro text-text-dim"
-            lang="en"
-          >
-            Sample data
-          </span>
-        ) : undefined
-      }
     >
       <div className="flex flex-col gap-4">
         {total === 0 ? (

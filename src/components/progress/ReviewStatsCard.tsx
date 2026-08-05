@@ -7,62 +7,8 @@ import { cn } from "@/lib/utils";
 
 export interface ReviewStatsCardProps {
   stats: ReviewStats;
-  /// Renders the "Sample data" badge. See MOCK_REVIEW_STATS.
-  isMock?: boolean;
   className?: string;
 }
-
-// MOCKUP DATA -- not wired to getReviewStats.
-//
-// Same reasoning as MOCK_FORECAST in ReviewForecastCard: the query and the
-// pure buildReviewStats service exist and are tested, but there is not yet
-// enough ReviewLog history for a live card to show a trend. Fourteen days of
-// plausible numbers, with meaning accuracy deliberately ahead of reading
-// accuracy, which is the usual pattern and the thing this card exists to
-// surface.
-//
-// To go live: delete this constant, call getReviewStats(userId) in the page,
-// drop isMock. The component already takes the real ReviewStats shape.
-function mockDay(daysAgo: number, correct: number, incorrect: number) {
-  const date = new Date();
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() - daysAgo);
-  const total = correct + incorrect;
-  return {
-    date,
-    correct,
-    incorrect,
-    accuracyPct: total === 0 ? 0 : Math.round((correct / total) * 1000) / 10,
-  };
-}
-
-export const MOCK_REVIEW_STATS: ReviewStats = {
-  split: [
-    { questionType: "MEANING", correct: 486, incorrect: 61, accuracyPct: 88.8 },
-    { questionType: "READING", correct: 402, incorrect: 118, accuracyPct: 77.3 },
-  ],
-  trend: [
-    mockDay(13, 41, 9),
-    mockDay(12, 55, 7),
-    mockDay(11, 38, 14),
-    mockDay(10, 62, 11),
-    mockDay(9, 71, 8),
-    mockDay(8, 44, 16),
-    mockDay(7, 58, 6),
-    mockDay(6, 66, 13),
-    mockDay(5, 73, 9),
-    mockDay(4, 51, 18),
-    mockDay(3, 69, 7),
-    mockDay(2, 82, 12),
-    mockDay(1, 78, 10),
-    mockDay(0, 60, 9),
-  ],
-  totalAnswers: 1067,
-  overallAccuracyPct: 83.2,
-  mode: "ranked",
-  rankedAnswers: 1067,
-  practiceAnswers: 214,
-};
 
 const TYPE_LABELS: Record<string, string> = {
   MEANING: "Meaning",
@@ -80,7 +26,7 @@ const TYPE_COLORS: Record<string, string> = {
 /// filter and can be drilled without limit, so folding it in would let volume
 /// on easy items mask real SRS performance -- the excluded count is shown
 /// rather than hidden. See buildReviewStats.
-export function ReviewStatsCard({ stats, isMock, className }: ReviewStatsCardProps) {
+export function ReviewStatsCard({ stats, className }: ReviewStatsCardProps) {
   const sweep = useMountedFraction(1, 200);
   const hasData = stats.totalAnswers > 0;
   const peak = Math.max(...stats.trend.map((p) => p.correct + p.incorrect), 1);
@@ -91,16 +37,6 @@ export function ReviewStatsCard({ stats, isMock, className }: ReviewStatsCardPro
       title="Review Accuracy"
       titleJa="正答率"
       className={className}
-      action={
-        isMock ? (
-          <span
-            className="rounded-[var(--radius-chip)] bg-surface-3 px-2 py-0.5 text-micro text-text-dim"
-            lang="en"
-          >
-            Sample data
-          </span>
-        ) : undefined
-      }
     >
       <div className="flex flex-col gap-4">
         {!hasData ? (
