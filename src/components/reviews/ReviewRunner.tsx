@@ -10,6 +10,7 @@ import { commitReviewSession, type CommitReviewSessionResult, type ReviewAnswerR
 import type { ReviewSubject } from "@/server/queries/reviews";
 import { CelebrationModal } from "@/components/celebration/CelebrationModal";
 import { useCelebrationQueue, celebrationEventsFromCommit } from "@/components/celebration/useCelebrationQueue";
+import { useSound } from "@/lib/sound/useSound";
 
 export interface ReviewRunnerProps {
   items: ReviewSubject[];
@@ -27,6 +28,7 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const celebration = useCelebrationQueue();
+  const play = useSound();
 
   // Held so a failed commit can be retried without losing the session's
   // answers — the quiz component is already unmounted by this point.
@@ -39,7 +41,20 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
       const res = await commitReviewSession({ answers });
       setResult(res);
       setPhase("done");
-      celebration.enqueue(celebrationEventsFromCommit(res));
+      // Exactly one session sound, never a pile-up. SRS pass/fail is only
+      // knowable here — the quiz sees correct/wrong per answer, but whether
+      // an item actually moved up or down a stage is resolved server-side.
+      // A demotion is the more important thing to hear, so it wins.
+      const events = celebrationEventsFromCommit(res);
+      // Skip the session sound entirely when a stinger is queued — the
+      // celebration is the louder, more meaningful close, and playing both
+      // back to back just sounds like a stutter.
+      if (events.length === 0) {
+        const anyDemoted = res.itemOutcomes.some((o) => o.endedStage < o.startedStage);
+        const anyPromoted = res.itemOutcomes.some((o) => o.promoted);
+        play(anyDemoted ? "review.fail" : anyPromoted ? "review.pass" : "session.complete");
+      }
+      celebration.enqueue(events);
     } catch {
       setError("Something went wrong saving this review session. Your progress in this session is safe to retry.");
     } finally {

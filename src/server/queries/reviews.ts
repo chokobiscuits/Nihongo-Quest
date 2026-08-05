@@ -40,6 +40,10 @@ export interface ReviewQueueResult {
 export interface UnrankedQueueFilter {
   types?: SubjectType[];
   levels?: number[];
+  /// Cap on how many items the session serves. Applied AFTER the shuffle, so
+  /// a short session is a random sample of everything that matched rather
+  /// than the same lowest-dueAt items every time.
+  limit?: number;
 }
 
 /// Fisher-Yates, in place on a caller-owned array.
@@ -225,7 +229,11 @@ export async function getUnrankedReviewQueue(
     select: REVIEW_SELECT,
   });
 
-  return shuffle(rows.map(toReviewSubject));
+  const shuffled = shuffle(rows.map(toReviewSubject));
+  // Slice after shuffling: a 10-item session should be a random 10 of the
+  // matching set, not the 10 with the earliest dueAt every single time.
+  const limit = filter.limit;
+  return limit !== undefined && limit > 0 ? shuffled.slice(0, limit) : shuffled;
 }
 
 export interface UnrankedOption {

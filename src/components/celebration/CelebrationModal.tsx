@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { CelebrationParticles } from "./CelebrationParticles";
 import { CelebrationNumeral } from "./CelebrationNumeral";
 import { sortCelebrationEvents, type CelebrationEvent } from "./types";
+import { useSound } from "@/lib/sound/useSound";
+import { CELEBRATION_SOUND } from "@/lib/sound/manifest";
 
 export interface CelebrationModalProps {
   events: CelebrationEvent[];
@@ -41,6 +43,7 @@ function rankLine(tier: string, division: number | null): string {
 /// that already happened, never itself a source of truth.
 export function CelebrationModal({ events, onDismissAll, triggerRef }: CelebrationModalProps) {
   const reducedMotion = useReducedMotion();
+  const play = useSound();
   const ordered = useMemo(() => sortCelebrationEvents(events), [events]);
   const [index, setIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
@@ -64,6 +67,16 @@ export function CelebrationModal({ events, onDismissAll, triggerRef }: Celebrati
     const timer = setTimeout(() => dismissButtonRef.current?.focus(), reducedMotion ? 0 : 700);
     return () => clearTimeout(timer);
   }, [index, reducedMotion]);
+
+  // One stinger per event as it comes to the front of the queue. Keyed on
+  // index so each item in a multi-event sequence gets its own sound, and
+  // driven off `kind` so a new event variant is caught by the typecheck on
+  // CELEBRATION_SOUND rather than silently playing nothing.
+  useEffect(() => {
+    const kind = ordered[index]?.kind;
+    if (kind) play(CELEBRATION_SOUND[kind]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, ordered]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

@@ -85,6 +85,38 @@ export async function updateFuriganaOverride(
   return { ok: true };
 }
 
+/// Persists `UserProfile.settings.soundEnabled`, read by the shell to
+/// configure the client-side SoundManager.
+export async function updateSoundEnabled(
+  enabled: boolean,
+  userId: string = APP_USER_ID,
+): Promise<SettingsActionResult> {
+  const settings = await readSettings(userId);
+  settings.soundEnabled = enabled;
+  await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
+  revalidateProfileViews();
+  return { ok: true };
+}
+
+/// Persists `UserProfile.settings.soundVolume` as a 0..1 fraction.
+export async function updateSoundVolume(
+  volume: number,
+  userId: string = APP_USER_ID,
+): Promise<SettingsActionResult> {
+  if (!Number.isFinite(volume)) {
+    return { ok: false, error: "Volume must be a number." };
+  }
+  if (volume < 0 || volume > 1) {
+    return { ok: false, error: "Volume must be between 0 and 1." };
+  }
+
+  const settings = await readSettings(userId);
+  settings.soundVolume = volume;
+  await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
+  revalidateProfileViews();
+  return { ok: true };
+}
+
 // IANA timezone names this app's settings page offers — a deliberately short
 // list of commonly-relevant zones rather than the full ~400-entry IANA
 // database, validated against `Intl` regardless so any valid IANA id works.

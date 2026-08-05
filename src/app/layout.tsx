@@ -8,6 +8,8 @@ import { accountMasteryLevel, masteryTier } from "@/services/xp/mastery";
 import { prisma } from "@/lib/db";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { storage } from "@/lib/storage";
+import { SoundProvider } from "@/components/sound/SoundProvider";
+import { DEFAULT_SOUND_ENABLED, DEFAULT_SOUND_VOLUME } from "@/lib/sound/manifest";
 
 import { APP_USER_ID } from "@/lib/appUser";
 
@@ -54,12 +56,18 @@ async function loadShellData() {
     _sum: { masteryXp: true },
   });
   const unlockStatuses = await getTypeUnlockStatuses(APP_USER_ID);
+  const settings = (profile.settings ?? {}) as { soundEnabled?: boolean; soundVolume?: number };
   return {
     name: profile.displayName,
     avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
     rank: { tier: parseTier(profile.rank), division: profile.rankDivision },
     tier: masteryTier(accountMasteryLevel(masteryXpAgg._sum.masteryXp ?? 0)),
     unlockStatuses,
+    // On by default: browsers keep the AudioContext suspended until a
+    // deliberate gesture, so there is no surprise noise on load, and
+    // off-by-default would leave the feature unfound in settings.
+    soundEnabled: settings.soundEnabled ?? DEFAULT_SOUND_ENABLED,
+    soundVolume: settings.soundVolume ?? DEFAULT_SOUND_VOLUME,
   };
 }
 
@@ -77,6 +85,10 @@ const FALLBACK_SHELL: Awaited<ReturnType<typeof loadShellData>> = {
     GRAMMAR: { type: "GRAMMAR", unlocked: false, requirement: null, have: 0, need: 0 },
     READING: { type: "READING", unlocked: false, requirement: null, have: 0, need: 0 },
   },
+  // Silent in the degraded shell: we cannot know the user's preference with
+  // the DB down, and defaulting to noise on a broken app is the wrong guess.
+  soundEnabled: false,
+  soundVolume: DEFAULT_SOUND_VOLUME,
 };
 
 export default async function RootLayout({
@@ -100,17 +112,19 @@ export default async function RootLayout({
       className={`h-full antialiased ${fontLatin.variable} ${fontJa.variable} ${fontJaDisplay.variable}`}
     >
       <body className="min-h-full flex flex-col bg-canvas text-text">
-        <AppShell
-          user={{
-            name: shell.name,
-            avatarUrl: shell.avatarUrl,
-            masteryTier: shell.tier,
-            rank: shell.rank,
-          }}
-          typeUnlockStatuses={shell.unlockStatuses}
-        >
-          {children}
-        </AppShell>
+        <SoundProvider enabled={shell.soundEnabled} volume={shell.soundVolume}>
+          <AppShell
+            user={{
+              name: shell.name,
+              avatarUrl: shell.avatarUrl,
+              masteryTier: shell.tier,
+              rank: shell.rank,
+            }}
+            typeUnlockStatuses={shell.unlockStatuses}
+          >
+            {children}
+          </AppShell>
+        </SoundProvider>
       </body>
     </html>
   );

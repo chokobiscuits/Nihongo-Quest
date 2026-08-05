@@ -9,6 +9,7 @@ import { commitLessonSession, type CommitLessonSessionResult, type LessonQuizAns
 import type { LessonSubject } from "@/server/queries/lessons";
 import { CelebrationModal } from "@/components/celebration/CelebrationModal";
 import { useCelebrationQueue, celebrationEventsFromCommit } from "@/components/celebration/useCelebrationQueue";
+import { useSound } from "@/lib/sound/useSound";
 
 export interface LessonRunnerProps {
   batch: LessonSubject[];
@@ -28,6 +29,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const celebration = useCelebrationQueue();
+  const play = useSound();
 
   const allViewed = viewed.size >= batch.length;
 
@@ -48,8 +50,12 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
       setResult(res);
       setPhase("done");
       // Fire celebrations only now — after the session has actually
-      // committed, never mid-session.
-      celebration.enqueue(celebrationEventsFromCommit(res));
+      // committed, never mid-session. The completion sound is skipped when
+      // a stinger is queued: the celebration is the louder, more meaningful
+      // close, and both back to back just sounds like a stutter.
+      const events = celebrationEventsFromCommit(res);
+      if (events.length === 0) play("session.complete");
+      celebration.enqueue(events);
     } catch {
       setError("Something went wrong saving this lesson. Your progress in this session is safe to retry.");
     } finally {

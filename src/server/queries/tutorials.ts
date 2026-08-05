@@ -125,7 +125,13 @@ function toSummary(row: {
 /// the lesson flow (see getLessonBatch). Null once none are pending.
 export async function getNextRequiredTutorial(userId: string = APP_USER_ID): Promise<TutorialDetail | null> {
   const stats = await computeTutorialStats(userId);
+  return firstPendingRequired(userId, stats);
+}
 
+/// The lowest-`order` required tutorial that is triggered under `stats` and
+/// uncompleted. Shared by getNextRequiredTutorial and getFirstRunTutorial so
+/// the trigger walk lives in one place.
+async function firstPendingRequired(userId: string, stats: TutorialStats): Promise<TutorialDetail | null> {
   const candidates = await prisma.tutorial.findMany({
     where: { required: true },
     orderBy: { order: "asc" },
@@ -139,6 +145,22 @@ export async function getNextRequiredTutorial(userId: string = APP_USER_ID): Pro
     }
   }
   return null;
+}
+
+/// The first-launch tutorial, and ONLY that: non-null just for an account
+/// that has never completed any tutorial (a fresh install, or one that has
+/// been reset — reset deletes every TutorialCompletion row).
+///
+/// Deliberately narrower than getNextRequiredTutorial, which keeps returning
+/// non-null throughout the curriculum via before_first/account_level
+/// triggers. The dashboard redirects on this, so using the broader query
+/// would make "/" permanently unreachable for a mid-curriculum user who has
+/// left a tutorial unread. Gating on hasCompletedAnyTutorial makes the
+/// redirect self-extinguishing: acknowledging anything ends it for good.
+export async function getFirstRunTutorial(userId: string = APP_USER_ID): Promise<TutorialDetail | null> {
+  const stats = await computeTutorialStats(userId);
+  if (stats.hasCompletedAnyTutorial) return null;
+  return firstPendingRequired(userId, stats);
 }
 
 /// Every OPTIONAL tutorial currently triggered and not yet completed —

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getLessonBatchOrTutorial } from "@/server/queries/lessons";
 import { LessonRunner } from "@/components/lessons/LessonRunner";
 import { TutorialGate } from "@/components/tutorials/TutorialGate";
-import { slugToType } from "@/components/subject/typeSlug";
+import { slugToType, ALL_TYPE_SLUGS } from "@/components/subject/typeSlug";
 
 import { APP_USER_ID } from "@/lib/appUser";
 
@@ -26,6 +26,8 @@ export default async function LessonsPage({
   // An unrecognised ?type= degrades to the unfiltered batch rather than
   // erroring: a hand-edited URL should still teach you something.
   const onlyType = raw ? slugToType(raw) : null;
+  // ...but say so, rather than silently serving a different result than asked.
+  const unrecognisedType = raw && !onlyType ? raw : null;
 
   const result = await getLessonBatchOrTutorial(APP_USER_ID, onlyType ?? undefined);
   const label = onlyType ? TYPE_LABEL[onlyType] : null;
@@ -47,6 +49,25 @@ export default async function LessonsPage({
           </Link>
         )}
       </div>
+
+      {unrecognisedType && (
+        <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-4">
+          <p className="text-body text-text">
+            Didn&apos;t recognise <span className="font-mono font-medium">{unrecognisedType}</span>. Showing everything.
+          </p>
+          <p className="text-caption text-text-dim">
+            Valid subjects:{" "}
+            {ALL_TYPE_SLUGS.map((slug, i) => (
+              <span key={slug}>
+                {i > 0 && ", "}
+                <Link href={`/lessons?type=${slug}`} className="text-brand-text hover:underline">
+                  {slug}
+                </Link>
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
 
       {result.kind === "tutorial" ? (
         <TutorialGate tutorial={result.tutorial} />

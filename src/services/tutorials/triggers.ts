@@ -47,8 +47,13 @@ export function isTriggered(trigger: TutorialTrigger, stats: TutorialStats): boo
       return false;
 
     default: {
+      // Compile-time exhaustiveness, but `Tutorial.trigger` is a Json column
+      // cast from `unknown`, so a malformed seeded row reaches here at
+      // runtime. Returning `_exhaustive` would hand back that object, and a
+      // truthy one would fire the tutorial. Fail closed instead.
       const _exhaustive: never = trigger;
-      return _exhaustive;
+      void _exhaustive;
+      return false;
     }
   }
 }

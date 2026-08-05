@@ -148,7 +148,21 @@ export default async function SubjectTypePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader labelEn={theme.labelEn} labelJa={theme.labelJa} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageHeader labelEn={theme.labelEn} labelJa={theme.labelJa} />
+        {/* The browse page is where "I want to learn more of this" happens,
+            so it needs its own way into a filtered lesson. Suppressed when
+            locked: the banner below already explains why there is nothing
+            to learn yet. */}
+        {!isLocked && (
+          <Link
+            href={`/lessons?type=${typeSlug}`}
+            className="inline-flex h-9 shrink-0 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+          >
+            Start lessons
+          </Link>
+        )}
+      </div>
 
       {isLocked && unlockStatus && (
         <div

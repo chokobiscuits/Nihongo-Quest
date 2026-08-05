@@ -198,7 +198,7 @@ function ContinueLearningCard({
   // away via the corner link and the sidebar.
   return (
     <div
-      className="card-lift entrance-staggered group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] hover:border-line-strong sm:min-w-0"
+      className="card-lift entrance-staggered group relative flex min-w-[76vw] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-card)] border border-line p-4 min-h-[190px] hover:border-line-strong has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-[var(--color-focus)] sm:min-w-0"
       style={{
         background: `linear-gradient(160deg, color-mix(in oklch, ${accent} 16%, var(--color-surface)), var(--color-surface))`,
         ...entranceStyle,
@@ -209,12 +209,15 @@ function ContinueLearningCard({
           brand glow that the rank-gated glow rule otherwise never triggers. */}
       {isPrimaryCta && <div className="cta-glow-layer" aria-hidden />}
 
-      {/* Full-card click target for the primary action. Sits behind the
-          browse link below, which raises itself above this overlay. */}
+      {/* Full-card click target for the primary action. Z-order contract for
+          this card: overlay z-10, corner browse link z-20, content unlayered
+          below. The content wrappers are `relative` with z-index auto, which
+          paints them above an earlier sibling at z-0 — that is what used to
+          leave only the p-4 gutter clickable. */}
       <Link
         href={`/lessons?type=${typeToSlug(card.type)}`}
         aria-label={`Start a ${card.labelEn} lesson`}
-        className="absolute inset-0 z-0"
+        className="absolute inset-0 z-10"
       />
 
       <div className="relative flex items-start justify-between">
@@ -227,7 +230,7 @@ function ContinueLearningCard({
           href={`/subjects/${typeToSlug(card.type)}`}
           aria-label={`Browse ${card.labelEn}`}
           title={`Browse ${card.labelEn}`}
-          className="relative z-10 -m-2 p-2 text-text-faint hover:text-text"
+          className="relative z-20 -m-2 p-2 text-text-faint hover:text-text"
         >
           <span aria-hidden>⤢</span>
         </Link>

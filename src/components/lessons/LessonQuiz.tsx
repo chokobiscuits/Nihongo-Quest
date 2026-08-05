@@ -11,7 +11,13 @@ import type { LessonSubject } from "@/server/queries/lessons";
 import type { LessonQuizAnswerRecord } from "@/server/actions/lessons";
 import { xpForLesson } from "@/services/xp/curve";
 import { XpPopupLayer, type XpPopupLayerHandle } from "./XpPopupLayer";
+import { useSound } from "@/lib/sound/useSound";
+import { comboRateFor, type SoundId } from "@/lib/sound/manifest";
 import { cn } from "@/lib/utils";
+
+/// Warmed when the quiz mounts: these fire on a keystroke, and an unloaded
+/// sound is dropped rather than played late.
+const LESSON_SOUNDS: SoundId[] = ["answer.correct", "answer.wrong"];
 
 export interface LessonQuizProps {
   subjects: LessonSubject[];
@@ -52,6 +58,10 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
   const [justWrong, setJustWrong] = useState(false);
   const [lastWrongAnswer, setLastWrongAnswer] = useState("");
   const xpPopupRef = useRef<XpPopupLayerHandle>(null);
+  const play = useSound(LESSON_SOUNDS);
+  // Consecutive correct answers, used only to pitch the correct-answer
+  // sound up a semitone per hit so a run audibly climbs.
+  const streakRef = useRef(0);
   // Guards against onComplete firing twice (e.g. a re-render racing the
   // effect below, or StrictMode double-invoking) — commit exactly once.
   const completedRef = useRef(false);
@@ -88,6 +98,8 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     });
 
     if (result.result === "correct") {
+      play("answer.correct", { rate: comboRateFor(streakRef.current) });
+      streakRef.current += 1;
       xpPopupRef.current?.spawn(xpForLesson());
       setCompleted((prev) => [
         ...prev,
@@ -100,6 +112,8 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
       return;
     }
 
+    // Silent by design: this branch re-prompts without advancing, and a
+    // near-miss is not a failure worth sounding.
     if (result.result === "almost" || result.result === "wrongType") {
       setFeedback(result.result);
       return;
@@ -109,6 +123,8 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     // itself re-queues to the back once the user dismisses the feedback
     // (continue()), not immediately — so "I should have been marked
     // correct" still targets the question on screen.
+    play("answer.wrong");
+    streakRef.current = 0;
     setFeedback("incorrect");
     setJustWrong(true);
     setLastWrongAnswer(answer);
@@ -131,6 +147,7 @@ export function LessonQuiz({ subjects, onComplete }: LessonQuizProps) {
     // Flip this question to correct for the session and move on. This is
     // the "should have been marked correct" override, so it fires the XP
     // popup the same as the normal correct-answer path.
+    play("answer.correct");
     xpPopupRef.current?.spawn(xpForLesson());
     const finished = {
       subjectId: current.subject.id,

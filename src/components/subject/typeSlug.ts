@@ -24,7 +24,10 @@ const TYPE_TO_SLUG: Record<SubjectType, string> = {
 };
 
 export function slugToType(slug: string): SubjectType | null {
-  return SLUG_TO_TYPE[slug] ?? null;
+  // Own-property check, not `?? null`: a bare index would resolve inherited
+  // keys, so "__proto__" or "constructor" came back as an Object rather than
+  // null and read as a valid type downstream.
+  return Object.hasOwn(SLUG_TO_TYPE, slug) ? SLUG_TO_TYPE[slug] : null;
 }
 
 export function typeToSlug(type: SubjectType): string {

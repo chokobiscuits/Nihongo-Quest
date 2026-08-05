@@ -4,10 +4,16 @@ import { SettingsForm } from "@/components/settings/SettingsForm";
 import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
 import { ResetProgressControl } from "@/components/settings/ResetProgressControl";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
+import { DEFAULT_SOUND_ENABLED, DEFAULT_SOUND_VOLUME } from "@/lib/sound/manifest";
 
 export default async function SettingsPage() {
   const profile = await getOrCreateProfile();
-  const settings = (profile.settings ?? {}) as { lessonBatchSize?: number; furiganaOverride?: boolean | null };
+  const settings = (profile.settings ?? {}) as {
+    lessonBatchSize?: number;
+    furiganaOverride?: boolean | null;
+    soundEnabled?: boolean;
+    soundVolume?: number;
+  };
   const kanaResolved = await isKanaResolvedFor(profile.userId);
 
   return (
@@ -23,6 +29,8 @@ export default async function SettingsPage() {
           lessonBatchSize: settings.lessonBatchSize ?? 5,
           furiganaOverride: settings.furiganaOverride ?? null,
           timezone: profile.timezone,
+          soundEnabled: settings.soundEnabled ?? DEFAULT_SOUND_ENABLED,
+          soundVolume: settings.soundVolume ?? DEFAULT_SOUND_VOLUME,
         }}
         showLogout={Boolean(process.env.APP_PASSWORD)}
       />

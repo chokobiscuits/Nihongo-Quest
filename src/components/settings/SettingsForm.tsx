@@ -8,10 +8,14 @@ import {
   updateLessonBatchSize,
   updateFuriganaOverride,
   updateTimezone,
+  updateSoundEnabled,
+  updateSoundVolume,
   uploadAvatar,
   removeAvatar,
   logout,
 } from "@/server/actions/settings";
+import { useSoundSettings } from "@/components/sound/SoundProvider";
+import { useSound } from "@/lib/sound/useSound";
 
 export interface SettingsFormProps {
   initial: {
@@ -20,6 +24,8 @@ export interface SettingsFormProps {
     lessonBatchSize: number;
     furiganaOverride: boolean | null;
     timezone: string;
+    soundEnabled: boolean;
+    soundVolume: number;
   };
   showLogout?: boolean;
 }
@@ -76,6 +82,7 @@ export function SettingsForm({ initial, showLogout }: SettingsFormProps) {
       <AvatarField initialUrl={initial.avatarUrl} />
       <LessonBatchSizeField initial={initial.lessonBatchSize} />
       <FuriganaField initial={initial.furiganaOverride} />
+      <SoundField initialEnabled={initial.soundEnabled} initialVolume={initial.soundVolume} />
       <TimezoneField initial={initial.timezone} />
       {showLogout && <LogoutField />}
     </div>
@@ -320,6 +327,107 @@ function FuriganaField({ initial }: { initial: boolean | null }) {
         </InsetPanel>
         <span className="text-micro text-text-faint" lang="en">
           &ldquo;Default by level&rdquo; hides furigana once you reach Master (level 65).
+        </span>
+        <StatusNote status={status} />
+      </div>
+    </Panel>
+  );
+}
+
+/// Sound on/off plus volume. Both persist independently, and both push into
+/// the live SoundProvider first so the Test button is audible at the new
+/// level before the server round-trip lands.
+function SoundField({ initialEnabled, initialVolume }: { initialEnabled: boolean; initialVolume: number }) {
+  const { setLocal } = useSoundSettings();
+  const play = useSound();
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [volume, setVolume] = useState(initialVolume);
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const [isPending, startTransition] = useTransition();
+
+  function saveEnabled(next: boolean) {
+    setEnabled(next);
+    setLocal({ enabled: next });
+    setStatus("saving");
+    startTransition(async () => {
+      const result = await updateSoundEnabled(next);
+      setStatus(result.ok ? "saved" : "error");
+    });
+  }
+
+  /// Dragging fires continuously, so the slider only previews locally; the
+  /// write happens on release (onPointerUp / onKeyUp via onChange commit).
+  function previewVolume(next: number) {
+    setVolume(next);
+    setLocal({ volume: next });
+  }
+
+  function commitVolume(next: number) {
+    setStatus("saving");
+    startTransition(async () => {
+      const result = await updateSoundVolume(next);
+      setStatus(result.ok ? "saved" : "error");
+    });
+  }
+
+  return (
+    <Panel accent="var(--color-sentence)" title="Sound" titleJa="サウンド">
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Sound effects</FieldLabel>
+        <InsetPanel className="flex flex-wrap items-center gap-2">
+          {[
+            { label: "On", value: true },
+            { label: "Off", value: false },
+          ].map((opt) => (
+            <button
+              key={opt.label}
+              type="button"
+              disabled={isPending}
+              onClick={() => saveEnabled(opt.value)}
+              className={cn(
+                "h-8 rounded-[var(--radius-chip)] border px-3 text-caption transition-colors duration-[var(--duration-fast)]",
+                enabled === opt.value
+                  ? "border-transparent bg-sentence text-[var(--color-sentence-text)]"
+                  : "border-line text-text-dim hover:bg-surface-3",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </InsetPanel>
+
+        <div className="flex items-center gap-3">
+          <label htmlFor="sound-volume" className="text-micro text-text-faint" lang="en">
+            Volume
+          </label>
+          <input
+            id="sound-volume"
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volume}
+            disabled={!enabled || isPending}
+            onChange={(e) => previewVolume(Number(e.target.value))}
+            onPointerUp={() => commitVolume(volume)}
+            onKeyUp={() => commitVolume(volume)}
+            className="h-8 flex-1 accent-[var(--color-sentence)] disabled:opacity-40"
+          />
+          <span className="w-10 text-right text-micro tabular-nums text-text-faint" lang="en">
+            {Math.round(volume * 100)}%
+          </span>
+          <button
+            type="button"
+            disabled={!enabled}
+            onClick={() => play("ui.click")}
+            className="h-8 rounded-[var(--radius-chip)] border border-line px-3 text-caption text-text-dim hover:bg-surface-3 disabled:opacity-40"
+          >
+            Test
+          </button>
+        </div>
+
+        <span className="text-micro text-text-faint" lang="en">
+          Plays on answers, level ups, and rank changes. Nothing plays until you interact with the page.
         </span>
         <StatusNote status={status} />
       </div>

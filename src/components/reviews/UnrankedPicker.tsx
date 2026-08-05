@@ -23,10 +23,14 @@ const TYPE_LABEL: Record<string, string> = {
 /// encoded into the URL rather than posted, so a chosen set is shareable and
 /// survives a refresh; the page reads it back and builds the queue
 /// server-side.
+/// Session-size options. `null` means "everything that matched".
+const SIZE_OPTIONS: (number | null)[] = [5, 10, 20, 40, null];
+
 export function UnrankedPicker({ options }: UnrankedPickerProps) {
   const router = useRouter();
   const [types, setTypes] = useState<string[]>([]);
   const [levels, setLevels] = useState<number[]>([]);
+  const [size, setSize] = useState<number | null>(null);
 
   // Levels offered depend on the selected types: selecting nothing means
   // "everything", so show the union of all available levels.
@@ -56,10 +60,17 @@ export function UnrankedPicker({ options }: UnrankedPickerProps) {
     setLevels((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]));
   }
 
+  // A size that no longer fits the current selection (pick 20, then narrow to
+  // a type with 5 items) is treated as "All" rather than silently capping at
+  // a number whose chip is no longer even shown.
+  const effectiveSize = size !== null && size < matching ? size : null;
+  const sessionCount = effectiveSize === null ? matching : effectiveSize;
+
   function start() {
     const params = new URLSearchParams();
     if (types.length > 0) params.set("types", types.join(","));
     if (levels.length > 0) params.set("levels", levels.join(","));
+    if (effectiveSize !== null) params.set("limit", String(effectiveSize));
     router.push(`/reviews/practice/session?${params.toString()}`);
   }
 
@@ -119,10 +130,40 @@ export function UnrankedPicker({ options }: UnrankedPickerProps) {
         </div>
       )}
 
+      <div className="flex flex-col gap-2">
+        <span className="text-caption uppercase tracking-wide text-text-faint">Session length</span>
+        <div className="flex flex-wrap gap-2">
+          {SIZE_OPTIONS.map((s) => {
+            // Offering 40 when only 21 items match is noise; keep the option
+            // only when it would actually change the session.
+            if (s !== null && s >= matching) return null;
+            return (
+              <button
+                key={s ?? "all"}
+                type="button"
+                onClick={() => setSize(s)}
+                className={cn(
+                  "h-9 min-w-9 rounded-[var(--radius-chip)] border px-3 text-body font-medium",
+                  effectiveSize === s
+                    ? "border-transparent bg-brand-button text-on-brand"
+                    : "border-line bg-surface-2 text-text-dim hover:bg-surface-3",
+                )}
+              >
+                {s ?? "All"}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-caption text-text-faint">
+          A shorter session is a random sample of what you selected.
+        </p>
+      </div>
+
       <div className="flex flex-col gap-2 border-t border-line pt-4">
         <p className="text-caption text-text-dim">
-          Up to {matching} item{matching === 1 ? "" : "s"} match. Practice earns no XP or mastery and never changes an
-          item&apos;s SRS stage.
+          {sessionCount} item{sessionCount === 1 ? "" : "s"}
+          {effectiveSize !== null ? ` of ${matching} matching` : " match"}. Practice earns no XP or mastery and never
+          changes an item&apos;s SRS stage.
         </p>
         <button
           type="button"

@@ -119,4 +119,13 @@ describe("isTriggered", () => {
       ).toBe(false);
     });
   });
+
+  // Tutorial.trigger is a Json column cast from `unknown`, so a malformed
+  // seeded row reaches the default branch at runtime, where the `never` type
+  // offers no protection. It must fail closed rather than gate the app on
+  // garbage — a truthy object used to be returned as-is.
+  it("fails closed on a malformed trigger", () => {
+    const malformed = { kind: "not_a_real_trigger", level: 1 } as unknown as TutorialTrigger;
+    expect(isTriggered(malformed, BASE_STATS)).toBe(false);
+  });
 });

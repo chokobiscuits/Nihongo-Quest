@@ -37,7 +37,21 @@ export default async function KanaPage({
         <h1 className="text-h1 font-semibold text-text">
           <span lang="en">{theme.labelEn}</span> <span lang="ja" className="text-text-muted">{theme.labelJa}</span>
         </h1>
-        <KanaSkipControl initialResolved={resolved} />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Kana has its own route rather than going through /subjects/[type],
+              so it needs the same "start a filtered lesson" entry point that
+              page grew. Hidden once every kana is passed or skipped — there
+              is nothing left to teach at that point. */}
+          {!resolved && (
+            <Link
+              href="/lessons?type=kana"
+              className="inline-flex h-9 shrink-0 items-center rounded-[var(--radius-chip)] bg-brand-button px-4 text-body font-medium text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+            >
+              Start lessons
+            </Link>
+          )}
+          <KanaSkipControl initialResolved={resolved} />
+        </div>
       </div>
 
       <p className="text-caption text-text-dim" lang="en">

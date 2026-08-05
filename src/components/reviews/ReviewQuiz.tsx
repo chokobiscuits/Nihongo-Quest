@@ -9,10 +9,16 @@ import { renderFurigana } from "@/services/furigana/render";
 import { xpForCorrectAnswer, xpForIncorrectAnswer } from "@/services/xp/curve";
 import { SrsStageChip } from "@/components/srs/SrsStageChip";
 import { XpPopupLayer, type XpPopupLayerHandle } from "@/components/lessons/XpPopupLayer";
+import { useSound } from "@/lib/sound/useSound";
+import { comboRateFor, type SoundId } from "@/lib/sound/manifest";
 import { buildReviewQueue, type ReviewCandidate, type ReviewQuestion } from "@/services/reviews/queue";
 import type { ReviewSubject } from "@/server/queries/reviews";
 import type { ReviewAnswerRecord } from "@/server/actions/reviews";
 import { cn } from "@/lib/utils";
+
+/// Warmed on mount: these fire on a keystroke, and an unloaded sound is
+/// dropped rather than played late.
+const REVIEW_SOUNDS: SoundId[] = ["answer.correct", "answer.wrong"];
 
 export interface ReviewQuizProps {
   items: ReviewSubject[];
@@ -48,6 +54,10 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
   const [justWrong, setJustWrong] = useState(false);
   const [lastWrongAnswer, setLastWrongAnswer] = useState("");
   const xpPopupRef = useRef<XpPopupLayerHandle>(null);
+  const play = useSound(REVIEW_SOUNDS);
+  // Consecutive correct answers; pitches the correct sound up a semitone
+  // per hit so a run audibly climbs.
+  const streakRef = useRef(0);
   // Guards against onComplete firing twice (e.g. a re-render racing the
   // effect below, or StrictMode double-invoking) — commit exactly once.
   const completedRef = useRef(false);
@@ -89,6 +99,8 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
     });
 
     if (result.result === "correct") {
+      play("answer.correct", { rate: comboRateFor(streakRef.current) });
+      streakRef.current += 1;
       xpPopupRef.current?.spawn(xpForCorrectAnswer(current.subject.srsStage));
       recordAndAdvance({
         userSubjectId: current.userSubjectId,
@@ -99,6 +111,8 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
       return;
     }
 
+    // Silent by design: this branch re-prompts without advancing, and a
+    // near-miss is not a failure worth sounding.
     if (result.result === "almost" || result.result === "wrongType") {
       setFeedback(result.result);
       return;
@@ -108,6 +122,8 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
     // regardless of whether the retry afterward succeeds), then re-queue the
     // question to the back so the item still needs to be answered correctly
     // before the session ends.
+    play("answer.wrong");
+    streakRef.current = 0;
     setFeedback("incorrect");
     setJustWrong(true);
     setLastWrongAnswer(answer);
@@ -137,6 +153,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
   async function markShouldHaveBeenCorrect() {
     if (!current || current.kind !== "MEANING") return;
     await acceptMeaningAnswer(current.subject.subjectId, lastWrongAnswer);
+    play("answer.correct");
     xpPopupRef.current?.spawn(xpForCorrectAnswer(current.subject.srsStage));
     recordAndAdvance({
       userSubjectId: current.userSubjectId,

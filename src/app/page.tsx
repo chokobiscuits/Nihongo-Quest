@@ -1,6 +1,7 @@
 import { getDashboard } from "@/server/queries/dashboard";
 import { getProgress } from "@/server/queries/progress";
-import { getTriggeredOptionalTutorials } from "@/server/queries/tutorials";
+import { redirect } from "next/navigation";
+import { getFirstRunTutorial, getTriggeredOptionalTutorials } from "@/server/queries/tutorials";
 import { TutorialTipsCard } from "@/components/dashboard/TutorialTipsCard";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DayStreakCard } from "@/components/dashboard/DayStreakCard";
@@ -49,6 +50,14 @@ function jlptCardProps(rows: { level: number; passed: number; total: number }[])
 }
 
 export default async function HomePage() {
+  // A brand-new or freshly reset account gets sent to onboarding instead of
+  // a dashboard of zeros. On a DB failure fall through to the dashboard —
+  // which will fail on its own terms — rather than bouncing the user to a
+  // tutorial route that cannot load either. redirect() throws a control-flow
+  // signal, so it must sit outside the catch.
+  const firstRun = await getFirstRunTutorial(APP_USER_ID).catch(() => null);
+  if (firstRun) redirect(`/tutorials/${firstRun.slug}?welcome=1`);
+
   const [dashboard, tutorialTips, progress] = await Promise.all([
     getDashboard(APP_USER_ID),
     getTriggeredOptionalTutorials(APP_USER_ID),

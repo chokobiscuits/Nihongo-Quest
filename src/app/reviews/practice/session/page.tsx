@@ -23,7 +23,12 @@ function parseFilter(params: Record<string, string | string[] | undefined>) {
     .map((l) => Number.parseInt(l, 10))
     .filter((n) => Number.isInteger(n) && n > 0);
 
-  return { types, levels };
+  // Absent or unparseable `limit` means "no cap", matching the picker's
+  // "All" option. A garbage value must not silently produce a 1-item session.
+  const rawLimit = typeof params.limit === "string" ? Number.parseInt(params.limit, 10) : NaN;
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : undefined;
+
+  return { types, levels, limit };
 }
 
 export default async function UnrankedSessionPage({
