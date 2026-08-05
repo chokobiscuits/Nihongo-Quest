@@ -11,7 +11,6 @@ import type { JlptLevel } from "@/components/stats/JlptStepper";
 import { ReviewsCard } from "@/components/dashboard/ReviewsCard";
 import { AchievementsCard } from "@/components/dashboard/AchievementsCard";
 import { RankLevelCard } from "@/components/rank/RankLevelCard";
-import { InfiniteMasteryCard } from "@/components/dashboard/InfiniteMasteryCard";
 
 import { APP_USER_ID } from "@/lib/appUser";
 
@@ -87,13 +86,6 @@ export default async function HomePage() {
         <TutorialTipsCard tutorials={tutorialTips} />
 
         <ContinueLearningSection cards={dashboard.continueCards} />
-
-        <InfiniteMasteryCard
-          level={dashboard.accountMasteryLevel}
-          tierName={dashboard.masteryTier.name}
-          xpIntoLevel={dashboard.masteryXpIntoLevel}
-          xpForNextLevel={dashboard.masteryXpForNextLevel}
-        />
 
         <ReviewsCard reviewsDue={dashboard.reviewsDue} byType={dashboard.reviewsByType} />
 
