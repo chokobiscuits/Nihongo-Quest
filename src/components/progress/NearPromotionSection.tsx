@@ -50,10 +50,14 @@ export function NearPromotionSection({ groups, now }: NearPromotionSectionProps)
           </div>
 
           <ul className="flex flex-col divide-y divide-line">
-            {group.items.map((item) => {
+            {group.items.map((item, itemIndex) => {
               const isDue = item.dueAt === null || item.dueAt <= now;
               return (
-                <li key={item.userSubjectId} className="flex items-center gap-3 py-2">
+                <li
+                  key={item.userSubjectId}
+                  className="entrance-staggered flex items-center gap-3 py-2"
+                  style={{ "--entrance-index": itemIndex } as React.CSSProperties}
+                >
                   <Link
                     href={`/subjects/${typeToSlug(group.type)}/${item.slug}`}
                     className="min-w-0 flex-1 truncate text-body text-text hover:underline"

@@ -77,14 +77,16 @@ export function RankLevelCard({ rank, lp, className }: RankLevelCardProps) {
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-h2 font-semibold text-text" lang="en">
             {tierLine}
-            {rank.division !== null && <span className="text-h3 tabular-nums text-text-muted"> · {displayedLp} LP</span>}
+            {rank.division !== null && (
+              <span className="count-up text-h3 tabular-nums text-text-muted"> · {displayedLp} LP</span>
+            )}
           </span>
         </div>
 
         <div className="w-full max-w-[220px]">
           <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-3">
             <div
-              className="progress-sweep h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)]"
+              className="lp-bar h-full rounded-full bg-linear-to-r from-brand to-[var(--color-brand-hover)]"
               style={{ width: `${Math.max(sweptLpFraction * 100, sweptLpFraction > 0 ? 0 : 1.5)}%` }}
             />
             {lp === 0 && (

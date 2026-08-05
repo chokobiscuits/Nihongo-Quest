@@ -110,7 +110,7 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
     const burnedItems = result.itemOutcomes.filter((o) => o.reachedBurned);
 
     return (
-      <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+      <div className="entrance flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
         {celebration.active && (
           <CelebrationModal events={celebration.events} onDismissAll={celebration.dismiss} />
         )}
@@ -158,9 +158,30 @@ export function ReviewRunner({ items }: ReviewRunnerProps) {
             Level up: {result.previousLevel} → {result.newLevel}.
           </p>
         )}
+
+        {/* LP is the ranked track: always reported, since a session that
+            moved no rank still moved (or deliberately did not move) LP. */}
+        {result.lpDelta !== 0 && (
+          <p className={result.lpDelta > 0 ? "text-body text-brand-text" : "text-body text-text-muted"}>
+            {result.lpDelta > 0 ? "+" : ""}
+            {result.lpDelta} LP
+            {result.lpBonus === "perfect"
+              ? " — perfect clear!"
+              : result.lpBonus === "s-rank"
+                ? " — S-rank session!"
+                : ""}
+          </p>
+        )}
         {result.rankPromoted && (
           <p className="text-body text-brand-text">
-            Rank up: {result.previousRank.tier} → {result.newRank.tier}.
+            Rank up: {result.previousRank.tier} {result.previousRank.division ?? ""} → {result.newRank.tier}{" "}
+            {result.newRank.division ?? ""}.
+          </p>
+        )}
+        {result.rankDemoted && (
+          <p className="text-body text-text-muted">
+            Rank down: {result.previousRank.tier} {result.previousRank.division ?? ""} → {result.newRank.tier}{" "}
+            {result.newRank.division ?? ""}. Your tier is safe.
           </p>
         )}
         {result.newlyUnlockedSubjectIds.length > 0 && (

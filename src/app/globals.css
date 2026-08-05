@@ -331,6 +331,72 @@ rt:empty {
   50% { opacity: 1; }
 }
 
+/* Section/card entrance: a short rise-and-fade on mount. The
+   reduced-motion block below has always overridden `.entrance`, `.count-up`,
+   `.shake` and `.particle`, but the base definitions were never written —
+   these four were dead overrides until now. */
+.entrance {
+  animation: entrance-in var(--duration-base) var(--ease-out) both;
+}
+
+@keyframes entrance-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Staggered list entrance. Consumers set --entrance-index per row and the
+   delay derives from it, so a list cascades rather than popping as a block.
+   Capped so a long list never leaves the last rows visibly late. */
+.entrance-staggered {
+  animation: entrance-in var(--duration-base) var(--ease-out) both;
+  animation-delay: calc(min(var(--entrance-index, 0), 12) * 40ms);
+}
+
+/* Numeric readouts that count up. The transition is on colour only — the
+   number itself is driven by useCountUp — so a value change reads as a
+   deliberate tick rather than a flicker. */
+.count-up {
+  transition: color var(--duration-base) var(--ease-out);
+}
+
+/* Card hover lift. Deliberately small: 2px and a soft shadow, on the fast
+   duration, so a grid of cards feels responsive without bouncing. */
+.card-lift {
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.5);
+}
+
+/* An incorrect answer: a short horizontal shake plus a danger border. */
+.shake {
+  animation: shake-x 400ms var(--ease-in-out);
+}
+
+@keyframes shake-x {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* LP bar. Separate from .progress-sweep because LP can go *down*, and a
+   loss should read differently from a gain rather than sliding back with
+   the same easing. */
+.lp-bar {
+  transition: width var(--duration-slow) var(--ease-out), background-color var(--duration-base) var(--ease-out);
+}
+
+.lp-bar-loss {
+  transition: width var(--duration-base) var(--ease-in-out), background-color var(--duration-fast) var(--ease-out);
+}
+
 /* Sidebar active-item accent bar: slides between nav items on navigation. */
 .sidebar-active-bar {
   position: absolute;
@@ -448,9 +514,26 @@ rt:empty {
     transition: none !important;
   }
 
-  .entrance {
+  .entrance,
+  .entrance-staggered {
+    animation: none !important;
     transform: none !important;
-    transition: opacity 120ms ease-out !important;
+    opacity: 1 !important;
+  }
+
+  /* Hover feedback stays, but as colour only — no movement. */
+  .card-lift {
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .card-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .lp-bar,
+  .lp-bar-loss {
+    transition: none;
   }
 
   .cta-glow-layer {
