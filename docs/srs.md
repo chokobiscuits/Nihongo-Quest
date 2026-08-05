@@ -32,13 +32,27 @@ All transitions are computed in `src/services/srs/transition.ts` via `computeTra
 
 Drop the stage by `ceil(incorrectCount / 2) * penaltyFactor`, minimum stage 1.
 
-The penalty factor changes at Guru (stage 5+): it doubles the demotion cost because losing long-term-review status is more expensive than losing a fresh Apprentice item. Examples:
+Below Guru the penalty factor is always 1. At Guru and above (stage 5+) it is 2 by default, because losing long-term-review status is more expensive than losing a fresh Apprentice item. Examples:
 - Apprentice II (stage 2), 1 wrong: drop to stage 1.
 - Apprentice III (stage 3), 3 wrongs: `ceil(3/2) = 2`, drop 2 stages to stage 1.
 - Master (stage 7), 1 wrong: `penaltyFactor = 2`, drop 2 stages to stage 5 (Guru I).
 - Enlightened (stage 8), 2 wrongs: `ceil(2/2) * 2 = 2`, drop 2 stages to stage 6 (Guru II).
 
 Demotion happens immediately; XP is awarded regardless of correctness.
+
+#### Mastery-softened demotion
+
+The Guru+ doubling is waived for an item with a clean history, so a well-learned item loses one stage on a miss instead of two. At Enlightened that is the difference between dropping to Master and dropping to Guru II, which is 120 days of interval rather than 134.
+
+"Clean" is `masteryXp / cleanClimbMasteryXp(stage)`, where the denominator is the mastery XP an item would hold if it had climbed to its current stage without a single miss. A flawless item sits at exactly 1.0; one missed once early sits near 1.5; one that has bounced between stages for a dozen reviews sits near 3.0. At or below `CLEAN_HISTORY_RATIO` (1.6) the penalty is 1, otherwise 2.
+
+The ratio, not raw `masteryXp`, carries the signal. Raw mastery XP rises with volume, and a struggling item accumulates *more* of it than a clean one precisely because it keeps coming back: a shaky item at Guru I can hold 132 XP against a flawless item's 45. Comparing against the clean-climb baseline is what turns that into a usable measure. A threshold on raw `masteryXp` would have rewarded failure.
+
+`masteryXp` is optional on `TransitionInput`; omitting it falls back to the flat stage-based penalty.
+
+**Warning:** `CLEAN_HISTORY_RATIO` is an untested guess, the same caveat that applies to the 4-hour promotion cap below. It was chosen to sit above a single early miss (~1.5) and below a chronically shaky item (~2.9), but it has not been validated against learner data. Instrument the distribution of the ratio at demotion time before tuning it.
+
+Note also what the ratio cannot see: `masteryXp` measures accumulated correct volume, not current knowledge. An item learned well months ago and since forgotten still carries a low ratio and receives the softer penalty on exactly the miss that deserves the harsher one. Weighting recent `ReviewLog` entries instead would fix this at the cost of a heavier query.
 
 ## The 4-hour promotion cap
 

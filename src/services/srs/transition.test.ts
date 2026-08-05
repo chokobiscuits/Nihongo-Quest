@@ -166,3 +166,118 @@ describe("computeTransition: incorrect answers", () => {
     expect(result.dueAt).toEqual(new Date(NOW.getTime() + 24 * 60 * 60 * 1000));
   });
 });
+
+describe("computeTransition: mastery-softened demotion", () => {
+  // Clean-climb baselines, one correct answer per stage below the current
+  // one at masteryXpForAnswer(s) = 5 + 2s: stage 5 -> 45, stage 8 -> 96.
+  const CLEAN_AT_5 = 45;
+  const CLEAN_AT_8 = 96;
+
+  it("halves the penalty at Guru for an item with a flawless history", () => {
+    const result = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: CLEAN_AT_5,
+    });
+    // ratio 1.0 <= 1.6, so penaltyFactor 1 -> 5 - 1 = 4, not 3.
+    expect(result.endedStage).toBe(4);
+  });
+
+  it("keeps the full penalty for a chronically shaky item", () => {
+    const result = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      // A shaky item accumulates MORE mastery XP than a clean one, because
+      // it keeps coming back. Ratio 132/45 = 2.93 > 1.6.
+      masteryXp: 132,
+    });
+    expect(result.endedStage).toBe(3);
+  });
+
+  it("softens Enlightened, where the full penalty costs 120 days of interval", () => {
+    const clean = computeTransition({
+      stage: 8,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: CLEAN_AT_8,
+    });
+    // Drops to Guru II (14 days) rather than Guru I (7 days).
+    expect(clean.endedStage).toBe(7);
+
+    const shaky = computeTransition({
+      stage: 8,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: CLEAN_AT_8 * 3,
+    });
+    expect(shaky.endedStage).toBe(6);
+  });
+
+  it("applies the full penalty at the ratio boundary and softens just under it", () => {
+    const justOver = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: Math.ceil(CLEAN_AT_5 * 1.6) + 1,
+    });
+    expect(justOver.endedStage).toBe(3);
+
+    const atBoundary = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: CLEAN_AT_5 * 1.6,
+    });
+    expect(atBoundary.endedStage).toBe(4);
+  });
+
+  it("does not soften below Guru, where the penalty is already 1", () => {
+    const result = computeTransition({
+      stage: 4,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: 1000,
+    });
+    expect(result.endedStage).toBe(3);
+  });
+
+  it("falls back to the full Guru penalty when masteryXp is omitted", () => {
+    const result = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 1,
+      now: NOW,
+      lastPromotedAt: null,
+    });
+    expect(result.endedStage).toBe(3);
+  });
+
+  it("still compounds with incorrectCount for a clean item", () => {
+    const result = computeTransition({
+      stage: 5,
+      correct: false,
+      incorrectCount: 3,
+      now: NOW,
+      lastPromotedAt: null,
+      masteryXp: CLEAN_AT_5,
+    });
+    // incorrectAdjustment = ceil(3/2) = 2, penaltyFactor 1 -> 5 - 2 = 3.
+    expect(result.endedStage).toBe(3);
+  });
+});

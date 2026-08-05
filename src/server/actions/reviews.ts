@@ -150,6 +150,8 @@ export async function commitReviewSession(
         incorrectCount,
         now,
         lastPromotedAt: row.lastPromotedAt,
+        // Softens the Guru+ demotion penalty for items with a clean history.
+        masteryXp: row.masteryXp,
       }),
     );
   }

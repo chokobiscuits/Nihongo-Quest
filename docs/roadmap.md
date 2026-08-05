@@ -92,6 +92,10 @@ See `src/services/reviews/queue.ts` for `questionKindsFor`.
 
 ### Demotion formula tuning
 
-The penalty factor (1x for Apprentice, 2x for Guru+) is untested. Is the demotion severity appropriate?
+`CLEAN_HISTORY_RATIO` (1.6) decides which items get the softened Guru+ penalty. It is an untested guess, picked to sit above a single early miss (~1.5) and below a chronically shaky item (~2.9). Instrument:
+- The distribution of `masteryXp / cleanClimbMasteryXp(stage)` at demotion time. What fraction of demotions currently qualify for the soft penalty?
+- Whether softening measurably changes how often items return to Guru after a miss.
 
-See `src/services/srs/transition.ts` for `demotedStage`.
+Known blind spot: the ratio measures accumulated correct volume, not current knowledge, so an item learned months ago and since forgotten receives the softer penalty on the miss that most deserves the harsher one. Weighting recent `ReviewLog` entries would fix this at the cost of a heavier query.
+
+See `demotionPenaltyFactor` in `src/services/srs/transition.ts` and the mastery-softened demotion section in `docs/srs.md`.
