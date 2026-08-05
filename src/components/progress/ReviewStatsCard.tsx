@@ -173,23 +173,29 @@ export function ReviewStatsCard({ stats, isMock, className }: ReviewStatsCardPro
                   return (
                     <div
                       key={point.date.toISOString()}
-                      className="flex min-w-0 flex-1 flex-col justify-end"
-                      style={{ height: "100%" }}
+                      className="flex h-full min-w-0 flex-1 flex-col justify-end"
                       title={`${point.date.toISOString().slice(0, 10)}: ${point.accuracyPct}% (${point.correct}/${dayTotal})`}
                     >
+                      {/*
+                        Rounding lives on this wrapper, with the two segments
+                        square and clipped by overflow-hidden. Rounding the
+                        segments themselves gives each one its own capsule
+                        top, so the incorrect/correct boundary reads as two
+                        separate pills rather than one stacked bar.
+                      */}
                       <div
-                        className="flex w-full flex-col justify-end overflow-hidden rounded-t-[var(--radius-chip)] transition-[height] duration-500 ease-[var(--ease-out)]"
+                        className="flex w-full flex-col justify-end overflow-hidden rounded-[3px] transition-[height] duration-500 ease-[var(--ease-out)]"
                         style={{ height: `max(2px, ${height * 100}%)` }}
                       >
                         <div
-                          className="w-full"
+                          className="w-full shrink-0"
                           style={{
                             height: `${(1 - correctShare) * 100}%`,
-                            background: "color-mix(in oklch, var(--color-danger) 65%, transparent)",
+                            background: "color-mix(in oklch, var(--color-danger) 70%, transparent)",
                           }}
                         />
                         <div
-                          className="w-full"
+                          className="w-full shrink-0"
                           style={{ height: `${correctShare * 100}%`, background: "var(--color-brand)" }}
                         />
                       </div>

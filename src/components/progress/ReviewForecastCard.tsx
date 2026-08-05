@@ -45,6 +45,9 @@ export function ReviewForecastCard({ buckets, isMock, className }: ReviewForecas
   const peak = Math.max(...buckets.map((b) => b.count), 1);
   const total = buckets.reduce((sum, b) => sum + b.count, 0);
   const dueSoon = buckets[0]?.count ?? 0;
+  // Cumulative through the "In a week" bucket, whose offset is 48h: its
+  // cumulative field already counts everything due at or before it.
+  const dueThisWeek = buckets.find((b) => b.offsetHours === 48)?.cumulative ?? total;
 
   return (
     <Panel
@@ -75,29 +78,44 @@ export function ReviewForecastCard({ buckets, isMock, className }: ReviewForecas
           </InsetPanel>
         ) : (
           <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-h1 font-semibold tabular-nums text-text" lang="en">
+                {dueSoon.toLocaleString()}
+              </span>
+              <span className="text-caption text-text-faint" lang="en">
+                due in the next 4 hours
+              </span>
+            </div>
+
+            {/*
+              Plain column chart: a fixed-height row, each column a
+              bottom-anchored bar. No track behind the bars and only a 2px
+              radius -- a large radius on a full-width column turns it into a
+              lozenge, and a filled track makes every column read as full.
+              The percentage height needs the h-28 row to resolve against;
+              a % height inside an auto-height flex column collapses.
+            */}
             <div
-              className="flex h-32 items-end gap-1.5"
+              className="flex h-28 items-end gap-2 sm:gap-3"
               role="img"
               aria-label={`${total} reviews scheduled across the next month and beyond`}
             >
               {buckets.map((bucket) => {
-                const height = (bucket.count / peak) * sweep;
+                const fill = (bucket.count / peak) * sweep;
                 const isNow = bucket.offsetHours === 0;
+                const cumulativePct = Math.round((bucket.cumulative / total) * 100);
                 return (
-                  <div key={bucket.offsetHours} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                    <span className="text-micro tabular-nums text-text-faint" lang="en">
-                      {bucket.count || ""}
-                    </span>
+                  <div
+                    key={bucket.offsetHours}
+                    className="flex h-full min-w-0 flex-1 items-end"
+                    title={`${bucket.labelEn}: ${bucket.count} due (${cumulativePct}% of the queue by then)`}
+                  >
                     <div
-                      title={`${bucket.labelEn}: ${bucket.count}`}
-                      className={cn(
-                        "w-full rounded-t-[var(--radius-chip)] transition-[height] duration-500 ease-[var(--ease-out)]",
-                        bucket.count === 0 && "opacity-40",
-                      )}
+                      className="w-full rounded-[2px] transition-[height] duration-700 ease-[var(--ease-out)] hover:brightness-110"
                       style={{
-                        // Floor at 2px so an empty window still reads as a
-                        // column rather than a gap in the axis.
-                        height: `max(2px, ${height * 100}%)`,
+                        // Floor keeps an empty window visible as a sliver
+                        // rather than an apparently missing column.
+                        height: `max(2px, ${fill * 100}%)`,
                         background: isNow ? "var(--color-brand)" : "var(--color-vocab)",
                       }}
                     />
@@ -106,26 +124,41 @@ export function ReviewForecastCard({ buckets, isMock, className }: ReviewForecas
               })}
             </div>
 
-            <div className="flex gap-1.5">
-              {buckets.map((bucket) => (
-                <span
-                  key={bucket.offsetHours}
-                  className="min-w-0 flex-1 truncate text-center text-micro text-text-faint"
-                  lang="en"
-                  title={bucket.labelEn}
-                >
-                  {bucket.labelEn.replace(/^(Next|In a|In) /, "")}
-                </span>
-              ))}
+            {/* Counts and labels as a separate axis row, so the bars keep a
+                clean shared baseline instead of each column being a stack. */}
+            <div className="flex gap-2 sm:gap-3">
+              {buckets.map((bucket) => {
+                const isNow = bucket.offsetHours === 0;
+                return (
+                  <div key={bucket.offsetHours} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
+                    <span
+                      className={cn(
+                        "text-caption tabular-nums",
+                        isNow ? "font-semibold text-text" : "text-text-dim",
+                      )}
+                      lang="en"
+                    >
+                      {bucket.count}
+                    </span>
+                    <span
+                      className="w-full truncate text-center text-micro text-text-faint"
+                      lang="en"
+                      title={bucket.labelEn}
+                    >
+                      {bucket.labelEn.replace(/^(Next|In a|In) /, "")}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             <InsetPanel className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-col">
                 <span className="text-caption text-text-faint" lang="en">
-                  Due in the next 4 hours
+                  Due within a week
                 </span>
                 <span className="text-h3 font-semibold tabular-nums text-text" lang="en">
-                  {dueSoon.toLocaleString()}
+                  {dueThisWeek.toLocaleString()}
                 </span>
               </div>
               <div className="flex flex-col text-right">
