@@ -4,6 +4,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { recordNewAchievements, backfillEarnedAchievements } from "../src/server/queries/newAchievements";
 import { getAchievements } from "../src/server/queries/achievements";
+import { skipKana } from "../src/server/actions/kana";
 
 const TEST_USER = "achievement-check-user";
 const REAL_USER = "local-user";
@@ -48,7 +49,7 @@ async function cleanup() {
     });
     const now = new Date();
     for (const s of subjects) {
-      await prisma.userSubject.create({
+      const us = await prisma.userSubject.create({
         data: {
           userId: TEST_USER,
           subjectId: s.id,
@@ -56,6 +57,19 @@ async function cleanup() {
           startedAt: now,
           passedAt: now,
           srsStage: 5,
+        },
+      });
+      // A ReviewLog is what distinguishes a studied item from one written
+      // straight to a stage by the kana skip. Stage milestones only count
+      // items with real review history.
+      await prisma.reviewLog.create({
+        data: {
+          userSubjectId: us.id,
+          questionType: "MEANING",
+          incorrectCount: 0,
+          startedStage: 4,
+          endedStage: 5,
+          answeredAt: now,
         },
       });
     }
@@ -94,6 +108,24 @@ async function cleanup() {
     // The roster still evaluates cleanly.
     const { unlocked, locked } = await getAchievements(TEST_USER);
     check("roster splits into unlocked/locked", unlocked.length > 0 && locked.length > 0, `${unlocked.length}/${locked.length}`);
+
+    // Regression guard: "I already know kana" writes 208 rows straight to
+    // Burned with no review history. That must not award Burn 100 Items,
+    // Reach Master, Reach Guru or any "learn N items" milestone — those
+    // represent study, not a declaration of prior knowledge.
+    await cleanup();
+    await prisma.userProfile.create({
+      data: { userId: TEST_USER, displayName: "Skip Test", timezone: "Asia/Tokyo" },
+    });
+    const skipResult = await skipKana(TEST_USER);
+    const afterSkip = await getAchievements(TEST_USER);
+    check(
+      "skipping kana burns items without earning achievements",
+      afterSkip.unlocked.length === 0,
+      `skipped ${skipResult.skipped}, unlocked ${afterSkip.unlocked.map((r) => r.definition.id).join(", ") || "(none)"}`,
+    );
+    check("burned kana with no review history do not count", afterSkip.stats.burnedCount === 0, String(afterSkip.stats.burnedCount));
+    check("skipped kana do not count as learned", afterSkip.stats.itemsLearned === 0, String(afterSkip.stats.itemsLearned));
   } catch (e) {
     console.log("ERR: " + (e as Error).message);
     failures++;

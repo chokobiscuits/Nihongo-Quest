@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { RankCrest } from "@/components/rank/RankCrest";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,14 @@ export function CelebrationModal({ events, onDismissAll, triggerRef }: Celebrati
   const [transitioning, setTransitioning] = useState(false);
   const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  // document.body is unavailable during SSR, so the portal target can only
+  // be resolved on the client. useSyncExternalStore with a server snapshot
+  // of `false` gives a mounted flag without a set-state-in-effect.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const current = ordered[index];
   const isLast = index === ordered.length - 1;
@@ -100,7 +109,14 @@ export function CelebrationModal({ events, onDismissAll, triggerRef }: Celebrati
 
   const headingId = "celebration-heading";
 
-  return (
+  // Portal to document.body. `position: fixed` resolves against the nearest
+  // *transformed* ancestor rather than the viewport, and every call site
+  // renders this inside a session-summary card that carries the `.entrance`
+  // animation — which animates transform. Without the portal the overlay
+  // centres itself inside that card instead of the screen.
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center celebration-overlay"
       style={{ background: "oklch(0.08 0.02 295 / 0.88)", backdropFilter: "blur(6px)" }}
@@ -143,7 +159,8 @@ export function CelebrationModal({ events, onDismissAll, triggerRef }: Celebrati
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
