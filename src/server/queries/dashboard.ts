@@ -5,6 +5,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { getReviewQueue } from "@/server/queries/reviews";
 import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { parseTier, type Rank } from "@/services/rank/tiers";
+import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { isGuruOrAbove } from "@/services/srs/stages";
 import { totalXpToReach, xpForLevel } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
@@ -115,7 +116,7 @@ import { APP_USER_ID } from "@/lib/appUser";
 export async function getDashboard(userId: string = APP_USER_ID): Promise<DashboardData> {
   const profile = await getOrCreateProfile(userId);
 
-  const [kanjiTotal, vocabTotal, sentenceTotal, grammarTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg, unlockStatuses] = await Promise.all([
+  const [kanjiTotal, vocabTotal, sentenceTotal, grammarTotal, passedCounts, startedCounts, reviewQueue, masteryXpAgg, unlockStatuses, kanaResolved] = await Promise.all([
     prisma.subject.count({ where: { type: SubjectType.KANJI, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.VOCAB, level: { not: null } } }),
     prisma.subject.count({ where: { type: SubjectType.SENTENCE, level: { not: null } } }),
@@ -141,6 +142,10 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
     // loading every UserSubject row just to add up masteryXp.
     prisma.userSubject.aggregate({ where: { userId }, _sum: { masteryXp: true } }),
     getTypeUnlockStatuses(userId),
+    // RADICAL has no Guru prerequisite (see typeUnlock.ts) — it is gated
+    // only by kana resolution, so its card needs this rather than an entry
+    // in unlockStatuses.
+    isKanaResolvedFor(userId),
   ]);
 
   const accountMasteryXp = masteryXpAgg._sum.masteryXp ?? 0;
@@ -170,6 +175,23 @@ export async function getDashboard(userId: string = APP_USER_ID): Promise<Dashbo
 
   const continueCards: DashboardContinueCard[] = [
     { type: SubjectType.KANA, labelEn: "Kana", labelJa: "かな", glyph: "あ", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANA), percent: percentOf(passedByType.KANA, KANA_TOTAL), unlocked: true, requirement: null, have: 0, need: 0 },
+    // Radicals were missing entirely: the `progress` array above and
+    // reviewsByType below both include RADICAL, and passedByType.RADICAL is
+    // already computed — only this list omitted it, so the dashboard had no
+    // route into the first thing you learn after kana.
+    {
+      type: SubjectType.RADICAL,
+      labelEn: "Radicals",
+      labelJa: "ぶしゅ",
+      glyph: "部首",
+      seeded: true,
+      lessonNumber: seededLessonNumber(passedByType.RADICAL),
+      percent: percentOf(passedByType.RADICAL, RADICAL_TOTAL),
+      unlocked: kanaResolved,
+      requirement: kanaResolved ? null : "Pass or skip every kana",
+      have: 0,
+      need: 0,
+    },
     { type: SubjectType.KANJI, labelEn: "Kanji", labelJa: "かんじ", glyph: "漢字", seeded: true, lessonNumber: seededLessonNumber(passedByType.KANJI), percent: percentOf(passedByType.KANJI, kanjiTotal), unlocked: unlockStatuses.KANJI.unlocked, requirement: unlockStatuses.KANJI.unlocked ? null : unlockStatuses.KANJI.requirement, have: unlockStatuses.KANJI.have, need: unlockStatuses.KANJI.need },
     { type: SubjectType.VOCAB, labelEn: "Vocabulary", labelJa: "ごい", glyph: "語彙", seeded: true, lessonNumber: seededLessonNumber(passedByType.VOCAB), percent: percentOf(passedByType.VOCAB, vocabTotal), unlocked: unlockStatuses.VOCAB.unlocked, requirement: unlockStatuses.VOCAB.unlocked ? null : unlockStatuses.VOCAB.requirement, have: unlockStatuses.VOCAB.have, need: unlockStatuses.VOCAB.need },
     { type: SubjectType.SENTENCE, labelEn: "Sentences", labelJa: "ぶんしょう", glyph: "文", seeded: true, lessonNumber: seededLessonNumber(passedByType.SENTENCE), percent: percentOf(passedByType.SENTENCE, sentenceTotal), unlocked: unlockStatuses.SENTENCE.unlocked, requirement: unlockStatuses.SENTENCE.unlocked ? null : unlockStatuses.SENTENCE.requirement, have: unlockStatuses.SENTENCE.have, need: unlockStatuses.SENTENCE.need },
