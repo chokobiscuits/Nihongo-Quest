@@ -222,6 +222,76 @@ function CelebrationCard({
     );
   }
 
+  if (event.kind === "achievement") {
+    const accent = `var(--color-rank-${event.accent === "brand" ? "gold" : event.accent})`;
+    return (
+      <div className="relative flex flex-col items-center gap-5 text-center">
+        <div
+          className={cn("absolute left-1/2 top-[60px] -translate-x-1/2 rounded-full", glowClass)}
+          style={{
+            width: 300,
+            height: 300,
+            background: `radial-gradient(circle, color-mix(in oklch, ${accent} 60%, transparent), transparent 70%)`,
+          }}
+          aria-hidden
+        />
+
+        <div className={cn("relative flex flex-col items-center gap-4", heroClass)}>
+          <div className="relative">
+            {!reducedMotion && <CelebrationParticles count={28} color={accent} className="absolute inset-0" />}
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{
+                width: 168,
+                height: 168,
+                background: `linear-gradient(155deg, color-mix(in oklch, ${accent} 85%, white), ${accent})`,
+                boxShadow: `0 0 60px -10px color-mix(in oklch, ${accent} 70%, transparent)`,
+              }}
+            >
+              <span className="text-glyph-sm font-bold text-white" lang="ja" aria-hidden>
+                {event.titleJa.slice(0, 2)}
+              </span>
+            </div>
+          </div>
+
+          <span
+            className={cn("text-caption uppercase tracking-wide", bodyLineClass())}
+            style={{ ...bodyLineStyle(440), color: accent }}
+            lang="en"
+          >
+            Achievement unlocked
+          </span>
+          <h2
+            id={headingId}
+            className={cn("text-h1 font-semibold text-text", bodyLineClass())}
+            style={bodyLineStyle(480)}
+            lang="ja"
+          >
+            {event.titleJa}
+          </h2>
+          <p className={cn("text-body text-text-muted", bodyLineClass())} style={bodyLineStyle(550)} lang="en">
+            {event.titleEn}
+          </p>
+          <p className={cn("text-caption text-text-dim", bodyLineClass())} style={bodyLineStyle(620)} lang="en">
+            {event.description}
+          </p>
+        </div>
+
+        <button
+          ref={dismissButtonRef}
+          type="button"
+          onClick={onPrimary}
+          className={cn(
+            "rounded-[var(--radius-chip)] bg-brand-button px-8 h-11 text-body font-semibold text-on-brand hover:bg-brand-button-hover transition-colors duration-[var(--duration-fast)]",
+            dismissClass,
+          )}
+        >
+          Nice!
+        </button>
+      </div>
+    );
+  }
+
   // Demotion: deliberately understated. No particles, no glow, no
   // exclamation — this is information, not a celebration, and the tone
   // should not punish a learner for a bad session.

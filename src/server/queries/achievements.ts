@@ -38,7 +38,7 @@ export interface AchievementsData {
 export async function getAchievements(userId: string = APP_USER_ID): Promise<AchievementsData> {
   const profile = await getOrCreateProfile(userId);
 
-  const [passedCounts, stageCounts, sessions, masteryXpAgg] = await Promise.all([
+  const [passedCounts, stageCounts, sessions, masteryXpAgg, lpEvents] = await Promise.all([
     prisma.userSubject.groupBy({
       by: ["subjectId"],
       where: { userId, passedAt: { not: null } },
@@ -50,9 +50,14 @@ export async function getAchievements(userId: string = APP_USER_ID): Promise<Ach
     }),
     prisma.session.findMany({
       where: { userId, completedAt: { not: null } },
-      select: { totalItems: true, correctItems: true, scorePct: true },
+      select: { totalItems: true, correctItems: true, scorePct: true, kind: true, scope: true, completedAt: true },
     }),
     prisma.userSubject.aggregate({ where: { userId }, _sum: { masteryXp: true } }),
+    prisma.lpEvent.findMany({
+      where: { userId },
+      select: { delta: true, tierAfter: true, divisionAfter: true },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const passedSubjectIds = passedCounts.map((r) => r.subjectId);
@@ -64,11 +69,68 @@ export async function getAchievements(userId: string = APP_USER_ID): Promise<Ach
 
   let bestSessionAccuracyPct = 0;
   let largestSessionItemCount = 0;
+  let bestLargeSessionAccuracyPct = 0;
+  let lessonSessionCount = 0;
+  let reviewSessionCount = 0;
+  let practiceSessionCount = 0;
+  const activeDays = new Set<string>();
+
   for (const session of sessions) {
     const accuracy =
       session.scorePct ?? (session.totalItems > 0 ? (session.correctItems / session.totalItems) * 100 : 0);
     if (accuracy > bestSessionAccuracyPct) bestSessionAccuracyPct = accuracy;
     if (session.totalItems > largestSessionItemCount) largestSessionItemCount = session.totalItems;
+    if (session.totalItems >= 20 && accuracy > bestLargeSessionAccuracyPct) {
+      bestLargeSessionAccuracyPct = accuracy;
+    }
+
+    // Practice sessions are REVIEW-kind rows flagged in `scope`, since the
+    // SessionKind enum was deliberately left alone — see
+    // commitUnrankedReviewSession.
+    const scope = session.scope as { unranked?: boolean } | null;
+    if (session.kind === "LESSON") lessonSessionCount += 1;
+    else if (scope?.unranked) practiceSessionCount += 1;
+    else if (session.kind === "REVIEW") reviewSessionCount += 1;
+
+    if (session.completedAt) activeDays.add(session.completedAt.toISOString().slice(0, 10));
+  }
+
+  // Walk LP history in order to count promotions and spot a recovery (a
+  // division regained after one was lost).
+  let lpGainedTotal = 0;
+  let divisionPromotionCount = 0;
+  let tierPromotionCount = 0;
+  let hasRecoveredDivision = false;
+  let sawDemotion = false;
+  let previousTier: string | null = null;
+  let previousDivision: number | null = null;
+
+  for (const event of lpEvents) {
+    if (event.delta > 0) lpGainedTotal += event.delta;
+
+    if (previousTier !== null) {
+      const tierChanged = event.tierAfter !== previousTier;
+      const divisionImproved =
+        !tierChanged &&
+        previousDivision !== null &&
+        event.divisionAfter !== null &&
+        event.divisionAfter < previousDivision;
+      const divisionWorsened =
+        !tierChanged &&
+        previousDivision !== null &&
+        event.divisionAfter !== null &&
+        event.divisionAfter > previousDivision;
+
+      if (tierChanged) tierPromotionCount += 1;
+      if (tierChanged || divisionImproved) {
+        divisionPromotionCount += 1;
+        if (sawDemotion) hasRecoveredDivision = true;
+      }
+      if (divisionWorsened) sawDemotion = true;
+    }
+
+    previousTier = event.tierAfter;
+    previousDivision = event.divisionAfter;
   }
 
   const rank = { tier: parseTier(profile.rank), division: profile.rankDivision };
@@ -89,6 +151,15 @@ export async function getAchievements(userId: string = APP_USER_ID): Promise<Ach
     accountMasteryLevel: masteryLevel,
     bestSessionAccuracyPct: Math.round(bestSessionAccuracyPct),
     largestSessionItemCount,
+    lessonSessionCount,
+    reviewSessionCount,
+    practiceSessionCount,
+    activeDayCount: activeDays.size,
+    lpGainedTotal,
+    divisionPromotionCount,
+    tierPromotionCount,
+    hasRecoveredDivision,
+    bestLargeSessionAccuracyPct: Math.round(bestLargeSessionAccuracyPct),
   };
 
   const rows: AchievementRow[] = ACHIEVEMENTS.map((definition) => {

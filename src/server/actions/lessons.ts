@@ -6,6 +6,7 @@ import { LESSON_STAGE, intervalForStage } from "@/services/srs/stages";
 import { xpForLesson, streakMultiplier, levelFromTotalXp } from "@/services/xp/curve";
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { parseTier, type Rank } from "@/services/rank/tiers";
+import { recordNewAchievements, type NewAchievement } from "@/server/queries/newAchievements";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { isSubjectUnlocked } from "@/services/srs/unlock";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
@@ -42,6 +43,8 @@ export interface CommitLessonSessionResult {
   newRank: { tier: string; division: number | null };
   rankPromoted: boolean;
   newlyUnlockedSubjectIds: string[];
+  /// Achievements crossed by this session, for the celebration queue.
+  newAchievements: NewAchievement[];
 }
 
 /// Commits a completed lesson session in one transaction: creates
@@ -190,6 +193,7 @@ export async function commitLessonSession(
     curriculumLevels[SubjectType.KANJI],
     subjectIds,
   );
+  const newAchievements = await recordNewAchievements(userId);
 
   try {
     revalidatePath("/lessons");
@@ -211,6 +215,7 @@ export async function commitLessonSession(
     newRank: rank,
     rankPromoted: false,
     newlyUnlockedSubjectIds,
+    newAchievements,
   };
 }
 

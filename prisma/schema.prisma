@@ -277,6 +277,21 @@ model XpEvent {
   @@index([userId, createdAt])
 }
 
+/// Records the moment an achievement was first earned.
+///
+/// Achievement progress is otherwise computed fresh on every read from live
+/// stats, which cannot distinguish "newly earned" from "already had" — so
+/// without this table there is nothing to fire a notification on. Rows are
+/// written inside the session commit that crossed the threshold.
+model UserAchievement {
+  userId        String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  @@id([userId, achievementId])
+  @@index([userId, earnedAt])
+}
+
 /// Mirrors XpEvent for the LP track. LP is the only progression value that
 /// can decrease, so without a log a drop is unexplainable and unauditable —
 /// this is what lets the UI answer "why did I lose rank?".

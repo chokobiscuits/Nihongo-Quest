@@ -17,6 +17,14 @@ export interface ProgressionCommitResult {
   rankDemoted?: boolean;
   lpDelta?: number;
   lpAfter?: number;
+  /// Achievements crossed by this session, if the commit path reports them.
+  newAchievements?: {
+    id: string;
+    titleJa: string;
+    titleEn: string;
+    description: string;
+    accent: string;
+  }[];
 }
 
 /// Builds the celebration queue from a commit result. Only ever called
@@ -42,6 +50,10 @@ export function celebrationEventsFromCommit(result: ProgressionCommitResult): Ce
       newDivision: result.newRank.division,
       lpDelta: result.lpDelta ?? 0,
     });
+  }
+
+  for (const achievement of result.newAchievements ?? []) {
+    events.push({ kind: "achievement", ...achievement });
   }
 
   if (result.rankPromoted) {

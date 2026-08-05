@@ -17,6 +17,7 @@ import {
 import { masteryXpForAnswer, masteryLevelFromXp } from "@/services/xp/mastery";
 import { resolveSession, outranks, type RankState } from "@/services/rank/lp";
 import { parseTier } from "@/services/rank/tiers";
+import { recordNewAchievements, type NewAchievement } from "@/server/queries/newAchievements";
 import { applyDailyActivity, dayInTimezone } from "@/services/xp/streak";
 import { isSubjectUnlocked } from "@/services/srs/unlock";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
@@ -74,6 +75,8 @@ export interface CommitReviewSessionResult {
   /// Set when an over-achievement multiplier applied.
   lpBonus: "s-rank" | "perfect" | null;
   newlyUnlockedSubjectIds: string[];
+  /// Achievements crossed by this session, for the celebration queue.
+  newAchievements: NewAchievement[];
   itemOutcomes: ReviewItemOutcome[];
   itemsReviewed: number;
   /// Percentage of individual questions answered correctly.
@@ -339,6 +342,7 @@ export async function commitReviewSession(
   // lesson commit — recomputing from totalXp alone — silently roll it back.
   const unlockLevel = await curriculumLevelForUnlocks(userId);
   const newlyUnlockedSubjectIds = await findNewlyUnlockedSubjects(userId, unlockLevel);
+  const newAchievements = await recordNewAchievements(userId);
 
   try {
     revalidatePath("/lessons");
@@ -365,6 +369,7 @@ export async function commitReviewSession(
     lpAfter: rankAfter.lp,
     lpBonus: lpOutcome.bonus,
     newlyUnlockedSubjectIds,
+    newAchievements,
     itemOutcomes: result.itemOutcomes,
     itemsReviewed: userSubjectIds.length,
     accuracyPct,
@@ -390,6 +395,9 @@ export interface CommitUnrankedSessionResult {
   xpCapped: boolean;
   /// Practice XP remaining today after this session.
   practiceXpRemaining: number;
+  /// Achievements crossed by this session. Practice can earn the
+  /// first-practice and volume achievements even though it moves no rank.
+  newAchievements: NewAchievement[];
 }
 
 /// Commits an UNRANKED (practice) session. Deliberately does far less than
@@ -547,6 +555,8 @@ export async function commitUnrankedReviewSession(
     // See commitReviewSession.
   }
 
+  const newAchievements = await recordNewAchievements(userId);
+
   return {
     sessionId: result.sessionId,
     itemsReviewed: userSubjectIds.length,
@@ -555,6 +565,7 @@ export async function commitUnrankedReviewSession(
     itemResults: result.itemResults,
     xpAwarded,
     xpCapped,
+    newAchievements,
     practiceXpRemaining: Math.max(0, UNRANKED_DAILY_XP_CAP - (practiceXpAlready + xpAwarded)),
   };
 }

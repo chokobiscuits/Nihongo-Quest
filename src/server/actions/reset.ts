@@ -13,6 +13,7 @@ export interface ResetProgressResult {
   sessions: number;
   xpEvents: number;
   lpEvents: number;
+  achievements: number;
   dailyActivity: number;
   tutorialCompletions: number;
 }
@@ -47,6 +48,7 @@ export async function resetProgress(
     const userSubjects = await tx.userSubject.deleteMany({ where: { userId } });
     const xpEvents = await tx.xpEvent.deleteMany({ where: { userId } });
     const lpEvents = await tx.lpEvent.deleteMany({ where: { userId } });
+    const achievements = await tx.userAchievement.deleteMany({ where: { userId } });
     const sessions = await tx.session.deleteMany({ where: { userId } });
     const dailyActivity = await tx.dailyActivity.deleteMany({ where: { userId } });
     const tutorialCompletions = await tx.tutorialCompletion.deleteMany({ where: { userId } });
@@ -77,6 +79,7 @@ export async function resetProgress(
       sessions: sessions.count,
       xpEvents: xpEvents.count,
       lpEvents: lpEvents.count,
+      achievements: achievements.count,
       dailyActivity: dailyActivity.count,
       tutorialCompletions: tutorialCompletions.count,
     };
