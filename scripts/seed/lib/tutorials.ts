@@ -384,4 +384,131 @@ This app includes furigana on every <ruby>漢<rt>かん</rt></ruby><ruby>字<rt>
 
 Think of furigana as training wheels: they're there when you need them, and you'll stop noticing them once the reading sinks in.`,
   },
+  // --------------------------------------------------- App mechanics (3)
+  // Unlike every tutorial above, these describe this app's own interface and
+  // rules rather than the Japanese language. They exist because each covers
+  // behaviour that is genuinely counterintuitive from the UI alone — see the
+  // "Not covered: app mechanics" section in docs/roadmap.md.
+  {
+    slug: "mastery-vs-srs-stage",
+    order: 19,
+    titleEn: "Mastery vs. SRS stage",
+    titleJa: "熟練度とSRSステージ",
+    required: false,
+    estimatedMinutes: 3,
+    trigger: { kind: "first_guru" },
+    body: `## Mastery vs. SRS stage
+
+This app tracks two different numbers for every item you learn, and they behave in opposite ways. Confusing them is the single most common misreading of your own progress.
+
+**SRS stage** is *when you'll see the item next*. It runs from Lesson (stage 0) up through Apprentice, Guru, Master, Enlightened, to Burned (stage 9). Answer correctly and it climbs one step, and the gap until the next review grows: 4 hours, 8 hours, a day, two days, a week, and onward. Answer incorrectly and **it drops**. Stage is a scheduling position, not a score, and it is designed to fall so that a shaky item comes back sooner.
+
+**Mastery** is *how much correct work you have put into the item, ever*. Every correct answer adds mastery XP, worth more at higher stages. Mastery **never decreases**. Miss an item ten times in a row and your mastery on it is unchanged by those misses — you simply stop adding to it until you start answering correctly again.
+
+So a single miss on an Enlightened item is both a real setback and no setback at all, depending on which number you look at. The stage falls back to Master or Guru II and you will see that item much sooner. The mastery you built stays exactly where it was.
+
+### Why two numbers
+
+If there were only stage, then every mistake would erase evidence of work you genuinely did, and a long-known item that you slipped on once would look identical to something you had never learned. If there were only mastery, nothing would ever reschedule and the whole point of spaced repetition would be lost.
+
+Stage answers "what should I study now?" Mastery answers "how far have I actually come?" You want both, and you want them to disagree sometimes.
+
+### The part that surprises people
+
+Mastery quietly protects you. When a well-learned item is missed, the app checks how cleanly you climbed to your current stage. Normally a miss at Guru or above costs you **two** stages, because losing long-term status should hurt. But if your history on that item is clean, the penalty is reduced to **one** stage instead.
+
+At Enlightened that is the difference between falling to Master and falling to Guru II — roughly 120 days of scheduling versus 14. The item you have never fumbled is treated more gently than the item that has been bouncing up and down for a dozen reviews, even though both just got the same question wrong.
+
+Note that this is measured as a *ratio* against a clean climb, not as raw mastery XP. Raw mastery rises with volume, and a struggling item accumulates more of it precisely because it keeps coming back. A shaky item at Guru I can be holding three times the mastery XP of a flawless one. Comparing against what a perfect climb would have earned is what turns that into a meaningful signal instead of a reward for failure.
+
+### Reading your own numbers
+
+- Stage dropped, mastery unchanged: normal. You missed something; the schedule adjusted. Nothing was lost.
+- Mastery climbing, stage stuck: you are answering correctly but hitting the 4-hour promotion cap, which blocks upward movement without blocking the review itself.
+- Both flat: you are not reviewing that item, ranked.
+
+Unranked practice is worth calling out here: it never changes stage and never awards mastery. It is drilling, not progress, by design.`,
+  },
+  {
+    slug: "kana-skip-flow",
+    order: 20,
+    titleEn: "Skipping kana",
+    titleJa: "かなをスキップする",
+    required: false,
+    estimatedMinutes: 2,
+    trigger: { kind: "manual" },
+    body: `## Skipping kana
+
+If you already read hiragana and katakana, you do not have to sit through 208 kana lessons. Settings has a **skip kana** option that marks every kana as known in one action.
+
+What it actually does: it burns every kana subject outright, setting each to the final stage so none of them will ever appear in a review queue. It is taken at your word — there is no test. There is also an unskip, which removes those entries again, but only for kana you have not since reviewed normally.
+
+### The part that surprises people
+
+**Skipping kana does not get you to kanji any faster.**
+
+It is natural to assume that clearing 208 items off the front of the curriculum must accelerate everything behind it. It does not, because kana is not what stands between you and kanji. The ladder is gated like this:
+
+- **Kana** gates **radicals**. Every kana must be passed or skipped before any radical unlocks. This is a one-time gate on the whole rest of the curriculum.
+- **Radicals** gate **kanji**. A kanji unlocks when every radical it is built from reaches Guru.
+- **Kanji** gate **vocabulary**, and vocabulary gates sentences and grammar.
+
+Kanji sits behind *radicals*, and radicals have to be learned and brought to Guru the ordinary way regardless of what you did with kana. Skipping saves you the kana reviews themselves — which is a real saving, and the reason the feature exists — but it does not shorten the radical climb, and the radical climb is what actually stands in front of kanji.
+
+There is a second soft gate worth knowing: kanji as a *type* does not appear in lesson batches until you have 10 radicals at Guru. Vocabulary needs 10 kanji at Guru. Sentences and grammar each need 50 vocabulary at Guru. Locked types stay visible and browsable the whole time; they just do not get served to you in lessons yet.
+
+### So should you skip?
+
+Skip if you genuinely read both syllabaries — you will save yourself a large number of reviews that teach you nothing.
+
+Do not skip to reach kanji sooner. That is not what it does, and starting the radical climb without solid kana makes every reading question harder than it needs to be.`,
+  },
+  {
+    slug: "lessons-and-reviews",
+    order: 21,
+    titleEn: "Lessons, reviews, and practice",
+    titleJa: "レッスンと復習",
+    required: false,
+    estimatedMinutes: 3,
+    trigger: { kind: "manual" },
+    body: `## Lessons, reviews, and practice
+
+Three places in this app serve you items, and they do very different things to your progress.
+
+### Lessons
+
+Lessons introduce material you have never seen. An item appears in a lesson batch once everything it is built from has reached Guru and its curriculum level is at or below your current level for that type. Finishing a lesson puts the item at stage 0 and schedules its first review.
+
+You can start lessons per subject type, so you are not forced to take radicals, kanji, and vocabulary in one undifferentiated pile.
+
+### Reviews (ranked)
+
+This is the SRS proper, and the only mode that moves your progress. The queue is filtered to items that are actually **due**, which means a session is finite: clear what is due and you are done. When nothing is due, the page tells you how long until the next item comes up.
+
+Ranked reviews are the only place that:
+
+- moves an item's SRS stage, up or down
+- awards mastery
+- awards LP, which drives your rank
+
+XP is 8 + 3 per stage for a correct answer, 2 for an incorrect one, with your streak multiplier applied on top.
+
+### Practice (unranked)
+
+Practice lets you drill any unlocked types and levels you like, ignoring due dates entirely. It is deliberately inert: it **cannot promote or demote anything**. Stage, due date, and mastery are all untouched. It awards no LP and gives 1 XP per correct answer, hard-capped at 150 per day.
+
+Your answers are still recorded, and per-item correct and incorrect counters still update, so practice shows up honestly in your accuracy statistics. It just does not move you up the ladder.
+
+The split exists because an unfiltered queue does not scale. Once you have a few hundred items started, a queue with no due-date filter serves your entire collection every session and can never be emptied. Making that mode free of stage changes and rank rewards is what keeps it from being both exhausting and exploitable.
+
+### Answering
+
+Meaning questions expect English. Reading questions expect Japanese, typed in kana. Press Enter to submit, then Enter again to advance to the next item. Radicals only ever ask for meaning, since they are building blocks rather than words with pronunciations of their own.
+
+If an answer of yours was reasonable but marked wrong, you can add it to that item's accepted meanings so it counts next time. If a mnemonic is not working for you, edit it — hand-edited mnemonics are marked as yours and are never overwritten by a regeneration pass.
+
+### One rule that catches people out
+
+A correct answer within **4 hours** of that item's last promotion will not promote it again. The review still counts and the item still reschedules, but the stage does not move, and XP for it is cut to 10%. Spacing is the mechanism doing the work here; answering the same item repeatedly in one sitting cannot substitute for time passing.`,
+  },
 ];

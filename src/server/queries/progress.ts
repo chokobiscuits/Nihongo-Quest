@@ -3,6 +3,8 @@ import { SubjectType } from "@/generated/prisma/enums";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { getCurriculumLevels } from "@/server/queries/curriculum";
 import { STAGES, GURU_STAGE } from "@/services/srs/stages";
+import { buildForecast, type ForecastBucket } from "@/services/reviews/forecast";
+import { buildReviewStats, type ReviewStats, type ReviewStatsMode } from "@/services/reviews/stats";
 import { parseTier, type Rank } from "@/services/rank/tiers";
 import { totalXpToReach } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
@@ -382,4 +384,42 @@ export async function getNearPromotion(
   }
 
   return groups;
+}
+
+/// When existing SRS reviews are scheduled to come due, bucketed into fixed
+/// windows (see `buildForecast`). Purely a readout of already-scheduled
+/// dueAt values — it does not project future review volume based on user
+/// behavior.
+export async function getReviewForecast(userId: string = APP_USER_ID, now: Date = new Date()): Promise<ForecastBucket[]> {
+  const rows = await prisma.userSubject.findMany({
+    where: { userId, startedAt: { not: null }, dueAt: { not: null }, srsStage: { gte: 1, lte: 8 } },
+    select: { dueAt: true },
+  });
+
+  return buildForecast({ dueAts: rows.map((r) => r.dueAt as Date), now });
+}
+
+/// Review accuracy split by question type and trended over time, from every
+/// ReviewLog row belonging to the user's UserSubjects in the last
+/// `sinceDays` days. See `buildReviewStats` for the scoring rules.
+///
+/// `mode` defaults to "ranked", so unranked practice is fetched but not
+/// scored. Practice is unbounded and re-servable (it has no due-date filter),
+/// so folding it into one accuracy number would let repeated drilling of easy
+/// items mask ranked performance. The returned `rankedAnswers` and
+/// `practiceAnswers` still describe every row fetched, so the UI can show
+/// what was left out. Pass "all" to score both together.
+export async function getReviewStats(
+  userId: string = APP_USER_ID,
+  sinceDays = 30,
+  mode: ReviewStatsMode = "ranked",
+): Promise<ReviewStats> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+
+  const rows = await prisma.reviewLog.findMany({
+    where: { answeredAt: { gte: since }, userSubject: { userId } },
+    select: { questionType: true, incorrectCount: true, startedStage: true, endedStage: true, answeredAt: true },
+  });
+
+  return buildReviewStats({ logs: rows, mode });
 }

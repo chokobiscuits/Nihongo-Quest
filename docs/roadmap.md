@@ -49,31 +49,33 @@ Because the pool so far exceeds the quota, *which* sentences get picked matters 
 
 ## Tutorials
 
-All 18 tutorial bodies are written. They live as a hand-encoded constant in `scripts/seed/lib/tutorials.ts` (not as separate markdown files), loaded by `scripts/seed/load-tutorials.ts`. The tutorial system (trigger logic, completion tracking, UI) is fully built. See `src/services/tutorials/` for the infrastructure.
+All 21 tutorial bodies are written. They live as a hand-encoded constant in `scripts/seed/lib/tutorials.ts` (not as separate markdown files), loaded by `scripts/seed/load-tutorials.ts`. The tutorial system (trigger logic, completion tracking, UI) is fully built. See `src/services/tutorials/` for the infrastructure.
 
-Every tutorial covers a Japanese-language topic: scripts and reading, radicals, meaning vs. reading, onyomi/kunyomi, rendaku, okurigana, particles, verb groups, politeness, transitivity, counters, plus SRS mechanics (Guru, the stage ladder) and reference entries (JLPT, furigana).
+Tutorials 1-18 cover Japanese-language topics: scripts and reading, radicals, meaning vs. reading, onyomi/kunyomi, rendaku, okurigana, particles, verb groups, politeness, transitivity, counters, plus SRS mechanics (Guru, the stage ladder) and reference entries (JLPT, furigana).
 
-**Reseed caveat:** `body` is seeded on create only and is never overwritten on update, the same treatment as Subject's USER-AUTHORED block. Rewriting a tutorial body does not reach an existing database without a deliberate update path. See the header comment in `scripts/seed/lib/tutorials.ts`.
+**Reseed caveat:** `body` is seeded on create only and is never overwritten on update, the same treatment as Subject's USER-AUTHORED block. Rewriting a tutorial body does not reach an existing database without a deliberate update path — pass `--force-bodies` to `load-tutorials.ts` for a one-time correction of seed content. See the header comment in `scripts/seed/lib/tutorials.ts`.
 
-### Not covered: app mechanics
+### App mechanics (19-21)
 
-No tutorial explains the app's own interface or flows. Candidates, none written:
+Three tutorials cover the app's own rules rather than the language. Each was chosen because it describes behavior that is genuinely counterintuitive from the UI alone:
 
-1. How to use the lessons page.
-2. How to use the reviews page (ranked vs. unranked practice).
-3. Mastery vs. SRS stage (they are separate; stage demotes, mastery does not).
-4. How to edit mnemonics.
-5. The kana skip flow, and that skipping kana does not accelerate kanji (radicals gate kanji, not kana).
-6. Keyboard shortcuts.
+19. **Mastery vs. SRS stage** (`first_guru`) — the two progressions move independently: stage demotes on a miss, mastery never does. Also covers the mastery-softened Guru+ demotion and why it is measured as a ratio against a clean climb rather than as raw mastery XP.
+20. **Skipping kana** (`manual`) — skipping kana does not accelerate kanji, because radicals gate kanji and kana gates radicals. Also covers the type-unlock thresholds.
+21. **Lessons, reviews, and practice** (`manual`) — what each of the three modes does and does not move, why unranked practice is deliberately inert, and the 4-hour promotion cap.
 
-Item 3 and item 5 are the two most worth writing: both describe behavior that is genuinely counterintuitive from the UI alone.
+Mnemonic editing is covered inside tutorial 21 rather than as its own entry.
+
+**Not written: keyboard shortcuts.** Investigated and dropped — there are no review keyboard shortcuts to document. The only `keydown` handlers in the app are a modal Escape/Tab focus trap, Enter-to-submit in two editors, and an audio warm-up listener. Answer submission works through a native form, so Enter submits and advances; that behavior is documented in tutorial 21. A shortcuts tutorial would need shortcuts to be built first.
 
 ## Optional features not built
 
 ### Review forecast
 
-The dashboard shows items due today, this week, and "eventually," but does not project forward (e.g., "if you complete 20 reviews daily, you'll unlock kanji level 3 in 5 days"). Forecast is computable from the SRS stage distribution, but UI/UX design work is needed.
+**Data layer built, no UI.** `buildForecast` in `src/services/reviews/forecast.ts` buckets scheduled reviews into 4h, 8h, tomorrow, 2 days, week, 2 weeks, month, and later, with overdue items falling into the first bucket. `getReviewForecast` in `src/server/queries/progress.ts` feeds it. Boundaries are half-open `[start, next)`, so an item due at exactly 4h lands in the 4h bucket.
 
+This is strictly "what is already scheduled and when," derived from stored `dueAt` values. The behavioral projection originally sketched here ("if you complete 20 reviews daily, you'll unlock kanji level 3 in 5 days") was deliberately not built: it requires modeling future user behavior rather than reading existing state, which is a different and much less reliable kind of claim.
+
+Remaining: a card on `/progress`. UI/UX design work still needed.
 
 ### Offline support
 
@@ -81,7 +83,13 @@ No offline mode or service worker. The app requires network for every lesson and
 
 ### Review performance stats
 
-No charts, no breakdown of "how many meanings vs. readings I got wrong," no per-item difficulty tracking. Only raw counts (passed, burned) on the profile.
+**Data layer built, no UI.** `buildReviewStats` in `src/services/reviews/stats.ts` returns accuracy split by question type (always both MEANING and READING, zeroed rather than omitted) and a UTC-daily accuracy trend. `getReviewStats(userId, sinceDays, mode)` in `src/server/queries/progress.ts` feeds it. A log counts as correct when `incorrectCount === 0`.
+
+**Ranked vs. practice:** scoring defaults to ranked only. Unranked practice has no due-date filter, so the same easy items can be drilled all day; folding that into one accuracy number would let volume mask real SRS performance. Practice is identified by `startedStage === endedStage` (`isPracticeLog`), which is the only signal `ReviewLog` carries. Note it slightly over-counts practice: a ranked review whose promotion is blocked by the 4-hour cap also leaves the stage unchanged. `rankedAnswers` and `practiceAnswers` always describe the full fetched set so the UI can show what was excluded.
+
+Remaining: a card or page on `/progress`, and per-item difficulty tracking, which has no stored signal yet and would need a derived metric defined first.
+
+**Both of the above are near-empty until there is review history.** At the time of writing the database holds 208 `UserSubject` rows and very little `ReviewLog` history, so both surfaces render as designed empty states. That is why neither got a UI in the same pass: there is nothing yet to lay out against.
 
 ## Known measurements worth instrumenting
 
