@@ -70,8 +70,320 @@ export const KANJI_LADDER_TARGET = KANJI_PER_LEVEL * LEVEL_COUNT; // ~1,980
 // KANJIDIC2 frequency rank is better (numerically lower) than this.
 export const NON_JLPT_FREQUENCY_CEILING = 2500;
 
+// Kanji that must make the ladder even though they carry no JLPT band.
+//
+// Selection takes JLPT-tagged kanji first and only then tops up from the
+// frequency-ranked remainder. With KANJI_LADDER_TARGET at ~1,980 the JLPT set
+// fills every slot, so the top-up loop never runs and a kanji without a band
+// cannot get on the ladder at any frequency. That is mostly the right call,
+// but it drops 分 despite a KANJIDIC2 frequency rank of 24, which in turn
+// blocks 分かる ("to understand") and 分 ("minute") from the vocab ladder,
+// since vocab cannot be placed ahead of its own kanji.
+//
+// Listed by character rather than slug: kanji slugs are derived, but the
+// character is the stable identity. Every entry here is a real omission
+// measured against KANJIDIC2 frequency, not a preference.
+export const KANJI_PRIORITY_CHARACTERS: readonly string[] = [
+  "分", // 24  minute, part, to understand
+  "的", // 105 target, -like suffix
+  "無", // 274 nothing, without
+  "可", // 314 possible, approve
+  "身", // 320 body, oneself
+  // 誰 ("who") is rank 1933, well outside the band above, and is included
+  // for a curriculum reason rather than a frequency one: without its kanji
+  // laddered, 誰 cannot be taught as vocabulary at all, and "who" is a
+  // question word a beginner needs. Unlike かばん and どこ it is NOT tagged
+  // kana-usual by JMdict, so the `uk` demotion does not reach it.
+  "誰",
+];
+
+const KANJI_PRIORITY_SET = new Set(KANJI_PRIORITY_CHARACTERS);
+
+/// True when `characters` is on the curated kanji must-include list.
+export function isPriorityKanji(characters: string | undefined): boolean {
+  return characters !== undefined && KANJI_PRIORITY_SET.has(characters);
+}
+
 // Target number of vocab placed on the ladder; the rest stay level = null.
 export const VOCAB_LADDER_TARGET = VOCAB_PER_LEVEL * LEVEL_COUNT; // ~5,400
+
+// Vocab slugs that must make the ladder regardless of how JMdict ranks them.
+//
+// Vocab selection is ordered by isCommon, then JMdict frequency rank, and
+// the 5,400 slots fill up before some genuinely essential words are reached.
+// Number words are the clearest casualties: JMdict ranks 一/いち at 33 and
+// gives 万, 億, 兆, 六つ, and 八つ no frequency rank at all, so the ladder
+// taught 二 and 三 as vocabulary but never 一, and stopped counting at 千.
+// The entries are all flagged common; they simply lose the sort.
+//
+// The same bias hits the whole conversational layer, not just numbers.
+// KANJIDIC2 and JMdict rank by written-corpus frequency, which systematically
+// under-ranks the spoken words a beginner needs first. An audit against a
+// standard beginner syllabus found the ladder covered numbers and beginner
+// kanji almost completely while carrying 3 of 18 core verbs and 2 of 8
+// question words: 行く, 来る, 食べる, 飲む, 見る, 聞く, 話す, 読む, and 書く
+// were all seeded, all flagged common, and none of them taught.
+//
+// This is a curated correction, not a general mechanism. Keep it to cases
+// where the omission is indefensible on its own terms: a learner who cannot
+// say "one", "ten thousand", or "eat" has a real gap however the corpus ranks
+// those words. It is not a place to express taste about which vocabulary is
+// nice to have. Entries still respect their kanji dependencies: this promotes
+// an item within the level it is already eligible for, it does not force it
+// earlier than its kanji.
+//
+// Not everything can be fixed here. Set phrases like こんにちは, すみません,
+// and はじめまして are not seeded as vocab at all, so no amount of reordering
+// reaches them; they need authored entries or parser work. See the beginner
+// coverage section in docs/content.md.
+//
+// Slugs match the `vocab-<characters>-<reading>` form built in transform.ts.
+export const VOCAB_PRIORITY_SLUGS: readonly string[] = [
+  // --- Numbers -----------------------------------------------------------
+  // Standalone digits missing from the ladder.
+  "vocab-一-いち",
+  // Large units: without these, counting stops at 千 (999 is the ceiling).
+  "vocab-万-まん",
+  "vocab-億-おく",
+  "vocab-兆-ちょう",
+  // Gaps in the つ-counter series, which otherwise runs 一つ through 十つ.
+  "vocab-六つ-むっつ",
+  "vocab-八つ-やっつ",
+  // Time: 時 is laddered but its partner unit was not.
+  "vocab-分-ふん",
+
+  // --- Core verbs --------------------------------------------------------
+  // The verbs a beginner uses constantly. All are JMdict-common and every
+  // one was seeded but unladdered, which left the ladder able to name a
+  // mountain but not to say "go", "eat", or "read".
+  "vocab-です-です",
+  "vocab-いる-いる",
+  "vocab-行く-いく",
+  "vocab-来る-くる",
+  "vocab-食べる-たべる",
+  "vocab-飲む-のむ",
+  "vocab-見る-みる",
+  "vocab-聞く-きく",
+  "vocab-話す-はなす",
+  "vocab-読む-よむ",
+  "vocab-書く-かく",
+  "vocab-欲しい-ほしい",
+  "vocab-分かる-わかる",
+  "vocab-寝る-ねる",
+  "vocab-働く-はたらく",
+
+  // --- Colors ------------------------------------------------------------
+  "vocab-黄色-きいろ",
+
+  // --- Question words ----------------------------------------------------
+  "vocab-いつ-いつ",
+  "vocab-どこ-どこ",
+  "vocab-いくら-いくら",
+  "vocab-いくつ-いくつ",
+  // 誰 ("who") is deliberately absent: its kanji sits at frequency rank 1933
+  // and is not on the kanji ladder, and vocab cannot be placed ahead of its
+  // own kanji. Adding it here would be a dead entry. In practice 誰 is
+  // usually written in kana anyway.
+  "vocab-どうして-どうして",
+  "vocab-どう-どう",
+  "vocab-どれ-どれ",
+
+  // --- Everyday nouns ----------------------------------------------------
+  "vocab-レストラン-レストラン",
+  "vocab-トイレ-トイレ",
+  // Reachable since the `uk` demotion: JMdict's headword is 鞄, whose kanji
+  // is unranked and off the ladder, but the word is ordinarily written かばん.
+  "vocab-かばん-かばん",
+
+  // --- Adjectives: weather, size, distance, price ------------------------
+  "vocab-晴れ-はれ",
+  "vocab-暑い-あつい",
+  "vocab-寒い-さむい",
+  "vocab-暖かい-あたたかい",
+  "vocab-近い-ちかい",
+  "vocab-遠い-とおい",
+  "vocab-安い-やすい",
+  "vocab-おいしい-おいしい",
+
+  // --- Demonstratives ----------------------------------------------------
+  "vocab-ここ-ここ",
+  "vocab-そこ-そこ",
+
+  // --- Colors ------------------------------------------------------------
+  "vocab-茶色-ちゃいろ",
+  "vocab-ピンク-ピンク",
+
+  // --- Travel and transactions -------------------------------------------
+  "vocab-バス-バス",
+  "vocab-タクシー-タクシー",
+  "vocab-ホーム-ホーム",
+  "vocab-カード-カード",
+  "vocab-領収書-りょうしゅうしょ",
+  "vocab-メニュー-メニュー",
+  "vocab-アレルギー-アレルギー",
+
+  // --- Set phrases -------------------------------------------------------
+  // Written-corpus frequency ranks spoken set phrases poorly, which is why
+  // these are absent despite being among the first words anyone learns.
+  // Only the ones JMdict actually carries as entries are listed; greetings
+  // like こんにちは and すみません are not seeded as vocab at all and need
+  // authoring rather than reordering.
+  "vocab-ありがとう-ありがとう",
+  "vocab-さようなら-さようなら",
+  "vocab-おはようございます-おはようございます",
+  // Reachable only since the `uk` demotion in transform.ts made these
+  // kana-primary: JMdict files them under 今日は, 済みません, 初めまして,
+  // which are spellings a reader will essentially never meet.
+  "vocab-こんにちは-こんにちは",
+  "vocab-こんばんは-こんばんは",
+  "vocab-すみません-すみません",
+  "vocab-はじめまして-はじめまして",
+  "vocab-ください-ください",
+  "vocab-どういたしまして-どういたしまして",
+
+  // --- Pronouns and directions ------------------------------------------
+  "vocab-あなた-あなた",
+  "vocab-まっすぐ-まっすぐ",
+];
+
+const VOCAB_PRIORITY_SET = new Set(VOCAB_PRIORITY_SLUGS);
+
+// Vocab kept off the ladder regardless of how common it is.
+//
+// JMdict's "common" flag measures corpus frequency, not teaching
+// suitability, and the two come apart badly at the very front of the
+// curriculum. Scatological and anatomical slang is genuinely high-frequency
+// in real Japanese, so frequency-ordered selection placed all of the entries
+// below in LEVEL 1: the first lesson batch a new learner is ever served.
+//
+// Matched by exact slug rather than by scanning English glosses. A gloss
+// filter looks tempting and is wrong: JMdict lists a vulgar secondary sense
+// on plenty of ordinary words, so matching on meaning text would drop 何
+// ("what", whose glosses include "whatsit") and 息子 ("son", glossed also as
+// "penis"). Those are words a beginner needs.
+//
+// This is not a general profanity filter and should not grow into one. The
+// words remain seeded and browsable; they are only kept out of the taught
+// curriculum. Anyone who wants them can search for them.
+// The second group is different in kind: not unsuitable, just not
+// vocabulary. JMdict carries bare numerals written in full-width digits as
+// dictionary entries, and frequency-ordered selection pulled a dozen of them
+// into level 1 (４０, ５０, ２００, ３０００ ...). There is nothing to learn
+// there: a learner who knows 四 and 十 can already read 四十, and the
+// full-width digit form teaches neither a reading nor a meaning.
+//
+// Deliberately NOT done as a regex over full-width characters, which is the
+// obvious implementation and would be wrong: the same character class covers
+// １月 through １２月, the months, which are real vocabulary the curriculum
+// wants. Blocking by shape would silently delete them. The distinction is
+// semantic (bare number vs. word that happens to contain a digit), so it has
+// to be made by hand.
+export const VOCAB_BLOCKED_SLUGS: readonly string[] = [
+  // Crude slang, see above.
+  "vocab-うんこ-うんこ",
+  "vocab-ウンチ-ウンチ",
+  "vocab-おしっこ-おしっこ",
+  "vocab-おっぱい-おっぱい",
+  "vocab-おなら-おなら",
+
+  // Bare full-width numerals: dictionary entries, not vocabulary.
+  "vocab-３０-さんじゅう",
+  "vocab-４０-よんじゅう",
+  "vocab-５０-ごじゅう",
+  "vocab-６０-ろくじゅう",
+  "vocab-７０-ななじゅう",
+  "vocab-８０-はちじゅう",
+  "vocab-９０-きゅうじゅう",
+  "vocab-２００-にひゃく",
+  "vocab-３００-さんびゃく",
+  "vocab-１０００-いっせん",
+  "vocab-３０００-さんぜん",
+  "vocab-４０００-よんせん",
+
+  // Full-width Latin loanwords. Real words, but the full-width spelling is a
+  // JMdict headword artifact rather than how they are ordinarily written,
+  // and none of them is level-1 material.
+  "vocab-ＣＤプレーヤー-シーディープレーヤー",
+  "vocab-Ｔシャツ-ティーシャツ",
+  "vocab-Ｔバック-ティーバック",
+];
+
+const VOCAB_BLOCKED_SET = new Set(VOCAB_BLOCKED_SLUGS);
+
+/// True when `slug` must be kept off the curriculum ladder entirely.
+export function isBlockedVocab(slug: string | undefined): boolean {
+  return slug !== undefined && VOCAB_BLOCKED_SET.has(slug);
+}
+
+// Reduced vocab quotas for the first levels.
+//
+// Vocab is gated on its kanji: a word cannot be taught before the kanji it
+// contains. That has a hard consequence at the very start of the ladder.
+// Measured on the seeded corpus, ZERO kanji-bearing vocab is eligible at
+// level 1 (no kanji has been taught yet) and only 26 at level 2. Supply does
+// not reach the full VOCAB_PER_LEVEL quota until level 3.
+//
+// Running the full quota anyway is what made level 1 bad. The only
+// candidates that fit are kana-only words, which have no kanji to wait for
+// and so fall straight through to the front however obscure they are. Of the
+// 29,911 seeded vocab, only 29 kana-only entries carry a JMdict frequency
+// rank at or under 30, and a third of those are full-width numerals. Demand
+// 90 words at level 1 and the ladder must scrape up はらいさげ ("sale of
+// unwanted government assets") and ぐるり ("surroundings") to fill it, while
+// 水 (rank 1) waits until level 6 for its kanji.
+//
+// No threshold fixes this, because the supply genuinely is not there. So ask
+// for less: levels 1-2 take a small vocab batch of the best-ranked kana
+// words, and the ladder leans on radicals and kanji, which is what those
+// levels are actually for. Level 3 onward carries the full quota.
+//
+// The ladder is smaller as a result (roughly 130 fewer vocab overall, since
+// the shortfall is not made up elsewhere). That is the intended trade: those
+// slots were being filled with words nobody should learn first.
+export const VOCAB_EARLY_LEVEL_QUOTAS: readonly number[] = [15, 20, 60];
+
+/// Vocab quota at `level`: reduced for the first levels where kanji-bearing
+/// vocab does not yet exist in quantity, VOCAB_PER_LEVEL thereafter.
+export function vocabQuotaForLevel(level: number): number {
+  const early = VOCAB_EARLY_LEVEL_QUOTAS[level - 1];
+  return early ?? VOCAB_PER_LEVEL;
+}
+
+// Early levels where uncommon adverbs and onomatopoeia are held back.
+//
+// Level 1 carried 16 adverbs, most of them nuanced expressive vocabulary a
+// beginner cannot use: うずうず ("itching to do something"), いそいそ
+// ("cheerfully"), つくづく ("deeply"), うとうと ("dozing off"). They are
+// frequent in fiction, which is what put them there, but they are not first
+// words. Below this level, adverbs sort after everything else rather than
+// being excluded, so a level still fills if adverbs are all it has.
+//
+// Core function words are exempt: どう and どうして are adverbs by JMdict's
+// tagging but are question words a beginner needs immediately, and anything
+// on VOCAB_PRIORITY_SLUGS outranks this rule by construction.
+export const ADVERB_DEPRIORITY_MAX_LEVEL = 10;
+
+/// True when `input` is an adverb-like entry that should sort late in the
+/// early levels. Priority entries are never deprioritized.
+function isDeprioritizedAdverb(input: LevelInput, level: number): boolean {
+  if (level > ADVERB_DEPRIORITY_MAX_LEVEL) return false;
+  if (isPriorityVocab(input.slug)) return false;
+  const pos = input.partsOfSpeech ?? [];
+  if (pos.length === 0) return false;
+  // Only pure adverbs: an entry that is also a noun or verb earns its place
+  // on that sense instead.
+  const adverbial = pos.some((p) => p === "adv" || p === "adv-to");
+  if (!adverbial) return false;
+  return !pos.some((p) => p === "n" || p.startsWith("v") || p === "pn" || p === "num");
+}
+
+/// True when `slug` is on the curated must-include list. Case-sensitive and
+/// exact: a slug that drifts stops matching and the item silently falls back
+/// to ordinary frequency ordering, which is why load-bearing entries are
+/// covered by a test asserting they end up laddered.
+export function isPriorityVocab(slug: string | undefined): boolean {
+  return slug !== undefined && VOCAB_PRIORITY_SET.has(slug);
+}
 
 // Per-level quota for SENTENCE subjects. Sentences are placed by
 // transform.ts in a third pass, after assignLevels has settled vocab levels
@@ -123,6 +435,17 @@ export const GRAMMAR_PER_LEVEL = 5;
 export interface LevelInput {
   tempId: string;
   type: SubjectType;
+  /// Subject slug, used only to match against VOCAB_PRIORITY_SLUGS. Optional
+  /// so callers and tests that do not exercise the curated must-include list
+  /// need not supply it; absent, the item sorts on frequency as usual.
+  slug?: string;
+  /// The kanji character itself, used only to match against
+  /// KANJI_PRIORITY_CHARACTERS. Optional for the same reason as `slug`.
+  characters?: string;
+  /// VOCAB only: JMdict part-of-speech tags, used to hold nuanced adverbs and
+  /// onomatopoeia back out of the early levels. Optional; absent means no
+  /// deprioritization applies.
+  partsOfSpeech?: string[];
   grade: number | null;
   frequency: number | null;
   /// KANJIDIC2/JLPT band: 5 = N5 (easiest) .. 1 = N1 (hardest), null if untagged.
@@ -272,6 +595,13 @@ function selectLadderSet(inputs: LevelInput[]): Set<string> {
     .sort(curriculumCompare);
 
   const selected = new Set<string>();
+  // Curated must-includes first. The JLPT set alone fills KANJI_LADDER_TARGET,
+  // so anything added after it would never be reached (see
+  // KANJI_PRIORITY_CHARACTERS).
+  for (const k of kanji) {
+    if (!isPriorityKanji(k.characters)) continue;
+    selected.add(k.tempId);
+  }
   for (const k of jlptKanji) {
     if (selected.size >= KANJI_LADDER_TARGET) break;
     selected.add(k.tempId);
@@ -309,7 +639,7 @@ function quotaForType(type: SubjectType, level: number): number {
     case "KANJI":
       return KANJI_PER_LEVEL;
     case "VOCAB":
-      return VOCAB_PER_LEVEL;
+      return vocabQuotaForLevel(level);
     case "SENTENCE":
       return SENTENCE_PER_LEVEL;
     case "GRAMMAR":
@@ -425,6 +755,7 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
     // is stable).
     const eligibleNow = vocabInputs.filter((v) => {
       if (laddered.has(v.tempId)) return false; // already placed
+      if (isBlockedVocab(v.slug)) return false; // never taught, see VOCAB_BLOCKED_SLUGS
       return v.dependsOn.every((dep) => {
         const depItem = byId.get(dep);
         if (!depItem) return false;
@@ -434,6 +765,20 @@ export function assignLevels(inputs: LevelInput[]): Map<string, number | null> {
       });
     });
     eligibleNow.sort((a, b) => {
+      // Curated must-includes first, ahead of even the isCommon split. These
+      // are words whose absence is indefensible however JMdict ranks them
+      // (see VOCAB_PRIORITY_SLUGS); everything else keeps the frequency
+      // ordering. This promotes within the level an item is already eligible
+      // for, so kanji dependencies still hold.
+      const aPriority = isPriorityVocab(a.slug);
+      const bPriority = isPriorityVocab(b.slug);
+      if (aPriority !== bPriority) return aPriority ? -1 : 1;
+      // Nuanced adverbs and onomatopoeia sort last in the early levels (see
+      // isDeprioritizedAdverb). A preference, not a filter: they still fill a
+      // level that has nothing else to offer.
+      const aAdverb = isDeprioritizedAdverb(a, level);
+      const bAdverb = isDeprioritizedAdverb(b, level);
+      if (aAdverb !== bAdverb) return aAdverb ? 1 : -1;
       if (a.isCommon !== b.isCommon) return a.isCommon ? -1 : 1;
       return curriculumCompare(a, b);
     });

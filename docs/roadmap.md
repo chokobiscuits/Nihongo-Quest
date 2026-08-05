@@ -29,13 +29,15 @@ Real numbers, not approximations. Derived from the schema's content sources and 
 | KANA | 208 | 208 | 208 | 0 | Done |
 | RADICAL | 214 | ~192 | 192 | 22 | Done |
 | KANJI | 10,384 | ~1,980 | 1,980 | 8,404 | Done |
-| VOCAB | 29,911 | ~5,400 | 5,400 | 24,511 | Done |
+| VOCAB | 29,911 | 5,225 | 5,225 | 24,686 | Done |
 | SENTENCE | 7,705 | 3,600 | 3,600 | 4,105 | Done |
 | GRAMMAR | 107 | 107 | 107 | 0 | Done |
 
 The "ladder target" column shows the intended size at the quota rates in `scripts/seed/lib/level-heuristic.ts` (`SENTENCE_PER_LEVEL` × `LEVEL_COUNT`, and so on). The "ladder actual" is what's currently on the ladder. Counts are derived from `data/processed/subjects.jsonl` by whether a subject carries a non-null `level`.
 
-Every type is laddered to target. Unladdered rows are not a gap and not lost: they are seeded and browsable, just not on the curriculum ladder. The seeded pool is deliberately much larger than the ladder for every corpus-sourced type (10,384 kanji seeded vs ~1,980 laddered, 29,911 vocab vs 5,400, 7,705 sentences vs 3,600) — the ladder is a curated slice, not an authoring shortfall.
+Every type is laddered to target. Unladdered rows are not a gap and not lost: they are seeded and browsable, just not on the curriculum ladder. The seeded pool is deliberately much larger than the ladder for every corpus-sourced type (10,384 kanji seeded vs ~1,980 laddered, 29,911 vocab vs 5,225, 7,705 sentences vs 3,600) — the ladder is a curated slice, not an authoring shortfall.
+
+VOCAB's target is below `VOCAB_PER_LEVEL * LEVEL_COUNT` (5,400) on purpose: levels 1-3 run reduced quotas because kanji-bearing vocab does not exist that early in the ladder, and filling those levels to the full quota meant scraping up kana-only filler. See the beginner coverage section in `docs/content.md`.
 
 ### Sentence ladder sizing and selection
 

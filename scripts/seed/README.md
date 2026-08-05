@@ -206,6 +206,33 @@ To retune: adjust the exported `*_QUOTA` / `*_TARGET` / `*_CEILING`
 constants at the top of the file. All pure, all covered by
 `lib/__tests__/level-heuristic.test.ts`.
 
+### Curated overrides
+
+Frequency ranking measures how often a word appears in a written corpus,
+which is not the same as what a beginner should learn first. Four hand-
+maintained overrides correct for that, all in `lib/level-heuristic.ts`:
+
+- `VOCAB_PRIORITY_SLUGS` — vocab that must make the ladder regardless of
+  rank (core verbs, numbers, question words, greetings). Sorts ahead of the
+  frequency ordering but still respects kanji dependencies.
+- `KANJI_PRIORITY_CHARACTERS` — kanji that must be selected even though the
+  JLPT set alone fills `KANJI_LADDER_TARGET`. 分 sits at frequency rank 24
+  and was off the ladder entirely without this.
+- `VOCAB_BLOCKED_SLUGS` — kept off the ladder however common: crude slang
+  and bare full-width numerals. Matched by slug, never by scanning glosses,
+  so 何 and 息子 survive their vulgar secondary senses.
+- `VOCAB_EARLY_LEVEL_QUOTAS` — reduced vocab quotas for levels 1-3, where
+  kanji-bearing vocab does not yet exist in quantity.
+
+**Slugs are derived, not authoritative.** A curated slug that matches no
+seeded subject is silently inert. `transform.ts` fails the run when that
+happens; see the curated-list integrity check near the end of `main`. This
+matters because changes elsewhere in the pipeline can rename a subject: the
+`uk` kana demotion turned `vocab-美味しい-おいしい` into
+`vocab-おいしい-おいしい` and broke a priority entry with no visible symptom.
+
+See the beginner coverage section in `docs/content.md` for the full story.
+
 ## Vocab scope control
 
 Per the task, vocab is filtered — not the full ~218k JMdict_e entries — to

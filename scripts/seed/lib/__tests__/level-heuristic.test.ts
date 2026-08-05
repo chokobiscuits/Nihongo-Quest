@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   assignLevels,
   assignSentenceLevels,
+  isPriorityVocab,
+  isPriorityKanji,
+  isBlockedVocab,
+  vocabQuotaForLevel,
+  VOCAB_EARLY_LEVEL_QUOTAS,
+  VOCAB_PRIORITY_SLUGS,
+  VOCAB_BLOCKED_SLUGS,
+  KANJI_PRIORITY_CHARACTERS,
   sentenceLengthCeiling,
   SENTENCE_LENGTH_MIN_CEILING,
   SENTENCE_LENGTH_MAX_CEILING,
@@ -193,6 +201,292 @@ describe("assignLevels", () => {
     const level1 = byLevel.get(1)!;
     expect(level1.RADICAL).toBeGreaterThan(0);
     expect(level1.KANJI).toBeGreaterThan(0);
+  });
+});
+
+describe("VOCAB_PRIORITY_SLUGS", () => {
+  it("promotes a curated slug over a better-ranked competitor for a scarce slot", () => {
+    // One kanji at level 1, then a single vocab slot at level 2. The priority
+    // entry has the worst possible ranking (uncommon, no frequency) and the
+    // competitor has the best, so frequency ordering alone would never pick
+    // it.
+    const priority = VOCAB_PRIORITY_SLUGS[0];
+    const inputs: LevelInput[] = [
+      { tempId: "k1", type: "KANJI", grade: 1, frequency: 1, jlpt: 5, isCommon: false, dependsOn: [] },
+      {
+        tempId: "v-priority",
+        type: "VOCAB",
+        slug: priority,
+        grade: null,
+        frequency: null,
+        jlpt: null,
+        isCommon: false,
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      },
+      ...Array.from({ length: VOCAB_PER_LEVEL * 2 }, (_, i) => ({
+        tempId: `v-common-${i}`,
+        type: "VOCAB" as const,
+        slug: `vocab-filler-${i}`,
+        grade: null,
+        frequency: 1,
+        jlpt: null,
+        isCommon: true,
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      })),
+    ];
+
+    const levels = assignLevels(inputs);
+    const priorityLevel = levels.get("v-priority");
+    expect(priorityLevel).not.toBeNull();
+    // Placed at the first level it is eligible for, ahead of the common pack.
+    expect(priorityLevel).toBe((levels.get("k1") as number) + 1);
+  });
+
+  it("still respects kanji dependencies rather than forcing an early level", () => {
+    // The curated entry depends on a kanji placed late, so it must land after
+    // that kanji, not at level 1. Priority reorders within a level; it does
+    // not bypass the dependency rule.
+    const priority = VOCAB_PRIORITY_SLUGS[0];
+    const inputs: LevelInput[] = [
+      { tempId: "k-late", type: "KANJI", grade: null, frequency: 9000, jlpt: null, isCommon: false, dependsOn: [] },
+      {
+        tempId: "v-priority",
+        type: "VOCAB",
+        slug: priority,
+        grade: null,
+        frequency: null,
+        jlpt: null,
+        isCommon: false,
+        dependsOn: ["k-late"],
+        strictDependsOn: ["k-late"],
+      },
+    ];
+
+    const levels = assignLevels(inputs);
+    const kanjiLevel = levels.get("k-late");
+    const vocabLevel = levels.get("v-priority");
+    if (typeof kanjiLevel === "number" && typeof vocabLevel === "number") {
+      expect(vocabLevel).toBeGreaterThan(kanjiLevel);
+    }
+  });
+
+  it("identifies priority slugs exactly, with no partial matching", () => {
+    expect(isPriorityVocab(VOCAB_PRIORITY_SLUGS[0])).toBe(true);
+    expect(isPriorityVocab(undefined)).toBe(false);
+    expect(isPriorityVocab("vocab-not-real-word")).toBe(false);
+    // A near miss must not match: slug drift should fail loudly via the
+    // reseed check, not silently half-work here.
+    expect(isPriorityVocab(`${VOCAB_PRIORITY_SLUGS[0]}-extra`)).toBe(false);
+  });
+
+  it("covers the number-word gaps that motivated the list", () => {
+    // These are the specific omissions found in the seeded ladder: standalone
+    // 一, the large units above 千, and two holes in the つ-counter series.
+    for (const slug of ["vocab-一-いち", "vocab-万-まん", "vocab-億-おく", "vocab-兆-ちょう"]) {
+      expect(VOCAB_PRIORITY_SLUGS).toContain(slug);
+    }
+  });
+
+  it("covers the core verbs a beginner syllabus expects", () => {
+    // The worst gap the coverage audit found: 3 of 18 core verbs laddered.
+    for (const slug of [
+      "vocab-行く-いく",
+      "vocab-来る-くる",
+      "vocab-食べる-たべる",
+      "vocab-飲む-のむ",
+      "vocab-見る-みる",
+      "vocab-聞く-きく",
+      "vocab-話す-はなす",
+      "vocab-読む-よむ",
+      "vocab-書く-かく",
+    ]) {
+      expect(VOCAB_PRIORITY_SLUGS).toContain(slug);
+    }
+  });
+
+  it("has no duplicate entries", () => {
+    expect(new Set(VOCAB_PRIORITY_SLUGS).size).toBe(VOCAB_PRIORITY_SLUGS.length);
+  });
+
+  it("ramps the vocab quota up over the first levels", () => {
+    // Level 1 has no kanji-bearing vocab available at all (no kanji taught
+    // yet), so a full quota can only be filled with kana-only filler.
+    expect(vocabQuotaForLevel(1)).toBeLessThan(VOCAB_PER_LEVEL);
+    expect(vocabQuotaForLevel(2)).toBeLessThan(VOCAB_PER_LEVEL);
+    expect(vocabQuotaForLevel(1)).toBeLessThanOrEqual(vocabQuotaForLevel(2));
+    expect(vocabQuotaForLevel(2)).toBeLessThanOrEqual(vocabQuotaForLevel(3));
+  });
+
+  it("uses the full vocab quota once past the early levels", () => {
+    for (const level of [VOCAB_EARLY_LEVEL_QUOTAS.length + 1, 20, LEVEL_COUNT]) {
+      expect(vocabQuotaForLevel(level)).toBe(VOCAB_PER_LEVEL);
+    }
+  });
+
+  it("keeps blocked vocab off the ladder entirely, however common it is", () => {
+    const blocked = VOCAB_BLOCKED_SLUGS[0];
+    const inputs: LevelInput[] = [
+      { tempId: "k1", type: "KANJI", grade: 1, frequency: 1, jlpt: 5, isCommon: false, dependsOn: [] },
+      {
+        tempId: "v-blocked",
+        type: "VOCAB",
+        slug: blocked,
+        grade: null,
+        frequency: 1,
+        jlpt: null,
+        isCommon: true,
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      },
+    ];
+
+    const levels = assignLevels(inputs);
+    expect(levels.get("v-blocked")).toBeNull();
+  });
+
+  it("blocks bare full-width numerals but never the months", () => {
+    // ４０ and １月 share a character class, so a regex over full-width
+    // digits would take both. The months are real vocabulary. If someone
+    // replaces the hand-listed slugs with a pattern, this fails.
+    expect(isBlockedVocab("vocab-４０-よんじゅう")).toBe(true);
+    expect(isBlockedVocab("vocab-３０００-さんぜん")).toBe(true);
+    for (const month of ["vocab-１月-いちがつ", "vocab-１２月-じゅうにがつ"]) {
+      expect(isBlockedVocab(month)).toBe(false);
+    }
+  });
+
+  it("does not block ordinary words that merely have a vulgar secondary gloss", () => {
+    // The blocklist is slug-based precisely so 何 and 息子 survive. If it ever
+    // becomes gloss-based, this is the test that should fail.
+    expect(isBlockedVocab("vocab-何-なに")).toBe(false);
+    expect(isBlockedVocab("vocab-息子-むすこ")).toBe(false);
+    expect(isBlockedVocab(undefined)).toBe(false);
+  });
+
+  it("sorts nuanced adverbs behind ordinary vocab in early levels", () => {
+    const inputs: LevelInput[] = [
+      { tempId: "k1", type: "KANJI", grade: 1, frequency: 1, jlpt: 5, isCommon: false, dependsOn: [] },
+      // One slot's worth of ordinary nouns, plus an adverb that would win on
+      // frequency alone.
+      {
+        tempId: "v-adverb",
+        type: "VOCAB",
+        slug: "vocab-うずうず-うずうず",
+        grade: null,
+        frequency: 1,
+        jlpt: null,
+        isCommon: true,
+        partsOfSpeech: ["adv", "adv-to"],
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      },
+      ...Array.from({ length: VOCAB_PER_LEVEL }, (_, i) => ({
+        tempId: `v-noun-${i}`,
+        type: "VOCAB" as const,
+        slug: `vocab-noun-${i}`,
+        grade: null,
+        frequency: 500 + i,
+        jlpt: null,
+        isCommon: true,
+        partsOfSpeech: ["n"],
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      })),
+    ];
+
+    const levels = assignLevels(inputs);
+    const adverbLevel = levels.get("v-adverb");
+    const firstNounLevel = levels.get("v-noun-0");
+    // The adverb loses its slot to the nouns despite ranking better.
+    expect(adverbLevel).not.toBe(firstNounLevel);
+  });
+
+  it("does not deprioritize an adverb that is also a noun or verb", () => {
+    // Words carrying a substantive sense earn their place on that sense.
+    const inputs: LevelInput[] = [
+      { tempId: "k1", type: "KANJI", grade: 1, frequency: 1, jlpt: 5, isCommon: false, dependsOn: [] },
+      {
+        tempId: "v-dual",
+        type: "VOCAB",
+        slug: "vocab-dual",
+        grade: null,
+        frequency: 1,
+        jlpt: null,
+        isCommon: true,
+        partsOfSpeech: ["adv", "n"],
+        dependsOn: ["k1"],
+        strictDependsOn: ["k1"],
+      },
+    ];
+
+    const levels = assignLevels(inputs);
+    expect(typeof levels.get("v-dual")).toBe("number");
+  });
+
+  it("selects priority kanji even when JLPT-tagged kanji would fill the ladder", () => {
+    // The real failure mode: the JLPT set alone exhausts KANJI_LADDER_TARGET,
+    // so a non-JLPT kanji is unreachable however common it is. 分 sits at
+    // KANJIDIC2 frequency rank 24 and was dropped for exactly this reason.
+    const priority = KANJI_PRIORITY_CHARACTERS[0];
+    const inputs: LevelInput[] = [
+      {
+        tempId: "k-priority",
+        type: "KANJI",
+        characters: priority,
+        grade: null,
+        frequency: 24,
+        jlpt: null,
+        isCommon: false,
+        dependsOn: [],
+      },
+      ...Array.from({ length: KANJI_LADDER_TARGET + 50 }, (_, i) => ({
+        tempId: `k-jlpt-${i}`,
+        type: "KANJI" as const,
+        characters: `X${i}`,
+        grade: 1,
+        frequency: i + 1,
+        jlpt: 5,
+        isCommon: false,
+        dependsOn: [],
+      })),
+    ];
+
+    const levels = assignLevels(inputs);
+    expect(levels.get("k-priority")).not.toBeNull();
+    expect(typeof levels.get("k-priority")).toBe("number");
+  });
+
+  it("identifies priority kanji by exact character", () => {
+    expect(isPriorityKanji(KANJI_PRIORITY_CHARACTERS[0])).toBe(true);
+    expect(isPriorityKanji(undefined)).toBe(false);
+    expect(isPriorityKanji("森")).toBe(false);
+  });
+
+  it("lists no vocab under a kanji headword the uk demotion has replaced", () => {
+    // A priority entry only works if its slug matches what transform.ts
+    // actually builds. Words JMdict files under a kanji headword but tags
+    // "usually written in kana" are emitted kana-primary (see
+    // entryIsKanaUsual), so the kanji-form slug names nothing. 鞄 became
+    // かばん and 何処 became どこ; listing the old form would be a dead entry.
+    expect(VOCAB_PRIORITY_SLUGS).not.toContain("vocab-鞄-かばん");
+    expect(VOCAB_PRIORITY_SLUGS).not.toContain("vocab-何処-どこ");
+    expect(VOCAB_PRIORITY_SLUGS).toContain("vocab-かばん-かばん");
+    expect(VOCAB_PRIORITY_SLUGS).toContain("vocab-どこ-どこ");
+  });
+
+  it("only lists well-formed vocab slugs", () => {
+    // A slug that does not match the vocab-<characters>-<reading> shape built
+    // in transform.ts can never match a real subject, so it would sit in the
+    // list doing nothing. Shape is checkable here; existence is not, since
+    // this module has no corpus access. The reseed check in
+    // docs/content.md's beginner coverage section is what catches a slug that
+    // is well-formed but wrong.
+    for (const slug of VOCAB_PRIORITY_SLUGS) {
+      expect(slug.startsWith("vocab-")).toBe(true);
+      expect(slug.split("-").length).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 

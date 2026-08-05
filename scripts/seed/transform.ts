@@ -23,6 +23,8 @@ import {
   assignSentenceLevels,
   type LevelInput,
   type SentenceLevelInput,
+  VOCAB_PRIORITY_SLUGS,
+  VOCAB_BLOCKED_SLUGS,
 } from "./lib/level-heuristic";
 import { baseSlug, dedupeSlug } from "./lib/slug";
 import { DATA_SOURCES } from "./lib/data-sources";
@@ -350,6 +352,8 @@ async function main() {
     levelInputs.push({
       tempId,
       type: "KANJI",
+      // Carried so selection can match KANJI_PRIORITY_CHARACTERS.
+      characters: kanji.literal,
       grade: kanji.grade,
       frequency: kanji.frequency,
       jlpt: jlptByKanji.get(kanji.literal) ?? null,
@@ -384,7 +388,27 @@ async function main() {
   // of the entry. Restricting to prioritized forms keeps particles like の
   // correctly recognized as kana-primary instead of being excluded entirely
   // because an obscure variant kanji isn't in the seeded kanji set.
+  /// JMdict's "usually written using kana alone" sense tag. When every sense
+  /// carries it, the kanji spelling exists in the dictionary but is not how
+  /// the word is actually written: どこ is こんにちは-style everyday
+  /// vocabulary whose 何処 form a reader will almost never meet.
+  ///
+  /// Requires EVERY sense to be tagged, not just one. Plenty of entries are
+  /// kana-usual in one sense and kanji-written in another (a verb sense
+  /// normally in kanji, an idiomatic sense normally in kana); demoting the
+  /// kanji form for those would be wrong.
+  function entryIsKanaUsual(entry: JMdictEntry): boolean {
+    if (entry.senses.length === 0) return false;
+    return entry.senses.every((s) => s.misc.includes("uk"));
+  }
+
   function primaryEligibleKanjiForms(entry: JMdictEntry): JMdictEntry["kanji"] {
+    // A kana-usual entry is treated as kana-primary even when its kanji form
+    // carries priority tags. Without this the ladder teaches 何処 for "where"
+    // and 幾ら for "how much", quizzing spellings native writers avoid. Same
+    // demotion the unprioritized-kanji branch below performs, driven by a
+    // different signal.
+    if (entryIsKanaUsual(entry)) return [];
     const prioritized = entry.kanji.filter((k) => k.priorities.length > 0);
     return prioritized.length > 0 ? prioritized : entry.kanji.length > 0 ? [] : entry.kanji;
   }
@@ -476,11 +500,16 @@ async function main() {
     const hasUk = entry.senses.some((s) => s.misc.includes("uk"));
     const pos = [...new Set(entry.senses.flatMap((s) => s.pos))];
 
+    // Hoisted so the LevelInput below can carry the same slug: vocab level
+    // assignment matches curated must-include entries by slug (see
+    // VOCAB_PRIORITY_SLUGS in level-heuristic.ts).
+    const vocabSlug = dedupeSlug(baseSlug("vocab", `${characters}-${primaryReading}`), usedSlugs);
+
     subjects.push({
       tempId,
       type: "VOCAB",
       level: 0,
-      slug: dedupeSlug(baseSlug("vocab", `${characters}-${primaryReading}`), usedSlugs),
+      slug: vocabSlug,
       characters,
       meanings,
       readings,
@@ -518,10 +547,15 @@ async function main() {
     levelInputs.push({
       tempId,
       type: "VOCAB",
+      slug: vocabSlug,
+      // Carried so early levels can apply the kana-only frequency floor.
+      characters,
       grade: null,
       frequency: nfRank,
       jlpt: null,
       isCommon,
+      // Carried so early levels can hold back nuanced adverbs/onomatopoeia.
+      partsOfSpeech: pos,
       dependsOn,
       strictDependsOn: dependsOn,
     });
@@ -982,6 +1016,24 @@ async function main() {
       Math.max(1, coverage.furiganaHits + coverage.furiganaMisses)
     ).toFixed(1)}%)`,
   );
+  // Curated-list integrity. A priority or blocked slug that matches no
+  // subject is silently inert: the word simply does not get promoted or
+  // suppressed, with nothing in the output to say so. That has already
+  // happened once, when the `uk` demotion renamed 美味しい to おいしい and
+  // left the old slug in the priority list doing nothing. Fail loudly here
+  // instead, since these lists are edited by hand and their slugs are
+  // derived, not authoritative.
+  const allVocabSlugs = new Set(subjects.filter((s) => s.type === "VOCAB").map((s) => s.slug));
+  const unmatchedPriority = VOCAB_PRIORITY_SLUGS.filter((s) => !allVocabSlugs.has(s));
+  const unmatchedBlocked = VOCAB_BLOCKED_SLUGS.filter((s) => !allVocabSlugs.has(s));
+  if (unmatchedPriority.length > 0 || unmatchedBlocked.length > 0) {
+    console.error("\nERROR: curated vocab slugs match no seeded subject.");
+    if (unmatchedPriority.length > 0) console.error("  priority:", unmatchedPriority.join(", "));
+    if (unmatchedBlocked.length > 0) console.error("  blocked: ", unmatchedBlocked.join(", "));
+    console.error("  Fix the slug in scripts/seed/lib/level-heuristic.ts or remove the entry.\n");
+    process.exitCode = 1;
+  }
+
   console.log(`Kanji with KanjiVG decomposition: ${coverage.kanjiWithKvg} / ${kanjiCount}`);
   console.log(`KRADFILE coverage gaps (components KanjiVG's direct children miss): ${coverage.kradfileCoverageGaps.length}`);
   if (coverage.kradfileCoverageGaps.length > 0) {
