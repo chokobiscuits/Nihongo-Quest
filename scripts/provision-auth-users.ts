@@ -16,8 +16,8 @@ const password = process.env.INITIAL_USER_PASSWORD;
 if (!url || !serviceRoleKey || !password) {
   throw new Error("Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY or INITIAL_USER_PASSWORD");
 }
-if (password.length < 12) {
-  throw new Error("Choose an initial password of at least 12 characters");
+if (password.length < 10) {
+  throw new Error("Choose an initial password of at least 10 characters");
 }
 
 const admin = createClient(url, serviceRoleKey, {
