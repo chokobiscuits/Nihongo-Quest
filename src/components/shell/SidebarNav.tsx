@@ -23,6 +23,7 @@ import {
   ReviewIcon,
   ExamIcon,
   ProgressIcon,
+  LeaderboardIcon,
   MasteryIcon,
   AchievementIcon,
   SettingsIcon,
@@ -98,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { href: "/progress", labelEn: "Progress", labelJa: "進捗", Icon: ProgressIcon },
+      { href: "/leaderboard", labelEn: "Leaderboard", labelJa: "ランキング", Icon: LeaderboardIcon },
       { href: "/tutorials", labelEn: "Tutorials", labelJa: "チュートリアル", Icon: TutorialIcon },
       { href: "/mastery", labelEn: "Mastery", labelJa: "熟練度", Icon: MasteryIcon },
       { href: "/achievements", labelEn: "Achievements", labelJa: "実績", Icon: AchievementIcon },
