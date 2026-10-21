@@ -119,7 +119,7 @@ export function LessonRunner({ batch }: LessonRunnerProps) {
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <LessonTeachCard subject={subject} position={index + 1} batchSize={batch.length} />
+      <LessonTeachCard key={subject.id} subject={subject} position={index + 1} batchSize={batch.length} />
 
       {error && <p className="text-caption text-danger">{error}</p>}
 

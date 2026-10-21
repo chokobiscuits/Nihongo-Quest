@@ -13,6 +13,14 @@
 // never touched by the seed scripts and must be excludable from any export
 // that redistributes seeded content under CC BY-SA without also publishing
 // personal notes.
+//
+// Per-user overrides of that block live in UserMnemonic, not on Subject
+// itself — Subject is shared across every account, so a field written there
+// by one user would leak to all of them. The USER-AUTHORED block on Subject
+// is kept as the system-default/seeded fallback only (e.g. a generated
+// mnemonic shipped with the curriculum); UserMnemonic rows, scoped by
+// (userId, subjectId), take precedence over it when present. See
+// src/server/queries/mnemonics.ts for the merge.
 
 generator client {
   provider = "prisma-client"
@@ -67,26 +75,30 @@ model Subject {
   readings Json
 
   // ---------------------------------------------------------- USER-AUTHORED
-  // Everything below this line is written by the user, never by a seed
-  // script. Kept together and clearly labeled so a future "export my seeded
-  // library" job can select every column above this block and skip these —
-  // the seeded content is CC BY-SA and redistributable, this is not.
+  // System-default/seeded fallback only — see UserMnemonic for the per-user
+  // override that takes precedence when present. Everything below this line
+  // is written by seed/generation scripts, never by a signed-in user's own
+  // edits (those go to UserMnemonic instead). Kept together and clearly
+  // labeled so a future "export my seeded library" job can select every
+  // column above this block and skip these — the seeded content is CC BY-SA
+  // and redistributable, user-authored overrides are not.
   meaningMnemonic  String?
   readingMnemonic  String?
   meaningHint      String?
   readingHint      String?
-  /// Synonym whitelist: alternate meanings the user wants accepted as
-  /// correct, on top of whatever `meanings` already allows.
+  /// Synonym whitelist: alternate meanings accepted as correct, on top of
+  /// whatever `meanings` already allows. Seeded default only — a user's own
+  /// additions live on their UserMnemonic row.
   acceptedMeanings Json    @default("[]")
   authored         Boolean @default(false)
   /// Provenance of the mnemonic/hint fields above: null (never touched),
   /// "generated" (written by scripts/mnemonics/generate.ts, safe to
-  /// regenerate), or "authored" (hand-edited by the user through the
-  /// mnemonic editor, never overwritten by a regeneration pass). Distinct
-  /// from `authored`, which only tracks acceptedMeanings edits via the
-  /// meaning-accept escape hatch as well as mnemonic edits — this column
-  /// exists so the generator can tell "never generated" apart from "user
-  /// took over" without conflating the two.
+  /// regenerate), or "authored" (hand-edited through the mnemonic editor
+  /// before per-user mnemonics existed, never overwritten by a regeneration
+  /// pass). Distinct from `authored`, which only tracks acceptedMeanings
+  /// edits via the meaning-accept escape hatch as well as mnemonic edits —
+  /// this column exists so the generator can tell "never generated" apart
+  /// from "user took over" without conflating the two.
   mnemonicSource   String?
   // ------------------------------------------------------ END USER-AUTHORED
 
@@ -104,12 +116,41 @@ model Subject {
   /// span rather than sourced from JmdictFurigana per-character segments.
   furiganaFallback Boolean @default(false)
 
-  parentLinks SubjectComponent[] @relation("SubjectAsParent")
-  childLinks  SubjectComponent[] @relation("SubjectAsChild")
-  userSubject UserSubject[]
+  parentLinks   SubjectComponent[] @relation("SubjectAsParent")
+  childLinks    SubjectComponent[] @relation("SubjectAsChild")
+  userSubject   UserSubject[]
+  userMnemonics UserMnemonic[]
 
   @@index([type, level])
   @@index([jlpt])
+}
+
+/// Per-user override of Subject's USER-AUTHORED block: mnemonics, hints, and
+/// accepted-meaning synonyms, scoped to the signed-in user instead of shared
+/// across every account. One row per (userId, subjectId); a missing row
+/// means "no override yet", and src/server/queries/mnemonics.ts falls back
+/// to Subject's own (seeded-default) fields in that case.
+///
+/// Mirrors the field set and semantics of Subject's USER-AUTHORED block —
+/// see that block's comment for what each field means and why it's kept
+/// separate from seeded content.
+model UserMnemonic {
+  id        String @id @default(cuid())
+  userId    String
+  subjectId String
+
+  meaningMnemonic  String?
+  readingMnemonic  String?
+  meaningHint      String?
+  readingHint      String?
+  acceptedMeanings Json    @default("[]")
+
+  updatedAt DateTime @updatedAt
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId])
+  @@index([userId])
 }
 
 /// Composition edges: which Subjects make up which other Subjects (radicals

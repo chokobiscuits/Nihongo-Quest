@@ -6,6 +6,7 @@ import { isTypeUnlocked } from "@/services/srs/typeUnlock";
 import { getCurriculumLevels, getGuruCounts, getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
+import { mergeMnemonicFields } from "@/server/queries/mnemonics";
 
 // Ladder types have a curriculum level and are gated by unlock rules.
 // Reading has no seeded rows yet (see dashboard.ts); Sentence and Grammar
@@ -470,21 +471,29 @@ export async function getSubjectDetail(
 
   if (!subject) return null;
 
-  const userSubject = await prisma.userSubject.findUnique({
-    where: { userId_subjectId: { userId, subjectId: subject.id } },
-    select: {
-      srsStage: true,
-      dueAt: true,
-      passedAt: true,
-      burnedAt: true,
-      meaningCorrect: true,
-      meaningIncorrect: true,
-      readingCorrect: true,
-      readingIncorrect: true,
-      masteryLevel: true,
-      masteryXp: true,
-    },
-  });
+  const [userSubject, userMnemonic] = await Promise.all([
+    prisma.userSubject.findUnique({
+      where: { userId_subjectId: { userId, subjectId: subject.id } },
+      select: {
+        srsStage: true,
+        dueAt: true,
+        passedAt: true,
+        burnedAt: true,
+        meaningCorrect: true,
+        meaningIncorrect: true,
+        readingCorrect: true,
+        readingIncorrect: true,
+        masteryLevel: true,
+        masteryXp: true,
+      },
+    }),
+    prisma.userMnemonic.findUnique({
+      where: { userId_subjectId: { userId, subjectId: subject.id } },
+      select: { meaningMnemonic: true, readingMnemonic: true, meaningHint: true, readingHint: true, acceptedMeanings: true },
+    }),
+  ]);
+
+  const merged = mergeMnemonicFields(subject, userMnemonic);
 
   return {
     id: subject.id,
@@ -494,12 +503,12 @@ export async function getSubjectDetail(
     characters: subject.characters,
     meanings: subject.meanings as unknown as LessonSubjectMeaning[],
     readings: subject.readings as unknown as LessonSubjectReading[],
-    meaningMnemonic: subject.meaningMnemonic,
-    readingMnemonic: subject.readingMnemonic,
-    meaningHint: subject.meaningHint,
-    readingHint: subject.readingHint,
-    acceptedMeanings: subject.acceptedMeanings as string[],
-    authored: subject.authored,
+    meaningMnemonic: merged.meaningMnemonic,
+    readingMnemonic: merged.readingMnemonic,
+    meaningHint: merged.meaningHint,
+    readingHint: merged.readingHint,
+    acceptedMeanings: merged.acceptedMeanings,
+    authored: userMnemonic !== null || subject.authored,
     jlpt: subject.jlpt,
     frequency: subject.frequency,
     furigana: subject.furigana as { ruby: string; rt?: string }[] | null,
