@@ -372,6 +372,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
             YOUR MNEMONICS
           </span>
           <MnemonicEditor
+            key={`${subject.id}-meaning`}
             subjectId={subject.id}
             field="meaningMnemonic"
             label="Meaning mnemonic"
@@ -381,6 +382,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
           />
           {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && subject.type !== "GRAMMAR" && (
             <MnemonicEditor
+              key={`${subject.id}-reading`}
               subjectId={subject.id}
               field="readingMnemonic"
               label="Reading mnemonic"
@@ -389,7 +391,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
               accentColor={theme.base}
             />
           )}
-          <AcceptedMeaningsEditor subjectId={subject.id} value={subject.acceptedMeanings} accentColor={theme.base} />
+          <AcceptedMeaningsEditor key={subject.id} subjectId={subject.id} value={subject.acceptedMeanings} accentColor={theme.base} />
         </div>
       </div>
     </div>

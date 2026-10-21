@@ -28,7 +28,7 @@ export default async function SubjectDetailPage({
       <Link href={`/subjects/${typeSlug}`} className="text-caption text-text-dim hover:text-text w-fit">
         ← Back
       </Link>
-      <SubjectDetailCard subject={subject} />
+      <SubjectDetailCard key={subject.id} subject={subject} />
     </div>
   );
 }

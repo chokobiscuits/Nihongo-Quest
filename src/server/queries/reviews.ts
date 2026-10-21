@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import type { LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
+import { mergeMnemonicFields, type UserMnemonicOverride } from "@/server/queries/mnemonics";
 
 export interface ReviewSubject {
   id: string; // UserSubject id
@@ -72,6 +73,8 @@ const REVIEW_SELECT = {
       acceptedMeanings: true,
       meaningMnemonic: true,
       readingMnemonic: true,
+      meaningHint: true,
+      readingHint: true,
       furigana: true,
       furiganaFallback: true,
     },
@@ -93,12 +96,15 @@ type ReviewRow = {
     acceptedMeanings: unknown;
     meaningMnemonic: string | null;
     readingMnemonic: string | null;
+    meaningHint: string | null;
+    readingHint: string | null;
     furigana: unknown;
     furiganaFallback: boolean;
   };
 };
 
-function toReviewSubject(row: ReviewRow): ReviewSubject {
+function toReviewSubject(row: ReviewRow, mnemonicBySubject: Map<string, UserMnemonicOverride>): ReviewSubject {
+  const merged = mergeMnemonicFields(row.subject, mnemonicBySubject.get(row.subject.id));
   return {
     id: row.id,
     subjectId: row.subject.id,
@@ -107,15 +113,26 @@ function toReviewSubject(row: ReviewRow): ReviewSubject {
     characters: row.subject.characters,
     meanings: row.subject.meanings as LessonSubjectMeaning[],
     readings: row.subject.readings as LessonSubjectReading[],
-    acceptedMeanings: row.subject.acceptedMeanings as string[],
-    meaningMnemonic: row.subject.meaningMnemonic,
-    readingMnemonic: row.subject.readingMnemonic,
+    acceptedMeanings: merged.acceptedMeanings,
+    meaningMnemonic: merged.meaningMnemonic,
+    readingMnemonic: merged.readingMnemonic,
     srsStage: row.srsStage,
     dueAt: row.dueAt,
     lastPromotedAt: row.lastPromotedAt,
     furigana: row.subject.furigana as { ruby: string; rt?: string }[] | null,
     furiganaFallback: row.subject.furiganaFallback,
   };
+}
+
+/// Fetches the signed-in user's UserMnemonic overrides for a set of subject
+/// ids, keyed by subjectId, for merging into review queue rows.
+async function fetchMnemonicOverrides(userId: string, subjectIds: string[]): Promise<Map<string, UserMnemonicOverride>> {
+  if (subjectIds.length === 0) return new Map();
+  const rows = await prisma.userMnemonic.findMany({
+    where: { userId, subjectId: { in: subjectIds } },
+    select: { subjectId: true, meaningMnemonic: true, readingMnemonic: true, meaningHint: true, readingHint: true, acceptedMeanings: true },
+  });
+  return new Map(rows.map((r) => [r.subjectId, r]));
 }
 
 /// Fetches the RANKED review queue for `userId`: every UserSubject that has
@@ -160,6 +177,8 @@ export async function getReviewQueue(userId: string, now: Date = new Date()): Pr
           acceptedMeanings: true,
           meaningMnemonic: true,
           readingMnemonic: true,
+          meaningHint: true,
+          readingHint: true,
           furigana: true,
           furiganaFallback: true,
         },
@@ -167,7 +186,8 @@ export async function getReviewQueue(userId: string, now: Date = new Date()): Pr
     },
   });
 
-  const items: ReviewSubject[] = shuffle(rows.map(toReviewSubject));
+  const overrides = await fetchMnemonicOverrides(userId, rows.map((r) => r.subject.id));
+  const items: ReviewSubject[] = shuffle(rows.map((row) => toReviewSubject(row, overrides)));
 
   const countsByType = new Map<SubjectType, number>();
   for (const row of rows) {
@@ -228,7 +248,8 @@ export async function getUnrankedReviewQueue(
     select: REVIEW_SELECT,
   });
 
-  const shuffled = shuffle(rows.map(toReviewSubject));
+  const overrides = await fetchMnemonicOverrides(userId, rows.map((r) => r.subject.id));
+  const shuffled = shuffle(rows.map((row) => toReviewSubject(row, overrides)));
   // Slice after shuffling: a 10-item session should be a random 10 of the
   // matching set, not the 10 with the earliest dueAt every single time.
   const limit = filter.limit;

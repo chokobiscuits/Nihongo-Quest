@@ -8,6 +8,7 @@ import { getOrCreateProfile } from "@/server/queries/profile";
 import { getCurriculumLevels, getGuruCounts } from "@/server/queries/curriculum";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
 import { getNextRequiredTutorial, type TutorialDetail } from "@/server/queries/tutorials";
+import { mergeMnemonicFields } from "@/server/queries/mnemonics";
 
 // Lessons only ever schedule the 60-level curriculum ladder (level != null).
 // Off-ladder subjects (jlpt/frequency reference material, and the ~5,900
@@ -292,44 +293,53 @@ export async function getLessonBatch(
 
   const batch = selectLessonBatch(asLessonCandidates, batchSize);
 
-  return batch.map(({ source }) => ({
-    id: source.id,
-    type: source.type as LessonSubjectType,
-    level: source.level,
-    slug: source.slug,
-    characters: source.characters,
-    meanings: source.meanings as unknown as LessonSubjectMeaning[],
-    readings: source.readings as unknown as LessonSubjectReading[],
-    meaningMnemonic: source.meaningMnemonic,
-    readingMnemonic: source.readingMnemonic,
-    meaningHint: source.meaningHint,
-    readingHint: source.readingHint,
-    acceptedMeanings: source.acceptedMeanings as string[],
-    authored: source.authored,
-    frequency: source.frequency,
-    jlpt: source.jlpt,
-    furigana: source.furigana as { ruby: string; rt?: string }[] | null,
-    furiganaFallback: source.furiganaFallback,
-    componentsOf:
-      source.type === "SENTENCE"
-        ? sentenceWordBreakdown(source.metadata, source.parentLinks)
-        : source.type === "GRAMMAR"
-          ? []
-          : source.parentLinks.map((link) => ({
-              id: link.child.id,
-              type: link.child.type as LessonSubjectType,
-              slug: link.child.slug,
-              characters: link.child.characters,
-              meaning: firstMeaning(link.child.meanings),
-              readingUsed: link.readingUsed,
-            })),
-    usedIn: rankUsedIn(source.type, source.childLinks),
-    usedInTotal: source.childLinks.length,
-    partsOfSpeech: source.type === "VOCAB" ? partsOfSpeechOf(source.metadata) : [],
-    tatoebaSentenceId: source.type === "SENTENCE" ? tatoebaSentenceIdOf(source.metadata) : null,
-    formation: source.type === "GRAMMAR" ? formationOf(source.metadata) : null,
-    grammarExamples: source.type === "GRAMMAR" ? grammarExamples(source.parentLinks) : [],
-  }));
+  const userMnemonics = await prisma.userMnemonic.findMany({
+    where: { userId, subjectId: { in: batch.map(({ source }) => source.id) } },
+    select: { subjectId: true, meaningMnemonic: true, readingMnemonic: true, meaningHint: true, readingHint: true, acceptedMeanings: true },
+  });
+  const mnemonicBySubject = new Map(userMnemonics.map((m) => [m.subjectId, m]));
+
+  return batch.map(({ source }) => {
+    const merged = mergeMnemonicFields(source, mnemonicBySubject.get(source.id));
+    return {
+      id: source.id,
+      type: source.type as LessonSubjectType,
+      level: source.level,
+      slug: source.slug,
+      characters: source.characters,
+      meanings: source.meanings as unknown as LessonSubjectMeaning[],
+      readings: source.readings as unknown as LessonSubjectReading[],
+      meaningMnemonic: merged.meaningMnemonic,
+      readingMnemonic: merged.readingMnemonic,
+      meaningHint: merged.meaningHint,
+      readingHint: merged.readingHint,
+      acceptedMeanings: merged.acceptedMeanings,
+      authored: mnemonicBySubject.has(source.id) || source.authored,
+      frequency: source.frequency,
+      jlpt: source.jlpt,
+      furigana: source.furigana as { ruby: string; rt?: string }[] | null,
+      furiganaFallback: source.furiganaFallback,
+      componentsOf:
+        source.type === "SENTENCE"
+          ? sentenceWordBreakdown(source.metadata, source.parentLinks)
+          : source.type === "GRAMMAR"
+            ? []
+            : source.parentLinks.map((link) => ({
+                id: link.child.id,
+                type: link.child.type as LessonSubjectType,
+                slug: link.child.slug,
+                characters: link.child.characters,
+                meaning: firstMeaning(link.child.meanings),
+                readingUsed: link.readingUsed,
+              })),
+      usedIn: rankUsedIn(source.type, source.childLinks),
+      usedInTotal: source.childLinks.length,
+      partsOfSpeech: source.type === "VOCAB" ? partsOfSpeechOf(source.metadata) : [],
+      tatoebaSentenceId: source.type === "SENTENCE" ? tatoebaSentenceIdOf(source.metadata) : null,
+      formation: source.type === "GRAMMAR" ? formationOf(source.metadata) : null,
+      grammarExamples: source.type === "GRAMMAR" ? grammarExamples(source.parentLinks) : [],
+    };
+  });
 }
 
 /// `usedIn` ordering/capping: RADICAL -> kanji it appears in, capped at the
