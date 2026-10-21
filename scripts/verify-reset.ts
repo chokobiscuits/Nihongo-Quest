@@ -1,11 +1,16 @@
-// Verifies resetProgress against a THROWAWAY user id. Never touches
-// local-user. Creates a profile with some progress, resets it, asserts
-// everything is gone and the profile is back to defaults, then cleans up.
+// Verifies resetProgress against a THROWAWAY user id. Never touches the real
+// user. Creates a profile with some progress, resets it, asserts everything
+// is gone and the profile is back to defaults, then cleans up.
 import { prisma } from "../src/lib/db";
-import { resetProgress } from "../src/server/actions/reset";
+import { resetProgressImpl } from "../src/server/actions/resetImpl";
 import { RESET_CONFIRMATION } from "../src/server/actions/resetConfirmation";
 
 const TEST_USER = "reset-check-user";
+// The real account's UserProfile.userId, to prove this script never touches
+// it. Now that accounts are per-user (see docs/multi-user-auth-migration.md)
+// this is no longer always "local-user" — pass it explicitly:
+//   npx tsx --env-file=.env scripts/verify-reset.ts <real-user-id>
+const REAL_USER = process.argv[2] ?? "local-user";
 
 async function cleanup() {
   await prisma.reviewLog.deleteMany({ where: { userSubject: { userId: TEST_USER } } });
@@ -28,8 +33,8 @@ function check(label: string, ok: boolean, detail = "") {
     await cleanup();
 
     // Snapshot real user first, to prove we never touch it.
-    const before = await prisma.userProfile.findUnique({ where: { userId: "local-user" } });
-    const beforeSubjects = await prisma.userSubject.count({ where: { userId: "local-user" } });
+    const before = await prisma.userProfile.findUnique({ where: { userId: REAL_USER } });
+    const beforeSubjects = await prisma.userSubject.count({ where: { userId: REAL_USER } });
 
     await prisma.userProfile.create({
       data: {
@@ -64,14 +69,14 @@ function check(label: string, ok: boolean, detail = "") {
     // Wrong confirmation must refuse.
     let refused = false;
     try {
-      await resetProgress("nope", TEST_USER);
+      await resetProgressImpl("nope", TEST_USER);
     } catch {
       refused = true;
     }
     check("refuses without the confirmation word", refused);
     check("nothing deleted on refusal", (await prisma.userSubject.count({ where: { userId: TEST_USER } })) === 1);
 
-    const result = await resetProgress(RESET_CONFIRMATION, TEST_USER);
+    const result = await resetProgressImpl(RESET_CONFIRMATION, TEST_USER);
     check("reports deleted counts", result.userSubjects === 1 && result.reviewLogs === 1, JSON.stringify(result));
 
     check("userSubjects gone", (await prisma.userSubject.count({ where: { userId: TEST_USER } })) === 0);
@@ -92,8 +97,8 @@ function check(label: string, ok: boolean, detail = "") {
     const seeded = await prisma.subject.count();
     check("seeded content untouched", seeded > 0, `${seeded} subjects`);
 
-    const afterReal = await prisma.userProfile.findUnique({ where: { userId: "local-user" } });
-    const afterRealSubjects = await prisma.userSubject.count({ where: { userId: "local-user" } });
+    const afterReal = await prisma.userProfile.findUnique({ where: { userId: REAL_USER } });
+    const afterRealSubjects = await prisma.userSubject.count({ where: { userId: REAL_USER } });
     const ser = (p: typeof before) => (p ? JSON.stringify(p, (_k, v) => (typeof v === "bigint" ? v.toString() : v)) : "null");
     check(
       "real user untouched",

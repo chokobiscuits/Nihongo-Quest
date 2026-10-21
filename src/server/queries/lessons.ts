@@ -211,8 +211,6 @@ function formationOf(metadata: unknown): string | null {
 /// ladder subjects, ordered radical -> kanji -> vocab, by level, then
 /// frequency, truncated to `UserProfile.settings.lessonBatchSize` (default
 /// 5). Creates the user's profile on first access if missing.
-import { APP_USER_ID } from "@/lib/appUser";
-
 export type LessonBatchResult =
   | { kind: "tutorial"; tutorial: TutorialDetail }
   | { kind: "lessons"; batch: LessonSubject[] };
@@ -223,7 +221,7 @@ export type LessonBatchResult =
 /// getNextRequiredTutorial). Optional triggered tutorials never block here;
 /// they surface as dismissible dashboard cards instead.
 export async function getLessonBatchOrTutorial(
-  userId: string = APP_USER_ID,
+  userId: string,
   onlyType?: SubjectType,
 ): Promise<LessonBatchResult> {
   const tutorial = await getNextRequiredTutorial(userId);
@@ -237,7 +235,7 @@ export async function getLessonBatchOrTutorial(
 /// unlock rule, so it can only ever narrow what was already legitimately
 /// available — it can never surface a locked or out-of-level item.
 export async function getLessonBatch(
-  userId: string = APP_USER_ID,
+  userId: string,
   onlyType?: SubjectType,
 ): Promise<LessonSubject[]> {
   const profile = await getOrCreateProfile(userId);

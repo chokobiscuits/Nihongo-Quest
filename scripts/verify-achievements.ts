@@ -1,13 +1,17 @@
 // Verifies achievement persistence and "newly earned" detection against a
-// THROWAWAY user. Never touches local-user.
+// THROWAWAY user. Never touches the real user.
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { recordNewAchievements, backfillEarnedAchievements } from "../src/server/queries/newAchievements";
 import { getAchievements } from "../src/server/queries/achievements";
-import { skipKana } from "../src/server/actions/kana";
+import { skipKanaImpl } from "../src/server/actions/kanaImpl";
 
 const TEST_USER = "achievement-check-user";
-const REAL_USER = "local-user";
+// The real account's UserProfile.userId, to prove this script never touches
+// it. Now that accounts are per-user (see docs/multi-user-auth-migration.md)
+// this is no longer always "local-user" — pass it explicitly:
+//   npx tsx --env-file=.env scripts/verify-achievements.ts <real-user-id>
+const REAL_USER = process.argv[2] ?? "local-user";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -117,7 +121,7 @@ async function cleanup() {
     await prisma.userProfile.create({
       data: { userId: TEST_USER, displayName: "Skip Test", timezone: "Asia/Tokyo" },
     });
-    const skipResult = await skipKana(TEST_USER);
+    const skipResult = await skipKanaImpl(TEST_USER);
     const afterSkip = await getAchievements(TEST_USER);
     check(
       "skipping kana burns items without earning achievements",

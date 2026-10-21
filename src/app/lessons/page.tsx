@@ -3,8 +3,7 @@ import { getLessonBatchOrTutorial } from "@/server/queries/lessons";
 import { LessonRunner } from "@/components/lessons/LessonRunner";
 import { TutorialGate } from "@/components/tutorials/TutorialGate";
 import { slugToType, ALL_TYPE_SLUGS } from "@/components/subject/typeSlug";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 const TYPE_LABEL: Record<string, { en: string; ja: string }> = {
   KANA: { en: "Kana", ja: "かな" },
@@ -29,7 +28,8 @@ export default async function LessonsPage({
   // ...but say so, rather than silently serving a different result than asked.
   const unrecognisedType = raw && !onlyType ? raw : null;
 
-  const result = await getLessonBatchOrTutorial(APP_USER_ID, onlyType ?? undefined);
+  const userId = await getCurrentUserId();
+  const result = await getLessonBatchOrTutorial(userId, onlyType ?? undefined);
   const label = onlyType ? TYPE_LABEL[onlyType] : null;
 
   return (

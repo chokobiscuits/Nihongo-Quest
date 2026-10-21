@@ -10,8 +10,7 @@ import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { storage } from "@/lib/storage";
 import { SoundProvider } from "@/components/sound/SoundProvider";
 import { DEFAULT_SOUND_ENABLED, DEFAULT_SOUND_VOLUME } from "@/lib/sound/manifest";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserIdOrNull } from "@/lib/session";
 
 const fontLatin = Inter({
   subsets: ["latin"],
@@ -49,13 +48,13 @@ export const metadata: Metadata = {
 /// database with no connection available, and fails the build.
 export const dynamic = "force-dynamic";
 
-async function loadShellData() {
-  const profile = await getOrCreateProfile(APP_USER_ID);
+async function loadShellData(userId: string) {
+  const profile = await getOrCreateProfile(userId);
   const masteryXpAgg = await prisma.userSubject.aggregate({
-    where: { userId: APP_USER_ID },
+    where: { userId },
     _sum: { masteryXp: true },
   });
-  const unlockStatuses = await getTypeUnlockStatuses(APP_USER_ID);
+  const unlockStatuses = await getTypeUnlockStatuses(userId);
   const settings = (profile.settings ?? {}) as { soundEnabled?: boolean; soundVolume?: number };
   return {
     name: profile.displayName,
@@ -101,10 +100,21 @@ export default async function RootLayout({
   // leaving no way in and no visible reason why. Failures are logged so they
   // reach the platform's runtime logs rather than vanishing into a generic
   // error page.
-  const shell = await loadShellData().catch((error) => {
-    console.error("[layout] shell data failed to load:", error);
-    return FALLBACK_SHELL;
-  });
+  //
+  // An unauthenticated request (no valid session cookie) has no appUserId to
+  // load a profile for — this notably includes /login itself, which must
+  // render its own chrome without ever touching the database or depending on
+  // who, if anyone, is signed in. src/proxy.ts is what actually enforces the
+  // auth gate for every other route; this fallback only keeps /login (and
+  // any race where the gate passes but the cookie has since expired) from
+  // 500ing.
+  const userId = await getCurrentUserIdOrNull();
+  const shell = userId
+    ? await loadShellData(userId).catch((error) => {
+        console.error("[layout] shell data failed to load:", error);
+        return FALLBACK_SHELL;
+      })
+    : FALLBACK_SHELL;
 
   return (
     <html

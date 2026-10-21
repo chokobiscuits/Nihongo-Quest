@@ -4,8 +4,7 @@ import { Panel } from "@/components/panel/Panel";
 import { TutorialIcon } from "@/components/shell/NavIcons";
 import { MarkAllReadButton } from "@/components/tutorials/MarkReadButton";
 import { categorizeTutorials } from "@/services/tutorials/categories";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 /// Full tutorial library — every tutorial, readable anytime regardless of
 /// trigger, grouped into sections and kept in `order` within each.
@@ -14,7 +13,8 @@ import { APP_USER_ID } from "@/lib/appUser";
 /// `order` ranges: app-mechanics tutorials are deliberately spread through
 /// the reading sequence, so the two do not line up.
 export default async function TutorialsPage() {
-  const tutorials = await getTutorialLibrary(APP_USER_ID);
+  const userId = await getCurrentUserId();
+  const tutorials = await getTutorialLibrary(userId);
   const completedCount = tutorials.filter((t) => t.completed).length;
   const sections = categorizeTutorials(tutorials);
 

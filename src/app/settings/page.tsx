@@ -5,9 +5,11 @@ import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
 import { ResetProgressControl } from "@/components/settings/ResetProgressControl";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { DEFAULT_SOUND_ENABLED, DEFAULT_SOUND_VOLUME } from "@/lib/sound/manifest";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function SettingsPage() {
-  const profile = await getOrCreateProfile();
+  const userId = await getCurrentUserId();
+  const profile = await getOrCreateProfile(userId);
   const settings = (profile.settings ?? {}) as {
     lessonBatchSize?: number;
     furiganaOverride?: boolean | null;
@@ -32,7 +34,12 @@ export default async function SettingsPage() {
           soundEnabled: settings.soundEnabled ?? DEFAULT_SOUND_ENABLED,
           soundVolume: settings.soundVolume ?? DEFAULT_SOUND_VOLUME,
         }}
-        showLogout={Boolean(process.env.APP_PASSWORD)}
+        // Every account is a real per-user Supabase Auth login now (see
+        // docs/multi-user-auth-migration.md), so logout is always available
+        // — unlike the old shared-password gate, which could be configured
+        // off entirely.
+        showLogout
+
       />
 
       <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-5">
