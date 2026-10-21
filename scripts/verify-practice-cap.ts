@@ -1,12 +1,16 @@
 // Verifies the unranked practice XP daily cap end to end against a
-// THROWAWAY user. Never touches local-user.
+// THROWAWAY user. Never touches the real user.
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
-import { commitUnrankedReviewSession, type ReviewAnswerRecord } from "../src/server/actions/reviews";
+import { commitUnrankedReviewSessionImpl, type ReviewAnswerRecord } from "../src/server/actions/reviewsImpl";
 import { UNRANKED_DAILY_XP_CAP } from "../src/services/xp/curve";
 
 const TEST_USER = "practice-cap-user";
-const REAL_USER = "local-user";
+// The real account's UserProfile.userId, to prove this script never touches
+// it. Now that accounts are per-user (see docs/multi-user-auth-migration.md)
+// this is no longer always "local-user" — pass it explicitly:
+//   npx tsx --env-file=.env scripts/verify-practice-cap.ts <real-user-id>
+const REAL_USER = process.argv[2] ?? "local-user";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -53,13 +57,13 @@ async function cleanup() {
       }));
 
     // First session: 60 correct answers, well under the 150 cap.
-    const first = await commitUnrankedReviewSession({ answers: answersFor(60) }, TEST_USER);
+    const first = await commitUnrankedReviewSessionImpl({ answers: answersFor(60) }, TEST_USER);
     check("first session awards flat XP", first.xpAwarded === 60, `awarded ${first.xpAwarded}`);
     check("first session is not capped", first.xpCapped === false);
 
     // Second and third push past the cap.
-    await commitUnrankedReviewSession({ answers: answersFor(60) }, TEST_USER);
-    const third = await commitUnrankedReviewSession({ answers: answersFor(60) }, TEST_USER);
+    await commitUnrankedReviewSessionImpl({ answers: answersFor(60) }, TEST_USER);
+    const third = await commitUnrankedReviewSessionImpl({ answers: answersFor(60) }, TEST_USER);
     check("third session is capped", third.xpCapped === true, `awarded ${third.xpAwarded}`);
 
     const activity = await prisma.dailyActivity.findFirst({ where: { userId: TEST_USER } });
@@ -70,7 +74,7 @@ async function cleanup() {
     );
 
     // A fourth session once the cap is spent must award nothing.
-    const fourth = await commitUnrankedReviewSession({ answers: answersFor(60) }, TEST_USER);
+    const fourth = await commitUnrankedReviewSessionImpl({ answers: answersFor(60) }, TEST_USER);
     check("a session past the cap awards zero", fourth.xpAwarded === 0);
     check("remaining is reported as zero", fourth.practiceXpRemaining === 0);
 

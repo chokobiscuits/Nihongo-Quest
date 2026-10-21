@@ -89,9 +89,8 @@ export function SettingsForm({ initial, showLogout }: SettingsFormProps) {
   );
 }
 
-/// Only rendered when the shared-password gate is active (APP_PASSWORD set)
-/// — see settings/page.tsx. Clears the session cookie and redirects to
-/// /login via the browser following the server action's redirect.
+/// Clears the signed-in user's session cookie and redirects to /login via
+/// the browser following the server action's redirect.
 function LogoutField() {
   const [isPending, startTransition] = useTransition();
 

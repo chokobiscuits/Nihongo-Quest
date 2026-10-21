@@ -7,10 +7,11 @@
 //
 // Safety: this script NEVER touches `local-user`. Every write goes through
 // `sim-test-user`, passed explicitly as the `userId` argument to every
-// query/action (never via `process.env.APP_USER_ID`, which is what corrupted
-// real data last time — ESM import hoisting reads env at import time, before
-// any override could apply). All of sim-test-user's rows are deleted at the
-// end, pass or fail, via a `finally`.
+// query/*Impl function — these call the *Impl modules directly
+// (src/server/actions/*Impl.ts), not the public "use server" actions, which
+// now derive userId from the signed-in session and accept no caller-supplied
+// override. All of sim-test-user's rows are deleted at the end, pass or
+// fail, via a `finally`.
 //
 // dotenv must load before src/lib/db, which reads DATABASE_URL at module
 // scope. Relative imports (not the `@/*` alias) are used throughout, since
@@ -22,9 +23,9 @@ import { getOrCreateProfile } from "../../src/server/queries/profile";
 import { getLessonBatch } from "../../src/server/queries/lessons";
 import { getReviewQueue } from "../../src/server/queries/reviews";
 import { getDashboard } from "../../src/server/queries/dashboard";
-import { commitLessonSession, type LessonQuizAnswerRecord } from "../../src/server/actions/lessons";
-import { commitReviewSession, type ReviewAnswerRecord } from "../../src/server/actions/reviews";
-import { skipKana, unskipKana } from "../../src/server/actions/kana";
+import { commitLessonSessionImpl, type LessonQuizAnswerRecord } from "../../src/server/actions/lessonsImpl";
+import { commitReviewSessionImpl, type ReviewAnswerRecord } from "../../src/server/actions/reviewsImpl";
+import { skipKanaImpl, unskipKanaImpl } from "../../src/server/actions/kanaImpl";
 import { isKanaResolvedFor } from "../../src/services/srs/kana-gate";
 import { GURU_STAGE, BURNED_STAGE, intervalForStage, STAGES } from "../../src/services/srs/stages";
 import { xpForCorrectAnswer, levelFromTotalXp } from "../../src/services/xp/curve";
@@ -106,7 +107,7 @@ async function learnSubjects(subjectIds: string[], types: Map<string, string>) {
       answers.push({ subjectId: id, questionType: "READING", incorrectCount: 0 });
     }
   }
-  return commitLessonSession({ subjectIds, answers }, SIM_USER);
+  return commitLessonSessionImpl({ subjectIds, answers }, SIM_USER);
 }
 
 /// Answers every item in the current review queue correctly (both kinds for
@@ -121,7 +122,7 @@ async function reviewAllCorrect() {
     }
   }
   if (answers.length === 0) return null;
-  return commitReviewSession({ answers }, SIM_USER);
+  return commitReviewSessionImpl({ answers }, SIM_USER);
 }
 
 /// Backdates every UserSubject row for the given subjectIds so their
@@ -208,7 +209,7 @@ async function main() {
         assertTrue(SECTION_A0, "a kana subject reaches Guru through ordinary practice", guruedKana.srsStage >= GURU_STAGE);
       }
 
-      const skipResult = await skipKana(SIM_USER);
+      const skipResult = await skipKanaImpl(SIM_USER);
       assertTrue(SECTION_A0, "skipKana burns every remaining (unresolved) kana subject", skipResult.skipped > 0);
 
       const resolvedAfterSkip = await isKanaResolvedFor(SIM_USER);
@@ -223,7 +224,7 @@ async function main() {
 
       // Unskip: rows with real review history (the one learned+guru'd above)
       // must survive; the rest (pure skip rows, zero ReviewLog) are removed.
-      const unskipResult = await unskipKana(SIM_USER);
+      const unskipResult = await unskipKanaImpl(SIM_USER);
       assertTrue(SECTION_A0, "unskip removes the skip-created rows with no review history", unskipResult.removed > 0);
       assertEqual(SECTION_A0, "unskip keeps the one kana row with real review history", unskipResult.kept, oneKana ? 1 : 0);
 
@@ -237,7 +238,7 @@ async function main() {
       // Re-resolve kana (skip again) so the rest of the simulation's radical/
       // kanji/vocab sections — which assume kana is out of the way — proceed
       // exactly as before this section existed.
-      await skipKana(SIM_USER);
+      await skipKanaImpl(SIM_USER);
       const resolvedFinal = await isKanaResolvedFor(SIM_USER);
       assertEqual(SECTION_A0, "kana is resolved again after re-skipping for the rest of the simulation", resolvedFinal, true);
     }
@@ -710,7 +711,7 @@ async function main() {
 
       // Meaning right, reading wrong -> item as a whole must be marked
       // incorrect (not advance), and the incorrect must be counted.
-      const res = await commitReviewSession(
+      const res = await commitReviewSessionImpl(
         {
           answers: [
             { userSubjectId: row.id, questionType: "MEANING", correct: true, incorrectCount: 0 },
@@ -728,7 +729,7 @@ async function main() {
       await backdate([testKanji.id], 5);
       row = await prisma.userSubject.findUniqueOrThrow({ where: { id: row.id } });
       const stageBefore2 = row.srsStage;
-      await commitReviewSession(
+      await commitReviewSessionImpl(
         {
           answers: [
             { userSubjectId: row.id, questionType: "MEANING", correct: true, incorrectCount: 0 },
@@ -961,7 +962,7 @@ async function main() {
       const trigger = toGuru[0];
       await backdate([trigger], 5);
       const triggerRow = await prisma.userSubject.findUniqueOrThrow({ where: { userId_subjectId: { userId: SIM_USER, subjectId: trigger } } });
-      const triggerCommit = await commitReviewSession(
+      const triggerCommit = await commitReviewSessionImpl(
         {
           answers: [
             { userSubjectId: triggerRow.id, questionType: "MEANING", correct: true, incorrectCount: 0 },
@@ -1004,7 +1005,7 @@ async function main() {
       });
       if (tinySubject) {
         await backdate([tinySubject.subjectId], 200);
-        const tiny = await commitReviewSession(
+        const tiny = await commitReviewSessionImpl(
           { answers: [{ userSubjectId: tinySubject.id, questionType: "MEANING", correct: true, incorrectCount: 0 }] },
           SIM_USER,
         );
@@ -1032,7 +1033,7 @@ async function main() {
         }
         const before = await getOrCreateProfile(SIM_USER);
         const lpBefore = before.lp;
-        const perfect = await commitReviewSession({ answers }, SIM_USER);
+        const perfect = await commitReviewSessionImpl({ answers }, SIM_USER);
 
         assertTrue(
           SECTION_I,
@@ -1069,7 +1070,7 @@ async function main() {
         for (const row of rankedSubjects) {
           wrongAnswers.push({ userSubjectId: row.id, questionType: "MEANING", correct: false, incorrectCount: 1 });
         }
-        await commitReviewSession({ answers: wrongAnswers }, SIM_USER);
+        await commitReviewSessionImpl({ answers: wrongAnswers }, SIM_USER);
         const afterDisaster = await getOrCreateProfile(SIM_USER);
         assertEqual(SECTION_I, "a terrible session never drops the tier", parseTier(afterDisaster.rank), "GOLD");
         assertTrue(SECTION_I, "LP floors at 0 in division IV", afterDisaster.lp >= 0, `lp: ${afterDisaster.lp}`);
@@ -1134,7 +1135,7 @@ async function reviewAllCorrectFor(subjectId: string) {
   if (!MEANING_ONLY_TYPES.includes(subject.type)) {
     answers.push({ userSubjectId: row.id, questionType: "READING", correct: true, incorrectCount: 0 });
   }
-  return commitReviewSession({ answers }, SIM_USER);
+  return commitReviewSessionImpl({ answers }, SIM_USER);
 }
 
 /// Runs one review commit for a single item, marking it incorrect (all
@@ -1146,7 +1147,7 @@ async function reviewIncorrectFor(subjectId: string, incorrectCount: number) {
   if (!MEANING_ONLY_TYPES.includes(subject.type)) {
     answers.push({ userSubjectId: row.id, questionType: "READING", correct: false, incorrectCount });
   }
-  return commitReviewSession({ answers }, SIM_USER);
+  return commitReviewSessionImpl({ answers }, SIM_USER);
 }
 
 void STAGES;

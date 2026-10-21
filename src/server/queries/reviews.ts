@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { SubjectType } from "@/generated/prisma/enums";
 import type { LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
-import { APP_USER_ID } from "@/lib/appUser";
 
 export interface ReviewSubject {
   id: string; // UserSubject id
@@ -136,7 +135,7 @@ function toReviewSubject(row: ReviewRow): ReviewSubject {
 /// data anomaly that should surface rather than silently vanish.
 /// The returned `items` are shuffled so a session doesn't present the same
 /// order every time; `dueCounts` is unaffected.
-export async function getReviewQueue(userId: string = APP_USER_ID, now: Date = new Date()): Promise<ReviewQueueResult> {
+export async function getReviewQueue(userId: string, now: Date = new Date()): Promise<ReviewQueueResult> {
   const rows = await prisma.userSubject.findMany({
     where: {
       userId,
@@ -212,7 +211,7 @@ export async function getReviewQueue(userId: string = APP_USER_ID, now: Date = n
 /// Nothing here can change an item's stage, so including Burned costs
 /// nothing.
 export async function getUnrankedReviewQueue(
-  userId: string = APP_USER_ID,
+  userId: string,
   filter: UnrankedQueueFilter = {},
 ): Promise<ReviewSubject[]> {
   const rows = await prisma.userSubject.findMany({
@@ -250,7 +249,7 @@ export interface UnrankedOption {
 /// Matches getUnrankedReviewQueue's stage filter exactly, Burned included —
 /// if the two drifted apart the picker would offer counts the session
 /// couldn't deliver, or hide items the session would happily serve.
-export async function getUnrankedOptions(userId: string = APP_USER_ID): Promise<UnrankedOption[]> {
+export async function getUnrankedOptions(userId: string): Promise<UnrankedOption[]> {
   const rows = await prisma.userSubject.findMany({
     where: { userId, startedAt: { not: null }, srsStage: { gte: 1 } },
     select: { subject: { select: { type: true, level: true } } },

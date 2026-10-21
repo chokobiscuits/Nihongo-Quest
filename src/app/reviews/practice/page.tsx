@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { getUnrankedOptions } from "@/server/queries/reviews";
 import { UnrankedPicker } from "@/components/reviews/UnrankedPicker";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function UnrankedPracticePage() {
-  const options = await getUnrankedOptions(APP_USER_ID);
+  const userId = await getCurrentUserId();
+  const options = await getUnrankedOptions(userId);
 
   return (
     <div className="flex flex-col gap-4">

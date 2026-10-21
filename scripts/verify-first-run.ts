@@ -1,11 +1,16 @@
 // Verifies getFirstRunTutorial against a THROWAWAY user id. Never touches
-// local-user. Asserts the dashboard redirect fires for an account with no
+// the real user. Asserts the dashboard redirect fires for an account with no
 // tutorial completions and stops firing the moment one is acknowledged —
 // the property that keeps "/" from becoming permanently unreachable.
 import { prisma } from "../src/lib/db";
 import { getFirstRunTutorial, getNextRequiredTutorial } from "../src/server/queries/tutorials";
 
 const TEST_USER = "first-run-check-user";
+// The real account's UserProfile.userId, to prove this script never touches
+// it. Now that accounts are per-user (see docs/multi-user-auth-migration.md)
+// this is no longer always "local-user" — pass it explicitly:
+//   npx tsx scripts/verify-first-run.ts <real-user-id>
+const REAL_USER = process.argv[2] ?? "local-user";
 
 async function cleanup() {
   await prisma.tutorialCompletion.deleteMany({ where: { userId: TEST_USER } });
@@ -23,7 +28,7 @@ function check(label: string, ok: boolean, detail = "") {
     await cleanup();
 
     // Prove we never touch the real user.
-    const realBefore = await prisma.tutorialCompletion.count({ where: { userId: "local-user" } });
+    const realBefore = await prisma.tutorialCompletion.count({ where: { userId: REAL_USER } });
 
     const tutorialCount = await prisma.tutorial.count({ where: { required: true } });
     if (tutorialCount === 0) {
@@ -69,7 +74,7 @@ function check(label: string, ok: boolean, detail = "") {
     const afterReset = await getFirstRunTutorial(TEST_USER);
     check("a reset account is treated as first-run again", afterReset !== null, afterReset?.slug ?? "null");
 
-    const realAfter = await prisma.tutorialCompletion.count({ where: { userId: "local-user" } });
+    const realAfter = await prisma.tutorialCompletion.count({ where: { userId: REAL_USER } });
     check("real user untouched", realBefore === realAfter, `${realBefore} -> ${realAfter}`);
 
     await cleanup();

@@ -2,8 +2,7 @@ import Link from "next/link";
 import { getUnrankedReviewQueue } from "@/server/queries/reviews";
 import { UnrankedRunner } from "@/components/reviews/UnrankedRunner";
 import { SubjectType } from "@/generated/prisma/enums";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 const VALID_TYPES = new Set<string>(Object.values(SubjectType));
 
@@ -38,7 +37,8 @@ export default async function UnrankedSessionPage({
 }) {
   const params = await searchParams;
   const filter = parseFilter(params);
-  const items = await getUnrankedReviewQueue(APP_USER_ID, filter);
+  const userId = await getCurrentUserId();
+  const items = await getUnrankedReviewQueue(userId, filter);
 
   const backHref = "/reviews/practice";
 

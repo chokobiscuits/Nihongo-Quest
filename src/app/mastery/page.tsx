@@ -4,10 +4,12 @@ import { MasteryTierLadder } from "@/components/mastery/MasteryTierLadder";
 import { InfiniteMasteryCard } from "@/components/dashboard/InfiniteMasteryCard";
 import { NearPromotionSection } from "@/components/progress/NearPromotionSection";
 import { MasteryIcon } from "@/components/shell/NavIcons";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function MasteryPage() {
   const now = new Date();
-  const [progress, nearPromotion] = await Promise.all([getProgress(), getNearPromotion(undefined, 5, now)]);
+  const userId = await getCurrentUserId();
+  const [progress, nearPromotion] = await Promise.all([getProgress(userId), getNearPromotion(userId, 5, now)]);
   const { account } = progress;
 
   return (

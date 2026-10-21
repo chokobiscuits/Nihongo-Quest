@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { getReviewQueue } from "@/server/queries/reviews";
 import { ReviewRunner } from "@/components/reviews/ReviewRunner";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 /// Formats the wait until the next review comes due, e.g. "3h 20m" or
 /// "2d 4h". Rounds down to the shown unit; anything under a minute reads as
@@ -25,7 +24,8 @@ function formatWait(from: Date, to: Date): string {
 
 export default async function ReviewsPage() {
   const now = new Date();
-  const { items, nextDueAt } = await getReviewQueue(APP_USER_ID, now);
+  const userId = await getCurrentUserId();
+  const { items, nextDueAt } = await getReviewQueue(userId, now);
 
   return (
     <div className="flex flex-col gap-4">

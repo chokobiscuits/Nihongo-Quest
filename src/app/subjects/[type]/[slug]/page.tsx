@@ -3,8 +3,7 @@ import Link from "next/link";
 import { slugToType } from "@/components/subject/typeSlug";
 import { getSubjectDetail } from "@/server/queries/subjects";
 import { SubjectDetailCard } from "@/components/subject/SubjectDetailCard";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function SubjectDetailPage({
   params,
@@ -20,7 +19,8 @@ export default async function SubjectDetailPage({
   // Next does not auto-decode it here — decode explicitly before the DB
   // lookup.
   const slug = decodeURIComponent(rawSlug);
-  const subject = await getSubjectDetail(slug, APP_USER_ID);
+  const userId = await getCurrentUserId();
+  const subject = await getSubjectDetail(slug, userId);
   if (!subject || subject.type !== subjectType) notFound();
 
   return (

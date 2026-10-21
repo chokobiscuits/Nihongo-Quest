@@ -9,8 +9,6 @@ import { parseTier, type Rank } from "@/services/rank/tiers";
 import { totalXpToReach } from "@/services/xp/curve";
 import { accountMasteryLevel, masteryTier, masteryProgress, type MasteryTier } from "@/services/xp/mastery";
 
-import { APP_USER_ID } from "@/lib/appUser";
-
 // Same laddered denominators the dashboard uses — see
 // src/server/queries/dashboard.ts's UNSEEDED_DENOMINATORS/RADICAL_TOTAL for
 // why radicals are a fixed constant while kanji/vocab totals come live from
@@ -109,7 +107,7 @@ export interface ProgressData {
   };
 }
 
-export async function getProgress(userId: string = APP_USER_ID): Promise<ProgressData> {
+export async function getProgress(userId: string): Promise<ProgressData> {
   const profile = await getOrCreateProfile(userId);
   // KANJI's own curriculum level (per-type, not the shared accountLevel —
   // see curriculum.ts) is what levelKanji below needs to query the right
@@ -333,7 +331,7 @@ const TYPE_ORDER: SubjectType[] = [
 /// Items crossing into Guru are flagged: that's the promotion that unlocks
 /// dependent subjects, so it's worth more than a plain stage step.
 export async function getNearPromotion(
-  userId: string = APP_USER_ID,
+  userId: string,
   perTypeLimit = 5,
   now: Date = new Date(),
 ): Promise<NearPromotionGroup[]> {
@@ -405,7 +403,7 @@ export async function getNearPromotion(
 /// windows (see `buildForecast`). Purely a readout of already-scheduled
 /// dueAt values — it does not project future review volume based on user
 /// behavior.
-export async function getReviewForecast(userId: string = APP_USER_ID, now: Date = new Date()): Promise<ForecastBucket[]> {
+export async function getReviewForecast(userId: string, now: Date = new Date()): Promise<ForecastBucket[]> {
   const rows = await prisma.userSubject.findMany({
     where: { userId, startedAt: { not: null }, dueAt: { not: null }, srsStage: { gte: 1, lte: 8 } },
     select: { dueAt: true },
@@ -425,7 +423,7 @@ export async function getReviewForecast(userId: string = APP_USER_ID, now: Date 
 /// `practiceAnswers` still describe every row fetched, so the UI can show
 /// what was left out. Pass "all" to score both together.
 export async function getReviewStats(
-  userId: string = APP_USER_ID,
+  userId: string,
   sinceDays = 30,
   mode: ReviewStatsMode = "ranked",
 ): Promise<ReviewStats> {
