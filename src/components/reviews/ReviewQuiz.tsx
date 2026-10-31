@@ -8,6 +8,11 @@ import { FuriganaText } from "@/components/furigana/FuriganaText";
 import { renderFurigana } from "@/services/furigana/render";
 import { xpForCorrectAnswer, xpForIncorrectAnswer } from "@/services/xp/curve";
 import { SrsStageChip } from "@/components/srs/SrsStageChip";
+import { SpeakButton } from "@/components/speech/SpeakButton";
+import { playSpeech } from "@/components/speech/speechPlayer";
+import { useSpeechSettings } from "@/components/speech/SpeechSettingsProvider";
+import { mayRevealPronunciation } from "@/components/speech/quizAudio";
+import { subjectSpeechText } from "@/components/speech/speechText";
 import { XpPopupLayer, type XpPopupLayerHandle } from "@/components/lessons/XpPopupLayer";
 import { useSound } from "@/lib/sound/useSound";
 import { comboRateFor, type SoundId } from "@/lib/sound/manifest";
@@ -55,6 +60,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
   const [lastWrongAnswer, setLastWrongAnswer] = useState("");
   const xpPopupRef = useRef<XpPopupLayerHandle>(null);
   const play = useSound(REVIEW_SOUNDS);
+  const { autoplay } = useSpeechSettings();
   // Consecutive correct answers; pitches the correct sound up a semitone
   // per hit so a run audibly climbs.
   const streakRef = useRef(0);
@@ -86,6 +92,24 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
     setQueue((prev) => prev.slice(1));
   }
 
+  /// False while this item's READING question is still queued after a MEANING
+  /// answer: the audio is the reading, so it would hand over that answer.
+  function pronunciationAllowed() {
+    return mayRevealPronunciation(
+      { kind: current.kind, itemId: current.userSubjectId },
+      queue.slice(1).map((q) => ({ kind: q.kind, itemId: q.userSubjectId })),
+    );
+  }
+
+  /// Auto-plays the revealed pronunciation once an answer is submitted, if the
+  /// user has that on. Goes through the shared player rather than a SpeakButton
+  /// so it keeps playing when the question advances and the button unmounts.
+  function autoplayPronunciation() {
+    if (!autoplay || !current || !pronunciationAllowed()) return;
+    const text = subjectSpeechText(current.subject);
+    if (text) playSpeech(text);
+  }
+
   function submit() {
     if (!current) return;
     const answer = input.trim();
@@ -100,6 +124,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
 
     if (result.result === "correct") {
       play("answer.correct", { rate: comboRateFor(streakRef.current) });
+      autoplayPronunciation();
       streakRef.current += 1;
       xpPopupRef.current?.spawn(xpForCorrectAnswer(current.subject.srsStage));
       recordAndAdvance({
@@ -123,6 +148,7 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
     // question to the back so the item still needs to be answered correctly
     // before the session ends.
     play("answer.wrong");
+    autoplayPronunciation();
     streakRef.current = 0;
     setFeedback("incorrect");
     setJustWrong(true);
@@ -162,6 +188,12 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
       incorrectCount: current.incorrectCount,
     });
   }
+
+  // Only offered after a wrong answer, and not while this item's READING
+  // question is still queued behind a MEANING answer (see
+  // pronunciationAllowed), so the button never gives away an open question.
+  const spokenAnswer =
+    feedback === "incorrect" && pronunciationAllowed() ? subjectSpeechText(current.subject) : null;
 
   const answeredCount = totalQuestions - queue.length;
   const incorrectFraction = totalQuestions === 0 ? 0 : incorrectTotal / totalQuestions;
@@ -262,13 +294,16 @@ export function ReviewQuiz({ items, onComplete }: ReviewQuizProps) {
 
         <div className="flex items-center justify-between gap-3">
           {feedback === "incorrect" ? (
-            <button
-              type="button"
-              onClick={continueAfterWrong}
-              className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
-            >
-              Continue
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={continueAfterWrong}
+                className="rounded-[var(--radius-chip)] bg-brand-button px-4 h-9 text-body font-medium text-on-brand"
+              >
+                Continue
+              </button>
+              {spokenAnswer && <SpeakButton text={spokenAnswer} label="Play pronunciation" />}
+            </div>
           ) : (
             <button
               type="submit"

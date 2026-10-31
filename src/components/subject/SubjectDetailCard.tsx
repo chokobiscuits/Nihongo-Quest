@@ -5,6 +5,8 @@ import { FuriganaText } from "@/components/furigana/FuriganaText";
 import { renderFurigana } from "@/services/furigana/render";
 import { MnemonicEditor } from "@/components/mnemonic/MnemonicEditor";
 import { AcceptedMeaningsEditor } from "@/components/mnemonic/AcceptedMeaningsEditor";
+import { SpeakButton } from "@/components/speech/SpeakButton";
+import { cleanReadingForSpeech, sentenceSpeechText, subjectSpeechText } from "@/components/speech/speechText";
 import { SectionPanel } from "@/components/lessons/SectionPanel";
 import { SrsStageChip } from "@/components/srs/SrsStageChip";
 import { stageInfo } from "@/services/srs/stages";
@@ -67,16 +69,22 @@ function SentenceWordChip({ component }: { component: LessonComponentSummary }) 
 /// own sentence subject.
 function GrammarExampleCard({ example }: { example: GrammarExample }) {
   const render = example.furigana ? renderFurigana(example.furigana, true) : null;
+  // Speak the kana reading when furigana is available so the engine does
+  // not guess kanji readings; otherwise fall back to the raw sentence.
+  const spoken = sentenceSpeechText(example);
   return (
-    <Link
-      href={`/subjects/sentences/${example.slug}`}
-      className="flex flex-col gap-1.5 rounded-[var(--radius-chip)] border border-line bg-surface px-4 py-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-    >
-      <span lang="ja" className="text-body leading-relaxed text-text">
-        {render ? <FuriganaText render={render} fallback={example.furiganaFallback} /> : example.characters}
-      </span>
-      {example.englishMeaning && <span className="text-caption text-text-dim">{example.englishMeaning}</span>}
-    </Link>
+    <div className="flex items-start gap-2">
+      <Link
+        href={`/subjects/sentences/${example.slug}`}
+        className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-[var(--radius-chip)] border border-line bg-surface px-4 py-3 hover:border-line-strong hover:bg-surface-3 transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+      >
+        <span lang="ja" className="text-body leading-relaxed text-text">
+          {render ? <FuriganaText render={render} fallback={example.furiganaFallback} /> : example.characters}
+        </span>
+        {example.englishMeaning && <span className="text-caption text-text-dim">{example.englishMeaning}</span>}
+      </Link>
+      {spoken && <SpeakButton text={spoken} label="Play example sentence" className="mt-3" />}
+    </div>
   );
 }
 
@@ -129,6 +137,11 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
         : subject.type === "SENTENCE"
           ? "Words in this sentence"
           : "Kanji used";
+
+  // Kana and sentences have no per-reading rows below, so they get a single
+  // button under the hero. Sentences speak their furigana so kanji readings
+  // are not guessed.
+  const heroSpoken = subject.type === "KANA" || subject.type === "SENTENCE" ? subjectSpeechText(subject) : null;
 
   const radicalFoundInKanji = subject.type === "RADICAL" ? subject.usedIn : [];
   const exampleVocab = subject.type === "KANJI" ? subject.usedIn : [];
@@ -197,6 +210,7 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
               )}
             </>
           )}
+          {heroSpoken && <SpeakButton text={heroSpoken} label={`Play pronunciation of ${subject.characters}`} />}
           {subject.type === "RADICAL" && primaryMeaning && (
             <span className="text-h1 text-text" lang="en">
               {primaryMeaning.meaning}
@@ -246,8 +260,18 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
               {onyomi.length > 0 && (
                 <div className="flex gap-4 py-1.5">
                   <span className="w-[72px] shrink-0 text-micro uppercase text-text-faint">On&apos;yomi</span>
-                  <span lang="ja" className="text-h2 text-text">
-                    {onyomi.map((r) => r.reading).join("、")}
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {onyomi.map((r, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5">
+                        <span lang="ja" className="text-h2 text-text">
+                          {r.reading}
+                        </span>
+                        <SpeakButton
+                          text={cleanReadingForSpeech(r.reading)}
+                          label={`Play on'yomi ${r.reading}`}
+                        />
+                      </span>
+                    ))}
                   </span>
                 </div>
               )}
@@ -255,14 +279,19 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
               {kunyomi.length > 0 && (
                 <div className="flex gap-4 py-1.5">
                   <span className="w-[72px] shrink-0 text-micro uppercase text-text-faint">Kun&apos;yomi</span>
-                  <span lang="ja" className="text-h2 text-text">
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     {kunyomi.map((r, i) => {
                       const [stem, okurigana] = r.reading.split(".");
                       return (
-                        <span key={i}>
-                          {i > 0 && "、"}
-                          {stem}
-                          {okurigana && <span className="text-text-dim">.{okurigana}</span>}
+                        <span key={i} className="inline-flex items-center gap-1.5">
+                          <span lang="ja" className="text-h2 text-text">
+                            {stem}
+                            {okurigana && <span className="text-text-dim">.{okurigana}</span>}
+                          </span>
+                          <SpeakButton
+                            text={cleanReadingForSpeech(r.reading)}
+                            label={`Play kun'yomi ${r.reading}`}
+                          />
                         </span>
                       );
                     })}
@@ -275,8 +304,15 @@ export function SubjectDetailCard({ subject, className }: SubjectDetailCardProps
 
         {subject.type === "VOCAB" && kana.length > 0 && (
           <SectionPanel label="Reading" labelColor={theme.base}>
-            <span lang="ja" className="text-h2 text-text">
-              {kana.map((r) => r.reading).join("、")}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {kana.map((r, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5">
+                  <span lang="ja" className="text-h2 text-text">
+                    {r.reading}
+                  </span>
+                  <SpeakButton text={cleanReadingForSpeech(r.reading)} label={`Play pronunciation of ${r.reading}`} />
+                </span>
+              ))}
             </span>
           </SectionPanel>
         )}

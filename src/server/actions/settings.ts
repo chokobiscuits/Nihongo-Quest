@@ -11,6 +11,9 @@ import { getCurrentUserId } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import type { InputJsonValue } from "@/generated/prisma/internal/prismaNamespace";
 
+import { isKnownReleaseId } from "@/content/changelog";
+import { recordChangelogSeen } from "@/server/changelog";
+
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // ~2MB
 const AVATAR_SIZE_PX = 512;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -102,6 +105,37 @@ export async function updateSoundVolume(volume: number): Promise<SettingsActionR
   const settings = await readSettings(userId);
   settings.soundVolume = volume;
   await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
+  revalidateProfileViews();
+  return { ok: true };
+}
+
+/// Persists `UserProfile.settings.pronunciationAutoplay`, read by the root
+/// layout to configure the quiz's after-answer pronunciation playback.
+export async function updatePronunciationAutoplay(enabled: boolean): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
+  // Server actions are callable with arbitrary client input, so the type
+  // annotation alone is not a guarantee.
+  if (typeof enabled !== "boolean") {
+    return { ok: false, error: "Pronunciation autoplay must be on or off." };
+  }
+
+  const settings = await readSettings(userId);
+  settings.pronunciationAutoplay = enabled;
+  await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
+  revalidateProfileViews();
+  return { ok: true };
+}
+
+/// Records that the user has seen changelog release `id` (the what's-new
+/// popup's dismiss and "see full changelog" paths). `id` is `unknown` on
+/// purpose: server actions take arbitrary client input, so it must be a
+/// string naming a release that exists.
+export async function markChangelogSeen(id: unknown): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
+  if (!isKnownReleaseId(id)) {
+    return { ok: false, error: "Unknown changelog release." };
+  }
+  await recordChangelogSeen(id, userId);
   revalidateProfileViews();
   return { ok: true };
 }
