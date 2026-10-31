@@ -10,12 +10,14 @@ import {
   updateTimezone,
   updateSoundEnabled,
   updateSoundVolume,
+  updatePronunciationAutoplay,
   uploadAvatar,
   removeAvatar,
   logout,
 } from "@/server/actions/settings";
 import { useSoundSettings } from "@/components/sound/SoundProvider";
 import { useSound } from "@/lib/sound/useSound";
+import { useSpeechSettings } from "@/components/speech/SpeechSettingsProvider";
 
 export interface SettingsFormProps {
   initial: {
@@ -26,6 +28,7 @@ export interface SettingsFormProps {
     timezone: string;
     soundEnabled: boolean;
     soundVolume: number;
+    pronunciationAutoplay: boolean;
   };
   showLogout?: boolean;
 }
@@ -83,6 +86,7 @@ export function SettingsForm({ initial, showLogout }: SettingsFormProps) {
       <LessonBatchSizeField initial={initial.lessonBatchSize} />
       <FuriganaField initial={initial.furiganaOverride} />
       <SoundField initialEnabled={initial.soundEnabled} initialVolume={initial.soundVolume} />
+      <PronunciationField initial={initial.pronunciationAutoplay} />
       <TimezoneField initial={initial.timezone} />
       {showLogout && <LogoutField />}
     </div>
@@ -428,6 +432,60 @@ function SoundField({ initialEnabled, initialVolume }: { initialEnabled: boolean
 
         <span className="text-micro text-text-faint" lang="en">
           Plays on answers, level ups, and rank changes. Nothing plays until you interact with the page.
+        </span>
+        <StatusNote status={status} />
+      </div>
+    </Panel>
+  );
+}
+
+/// Whether the quiz plays a subject's pronunciation after every answer.
+/// Pushes into the live SpeechSettingsProvider first so the quiz reflects
+/// the change before the server round-trip lands.
+function PronunciationField({ initial }: { initial: boolean }) {
+  const { setLocal } = useSpeechSettings();
+  const [enabled, setEnabled] = useState(initial);
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const [isPending, startTransition] = useTransition();
+
+  function save(next: boolean) {
+    setEnabled(next);
+    setLocal({ autoplay: next });
+    setStatus("saving");
+    startTransition(async () => {
+      const result = await updatePronunciationAutoplay(next);
+      setStatus(result.ok ? "saved" : "error");
+    });
+  }
+
+  return (
+    <Panel accent="var(--color-sentence)" title="Pronunciation" titleJa="発音">
+      <div className="flex flex-col gap-2">
+        <FieldLabel>Play after each answer</FieldLabel>
+        <InsetPanel className="flex flex-wrap items-center gap-2">
+          {[
+            { label: "On", value: true },
+            { label: "Off", value: false },
+          ].map((opt) => (
+            <button
+              key={opt.label}
+              type="button"
+              disabled={isPending}
+              onClick={() => save(opt.value)}
+              className={cn(
+                "h-8 rounded-[var(--radius-chip)] border px-3 text-caption transition-colors duration-[var(--duration-fast)]",
+                enabled === opt.value
+                  ? "border-transparent bg-sentence text-[var(--color-sentence-text)]"
+                  : "border-line text-text-dim hover:bg-surface-3",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </InsetPanel>
+        <span className="text-micro text-text-faint" lang="en">
+          Reviews and lessons speak the reading once you submit an answer, right or wrong. The play button on each
+          item works either way.
         </span>
         <StatusNote status={status} />
       </div>

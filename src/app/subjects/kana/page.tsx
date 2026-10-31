@@ -55,7 +55,7 @@ export default async function KanaPage({
       </div>
 
       <p className="text-caption text-text-dim" lang="en">
-        Already know your kana? Skip ahead. Radicals unlock once every kana here is passed or skipped.
+        Already know your kana? Skip ahead. Radicals unlock once every kana here is passed or skipped. Open any kana to hear it pronounced.
       </p>
 
       {/* One script at a time. Rendering all 208 tiles at once put this page

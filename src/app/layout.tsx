@@ -10,6 +10,12 @@ import { getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import { storage } from "@/lib/storage";
 import { SoundProvider } from "@/components/sound/SoundProvider";
 import { DEFAULT_SOUND_ENABLED, DEFAULT_SOUND_VOLUME } from "@/lib/sound/manifest";
+import { SpeechSettingsProvider } from "@/components/speech/SpeechSettingsProvider";
+import { DEFAULT_SPEECH_AUTOPLAY } from "@/components/speech/speechSettings";
+import { ChangelogPopup } from "@/components/changelog/ChangelogPopup";
+import { CHANGELOG, latestRelease } from "@/content/changelog";
+import { shouldShowChangelog } from "@/services/changelog/visibility";
+import { hasCompletedAnyTutorial } from "@/server/changelog";
 
 import { APP_USER_ID } from "@/lib/appUser";
 
@@ -56,7 +62,20 @@ async function loadShellData() {
     _sum: { masteryXp: true },
   });
   const unlockStatuses = await getTypeUnlockStatuses(APP_USER_ID);
-  const settings = (profile.settings ?? {}) as { soundEnabled?: boolean; soundVolume?: number };
+  const settings = (profile.settings ?? {}) as {
+    soundEnabled?: boolean;
+    soundVolume?: number;
+    pronunciationAutoplay?: boolean;
+    lastSeenChangelogId?: string;
+  };
+  const latest = latestRelease();
+  const showChangelog =
+    latest !== null &&
+    shouldShowChangelog({
+      releaseIds: CHANGELOG.map((release) => release.id),
+      lastSeenId: settings.lastSeenChangelogId,
+      onboarded: await hasCompletedAnyTutorial(APP_USER_ID),
+    });
   return {
     name: profile.displayName,
     avatarUrl: profile.avatarPath ? storage.publicUrl(profile.avatarPath) : null,
@@ -68,6 +87,10 @@ async function loadShellData() {
     // off-by-default would leave the feature unfound in settings.
     soundEnabled: settings.soundEnabled ?? DEFAULT_SOUND_ENABLED,
     soundVolume: settings.soundVolume ?? DEFAULT_SOUND_VOLUME,
+    pronunciationAutoplay: settings.pronunciationAutoplay ?? DEFAULT_SPEECH_AUTOPLAY,
+    // Null in the degraded shell below: with the database down there is no
+    // way to record that it was seen, so it would reappear on every load.
+    changelogRelease: showChangelog ? latest : null,
   };
 }
 
@@ -89,6 +112,8 @@ const FALLBACK_SHELL: Awaited<ReturnType<typeof loadShellData>> = {
   // the DB down, and defaulting to noise on a broken app is the wrong guess.
   soundEnabled: false,
   soundVolume: DEFAULT_SOUND_VOLUME,
+  pronunciationAutoplay: false,
+  changelogRelease: null,
 };
 
 export default async function RootLayout({
@@ -113,17 +138,20 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-canvas text-text">
         <SoundProvider enabled={shell.soundEnabled} volume={shell.soundVolume}>
-          <AppShell
-            user={{
-              name: shell.name,
-              avatarUrl: shell.avatarUrl,
-              masteryTier: shell.tier,
-              rank: shell.rank,
-            }}
-            typeUnlockStatuses={shell.unlockStatuses}
-          >
-            {children}
-          </AppShell>
+          <SpeechSettingsProvider autoplay={shell.pronunciationAutoplay}>
+            <AppShell
+              user={{
+                name: shell.name,
+                avatarUrl: shell.avatarUrl,
+                masteryTier: shell.tier,
+                rank: shell.rank,
+              }}
+              typeUnlockStatuses={shell.unlockStatuses}
+            >
+              {children}
+            </AppShell>
+            <ChangelogPopup release={shell.changelogRelease} />
+          </SpeechSettingsProvider>
         </SoundProvider>
       </body>
     </html>

@@ -62,3 +62,6 @@ next-env.d.ts
 # User-uploaded avatars — local disk only, see src/lib/storage.ts
 /public/uploads/avatars/*
 !/public/uploads/avatars/.gitkeep
+
+# Audio generator run report, see scripts/audio/generate.ts
+/scripts/audio/failed.json
