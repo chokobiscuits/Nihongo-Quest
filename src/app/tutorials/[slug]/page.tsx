@@ -6,8 +6,7 @@ import { TutorialBody } from "@/components/tutorials/TutorialBody";
 import { TutorialIcon } from "@/components/shell/NavIcons";
 import { MarkReadButton } from "@/components/tutorials/MarkReadButton";
 import { SkipFirstRunButton } from "@/components/tutorials/SkipFirstRunButton";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function TutorialDetailPage({
   params,
@@ -18,7 +17,8 @@ export default async function TutorialDetailPage({
 }) {
   const { slug } = await params;
   const { welcome } = await searchParams;
-  const tutorial = await getTutorialBySlug(slug, APP_USER_ID);
+  const userId = await getCurrentUserId();
+  const tutorial = await getTutorialBySlug(slug, userId);
   if (!tutorial) notFound();
 
   // Welcome mode: the user was redirected here from "/" on a brand-new or

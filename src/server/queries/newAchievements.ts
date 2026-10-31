@@ -2,8 +2,6 @@ import { prisma } from "@/lib/db";
 import { ACHIEVEMENTS } from "@/services/achievements/definitions";
 import { getAchievements } from "@/server/queries/achievements";
 
-import { APP_USER_ID } from "@/lib/appUser";
-
 export interface NewAchievement {
   id: string;
   titleJa: string;
@@ -27,7 +25,7 @@ export interface NewAchievement {
 /// that choice is that a crash between the two leaves an achievement
 /// un-notified — it will simply be recorded silently on the next session,
 /// which is the right failure direction.
-export async function recordNewAchievements(userId: string = APP_USER_ID): Promise<NewAchievement[]> {
+export async function recordNewAchievements(userId: string): Promise<NewAchievement[]> {
   const [{ unlocked }, existing] = await Promise.all([
     getAchievements(userId),
     prisma.userAchievement.findMany({ where: { userId }, select: { achievementId: true } }),
@@ -55,7 +53,7 @@ export async function recordNewAchievements(userId: string = APP_USER_ID): Promi
 /// Backfills the earned table without reporting anything as new. Used on
 /// first run against an existing account so a user who already qualifies for
 /// twenty achievements is not shown twenty pop-ups at once.
-export async function backfillEarnedAchievements(userId: string = APP_USER_ID): Promise<number> {
+export async function backfillEarnedAchievements(userId: string): Promise<number> {
   const { unlocked } = await getAchievements(userId);
   if (unlocked.length === 0) return 0;
 

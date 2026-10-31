@@ -433,6 +433,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
             YOUR MNEMONICS
           </span>
           <MnemonicEditor
+            key={`${subject.id}-meaning`}
             subjectId={subject.id}
             field="meaningMnemonic"
             label="Meaning mnemonic"
@@ -442,6 +443,7 @@ export function LessonTeachCard({ subject, position, batchSize, className }: Les
           />
           {subject.type !== "RADICAL" && subject.type !== "SENTENCE" && subject.type !== "GRAMMAR" && (
             <MnemonicEditor
+              key={`${subject.id}-reading`}
               subjectId={subject.id}
               field="readingMnemonic"
               label="Reading mnemonic"

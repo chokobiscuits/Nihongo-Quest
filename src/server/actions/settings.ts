@@ -7,10 +7,10 @@ import { prisma } from "@/lib/db";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import { storage } from "@/lib/storage";
 import { SESSION_COOKIE_NAME } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import type { InputJsonValue } from "@/generated/prisma/internal/prismaNamespace";
 
-import { APP_USER_ID } from "@/lib/appUser";
 import { isKnownReleaseId } from "@/content/changelog";
 import { recordChangelogSeen } from "@/server/changelog";
 
@@ -36,10 +36,8 @@ async function readSettings(userId: string): Promise<Record<string, unknown>> {
 
 /// Persists `UserProfile.displayName`. Server-side validated: non-empty,
 /// trimmed, capped length — never trusts whatever the client sent.
-export async function updateDisplayName(
-  displayName: string,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateDisplayName(displayName: string): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   const trimmed = displayName.trim();
   if (trimmed.length === 0) {
     return { ok: false, error: "Display name cannot be empty." };
@@ -56,10 +54,8 @@ export async function updateDisplayName(
 
 /// Persists `UserProfile.settings.lessonBatchSize`, read by getLessonBatch
 /// (src/server/queries/lessons.ts). Clamped server-side to a sane range.
-export async function updateLessonBatchSize(
-  size: number,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateLessonBatchSize(size: number): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   if (!Number.isFinite(size) || !Number.isInteger(size)) {
     return { ok: false, error: "Lesson batch size must be a whole number." };
   }
@@ -76,10 +72,8 @@ export async function updateLessonBatchSize(
 
 /// Persists `UserProfile.settings.furiganaOverride` (true / false / null),
 /// read by src/services/progress/visibility.ts's shouldShowFurigana.
-export async function updateFuriganaOverride(
-  override: boolean | null,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateFuriganaOverride(override: boolean | null): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   const settings = await readSettings(userId);
   settings.furiganaOverride = override;
   await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
@@ -89,10 +83,8 @@ export async function updateFuriganaOverride(
 
 /// Persists `UserProfile.settings.soundEnabled`, read by the shell to
 /// configure the client-side SoundManager.
-export async function updateSoundEnabled(
-  enabled: boolean,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateSoundEnabled(enabled: boolean): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   const settings = await readSettings(userId);
   settings.soundEnabled = enabled;
   await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
@@ -101,10 +93,8 @@ export async function updateSoundEnabled(
 }
 
 /// Persists `UserProfile.settings.soundVolume` as a 0..1 fraction.
-export async function updateSoundVolume(
-  volume: number,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateSoundVolume(volume: number): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   if (!Number.isFinite(volume)) {
     return { ok: false, error: "Volume must be a number." };
   }
@@ -121,10 +111,8 @@ export async function updateSoundVolume(
 
 /// Persists `UserProfile.settings.pronunciationAutoplay`, read by the root
 /// layout to configure the quiz's after-answer pronunciation playback.
-export async function updatePronunciationAutoplay(
-  enabled: boolean,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updatePronunciationAutoplay(enabled: boolean): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   // Server actions are callable with arbitrary client input, so the type
   // annotation alone is not a guarantee.
   if (typeof enabled !== "boolean") {
@@ -142,10 +130,8 @@ export async function updatePronunciationAutoplay(
 /// popup's dismiss and "see full changelog" paths). `id` is `unknown` on
 /// purpose: server actions take arbitrary client input, so it must be a
 /// string naming a release that exists.
-export async function markChangelogSeen(
-  id: unknown,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function markChangelogSeen(id: unknown): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   if (!isKnownReleaseId(id)) {
     return { ok: false, error: "Unknown changelog release." };
   }
@@ -157,10 +143,8 @@ export async function markChangelogSeen(
 // IANA timezone names this app's settings page offers — a deliberately short
 // list of commonly-relevant zones rather than the full ~400-entry IANA
 // database, validated against `Intl` regardless so any valid IANA id works.
-export async function updateTimezone(
-  timezone: string,
-  userId: string = APP_USER_ID,
-): Promise<SettingsActionResult> {
+export async function updateTimezone(timezone: string): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   try {
     // Throws RangeError for an invalid IANA timezone identifier.
     new Intl.DateTimeFormat("en-US", { timeZone: timezone });
@@ -185,11 +169,8 @@ export interface UploadAvatarResult extends SettingsActionResult {
 /// Actions can receive `FormData` with a File entry, but the caller here
 /// passes the already-extracted bytes so this function stays framework-free
 /// and unit-testable in isolation.
-export async function uploadAvatar(
-  fileBytes: ArrayBuffer,
-  declaredType: string,
-  userId: string = APP_USER_ID,
-): Promise<UploadAvatarResult> {
+export async function uploadAvatar(fileBytes: ArrayBuffer, declaredType: string): Promise<UploadAvatarResult> {
+  const userId = await getCurrentUserId();
   if (!ALLOWED_IMAGE_TYPES.has(declaredType)) {
     return { ok: false, error: "Only PNG, JPEG, WebP, or GIF images are allowed." };
   }
@@ -246,7 +227,8 @@ export async function uploadAvatar(
 }
 
 /// Removes the current avatar, both the stored file and the DB reference.
-export async function removeAvatar(userId: string = APP_USER_ID): Promise<SettingsActionResult> {
+export async function removeAvatar(): Promise<SettingsActionResult> {
+  const userId = await getCurrentUserId();
   const profile = await getOrCreateProfile(userId);
   if (profile.avatarPath) {
     // Clearing the pointer is what the user asked for. If the object cannot
@@ -262,9 +244,7 @@ export async function removeAvatar(userId: string = APP_USER_ID): Promise<Settin
   return { ok: true };
 }
 
-/// Clears the shared-password session cookie set by /api/login. A no-op if
-/// the password gate isn't configured (APP_PASSWORD unset), since there's
-/// no session to clear in that case.
+/// Clears the signed-in user's session cookie set by /api/login.
 export async function logout(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);

@@ -5,8 +5,7 @@ import { KanaSkipControl } from "@/components/kana/KanaSkipControl";
 import { getKanaBrowseGroups } from "@/server/queries/subjects";
 import { isKanaResolvedFor } from "@/services/srs/kana-gate";
 import { SubjectType } from "@/generated/prisma/enums";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 const SCRIPT_LABEL: Record<"hiragana" | "katakana", { en: string; ja: string }> = {
   hiragana: { en: "Hiragana", ja: "ひらがな" },
@@ -24,9 +23,10 @@ export default async function KanaPage({
 }) {
   const theme = SUBJECT_THEME[SubjectType.KANA];
   const { script } = await searchParams;
+  const userId = await getCurrentUserId();
   const [groups, resolved] = await Promise.all([
-    getKanaBrowseGroups(APP_USER_ID),
-    isKanaResolvedFor(APP_USER_ID),
+    getKanaBrowseGroups(userId),
+    isKanaResolvedFor(userId),
   ]);
   const activeScript =
     script === "katakana" || script === "hiragana" ? script : (groups[0]?.script ?? "hiragana");

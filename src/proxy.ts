@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 
-/// Simple shared-password gate for this single-user app: no accounts, no
-/// email, just one password in APP_PASSWORD checked against a signed session
-/// cookie. If APP_PASSWORD is unset, the gate is fully bypassed — local dev
-/// and any deployment that doesn't opt in are unaffected.
+/// Per-user auth gate: every route requires a valid signed session cookie
+/// (see src/lib/auth.ts and src/app/api/login/route.ts), identifying one of
+/// the four provisioned accounts. There is no bypass — APP_PASSWORD has been
+/// retired, and a missing/misconfigured APP_SESSION_SECRET fails closed
+/// (redirects to /login) rather than opening the app to every visitor.
 const PUBLIC_PATHS = ["/login", "/api/login"];
 
 export async function proxy(request: NextRequest) {
-  const appPassword = process.env.APP_PASSWORD?.trim();
-  if (!appPassword) {
-    return NextResponse.next();
-  }
-
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return NextResponse.next();

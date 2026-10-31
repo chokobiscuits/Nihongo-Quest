@@ -1,9 +1,11 @@
 import { getAchievements } from "@/server/queries/achievements";
 import { Panel } from "@/components/panel/Panel";
 import { AchievementRow } from "@/components/achievements/AchievementRow";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function AchievementsPage() {
-  const { unlocked, locked } = await getAchievements();
+  const userId = await getCurrentUserId();
+  const { unlocked, locked } = await getAchievements(userId);
 
   return (
     <div className="flex flex-col gap-4">

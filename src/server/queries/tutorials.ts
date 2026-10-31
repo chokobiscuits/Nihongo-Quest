@@ -5,8 +5,6 @@ import { GURU_STAGE, BURNED_STAGE } from "@/services/srs/stages";
 import { isTriggered, type TutorialStats } from "@/services/tutorials/triggers";
 import type { TutorialSubjectType, TutorialTrigger } from "@/services/tutorials/trigger-types";
 
-import { APP_USER_ID } from "@/lib/appUser";
-
 const LADDER_TYPES: TutorialSubjectType[] = [
   SubjectType.RADICAL,
   SubjectType.KANJI,
@@ -33,7 +31,7 @@ export interface TutorialDetail extends TutorialSummary {
 /// Builds the pure `TutorialStats` snapshot from live DB rows for `userId`.
 /// The only DB-touching half of trigger evaluation — see
 /// src/services/tutorials/triggers.ts for the pure predicate this feeds.
-export async function computeTutorialStats(userId: string = APP_USER_ID): Promise<TutorialStats> {
+export async function computeTutorialStats(userId: string): Promise<TutorialStats> {
   const profile = await getOrCreateProfile(userId);
 
   const zeroCounts = (): Record<TutorialSubjectType, number> => ({
@@ -123,7 +121,7 @@ function toSummary(row: {
 /// The next REQUIRED tutorial that is both currently triggered and not yet
 /// completed by `userId`, ordered by `order` ascending — this is what gates
 /// the lesson flow (see getLessonBatch). Null once none are pending.
-export async function getNextRequiredTutorial(userId: string = APP_USER_ID): Promise<TutorialDetail | null> {
+export async function getNextRequiredTutorial(userId: string): Promise<TutorialDetail | null> {
   const stats = await computeTutorialStats(userId);
   return firstPendingRequired(userId, stats);
 }
@@ -157,7 +155,7 @@ async function firstPendingRequired(userId: string, stats: TutorialStats): Promi
 /// would make "/" permanently unreachable for a mid-curriculum user who has
 /// left a tutorial unread. Gating on hasCompletedAnyTutorial makes the
 /// redirect self-extinguishing: acknowledging anything ends it for good.
-export async function getFirstRunTutorial(userId: string = APP_USER_ID): Promise<TutorialDetail | null> {
+export async function getFirstRunTutorial(userId: string): Promise<TutorialDetail | null> {
   const stats = await computeTutorialStats(userId);
   if (stats.hasCompletedAnyTutorial) return null;
   return firstPendingRequired(userId, stats);
@@ -165,7 +163,7 @@ export async function getFirstRunTutorial(userId: string = APP_USER_ID): Promise
 
 /// Every OPTIONAL tutorial currently triggered and not yet completed —
 /// surfaced as dismissible dashboard cards, never blocking.
-export async function getTriggeredOptionalTutorials(userId: string = APP_USER_ID): Promise<TutorialSummary[]> {
+export async function getTriggeredOptionalTutorials(userId: string): Promise<TutorialSummary[]> {
   const stats = await computeTutorialStats(userId);
 
   const candidates = await prisma.tutorial.findMany({
@@ -181,7 +179,7 @@ export async function getTriggeredOptionalTutorials(userId: string = APP_USER_ID
 
 /// Full library: every tutorial, in order, with completed state — readable
 /// anytime regardless of trigger.
-export async function getTutorialLibrary(userId: string = APP_USER_ID): Promise<TutorialSummary[]> {
+export async function getTutorialLibrary(userId: string): Promise<TutorialSummary[]> {
   const rows = await prisma.tutorial.findMany({
     orderBy: { order: "asc" },
     include: { completions: { where: { userId } } },
@@ -189,7 +187,7 @@ export async function getTutorialLibrary(userId: string = APP_USER_ID): Promise<
   return rows.map(toSummary);
 }
 
-export async function getTutorialBySlug(slug: string, userId: string = APP_USER_ID): Promise<TutorialDetail | null> {
+export async function getTutorialBySlug(slug: string, userId: string): Promise<TutorialDetail | null> {
   const row = await prisma.tutorial.findUnique({
     where: { slug },
     include: { completions: { where: { userId } } },
@@ -198,7 +196,7 @@ export async function getTutorialBySlug(slug: string, userId: string = APP_USER_
   return { ...toSummary(row), body: row.body };
 }
 
-export async function acknowledgeTutorial(tutorialId: string, userId: string = APP_USER_ID): Promise<void> {
+export async function acknowledgeTutorial(tutorialId: string, userId: string): Promise<void> {
   await prisma.tutorialCompletion.upsert({
     where: { userId_tutorialId: { userId, tutorialId } },
     update: {},
@@ -209,7 +207,7 @@ export async function acknowledgeTutorial(tutorialId: string, userId: string = A
 /// Marks every tutorial complete. `createMany` with `skipDuplicates` keeps
 /// this idempotent, so re-running it is a no-op rather than an error.
 /// Returns how many rows were newly created.
-export async function acknowledgeAllTutorials(userId: string = APP_USER_ID): Promise<number> {
+export async function acknowledgeAllTutorials(userId: string): Promise<number> {
   const all = await prisma.tutorial.findMany({ select: { id: true } });
   const result = await prisma.tutorialCompletion.createMany({
     data: all.map((t) => ({ userId, tutorialId: t.id, acknowledged: true })),

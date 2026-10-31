@@ -2,9 +2,11 @@ import Link from "next/link";
 import { getSubjectTypeSummaries } from "@/server/queries/subjects";
 import { SUBJECT_THEME } from "@/components/subject/theme";
 import { typeToSlug } from "@/components/subject/typeSlug";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function SubjectsPage() {
-  const summaries = await getSubjectTypeSummaries();
+  const userId = await getCurrentUserId();
+  const summaries = await getSubjectTypeSummaries(userId);
 
   return (
     <div className="flex flex-col gap-4">

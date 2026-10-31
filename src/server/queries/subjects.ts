@@ -6,8 +6,7 @@ import { isTypeUnlocked } from "@/services/srs/typeUnlock";
 import { getCurriculumLevels, getGuruCounts, getTypeUnlockStatuses } from "@/server/queries/curriculum";
 import type { LessonComponentSummary, LessonSubjectMeaning, LessonSubjectReading } from "@/server/queries/lessons";
 import { sentenceWordBreakdown, tatoebaSentenceIdOf, grammarExamples, type GrammarExample } from "@/server/queries/sentenceWordBreakdown";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { mergeMnemonicFields } from "@/server/queries/mnemonics";
 
 // Ladder types have a curriculum level and are gated by unlock rules.
 // Reading has no seeded rows yet (see dashboard.ts); Sentence and Grammar
@@ -56,7 +55,7 @@ export interface SubjectTypeSummary {
 /// Overview counts for all six SubjectTypes, for the `/subjects` index.
 /// Reading has no Subject rows, so it reports 0/0 with `seeded: false` — the
 /// page renders that as a "Coming soon" placeholder.
-export async function getSubjectTypeSummaries(userId: string = APP_USER_ID): Promise<SubjectTypeSummary[]> {
+export async function getSubjectTypeSummaries(userId: string): Promise<SubjectTypeSummary[]> {
   const seededTypes: SubjectType[] = [SubjectType.KANA, SubjectType.RADICAL, SubjectType.KANJI, SubjectType.VOCAB, SubjectType.SENTENCE, SubjectType.GRAMMAR];
 
   const [totals, passedCounts, unlockStatuses] = await Promise.all([
@@ -152,7 +151,7 @@ export async function getSubjectsForLevel(
   type: SubjectType,
   level: number | null,
   filters: BrowseFilters = {},
-  userId: string = APP_USER_ID,
+  userId: string,
 ): Promise<SubjectListItem[]> {
   const [curriculumLevels, guruCounts, kanaResolved] = await Promise.all([
     getCurriculumLevels(userId),
@@ -410,7 +409,7 @@ export interface SubjectDetail {
 /// reuse the same presentation as the teach card.
 export async function getSubjectDetail(
   slug: string,
-  userId: string = APP_USER_ID,
+  userId: string,
 ): Promise<SubjectDetail | null> {
   const subject = await prisma.subject.findUnique({
     where: { slug },
@@ -472,21 +471,29 @@ export async function getSubjectDetail(
 
   if (!subject) return null;
 
-  const userSubject = await prisma.userSubject.findUnique({
-    where: { userId_subjectId: { userId, subjectId: subject.id } },
-    select: {
-      srsStage: true,
-      dueAt: true,
-      passedAt: true,
-      burnedAt: true,
-      meaningCorrect: true,
-      meaningIncorrect: true,
-      readingCorrect: true,
-      readingIncorrect: true,
-      masteryLevel: true,
-      masteryXp: true,
-    },
-  });
+  const [userSubject, userMnemonic] = await Promise.all([
+    prisma.userSubject.findUnique({
+      where: { userId_subjectId: { userId, subjectId: subject.id } },
+      select: {
+        srsStage: true,
+        dueAt: true,
+        passedAt: true,
+        burnedAt: true,
+        meaningCorrect: true,
+        meaningIncorrect: true,
+        readingCorrect: true,
+        readingIncorrect: true,
+        masteryLevel: true,
+        masteryXp: true,
+      },
+    }),
+    prisma.userMnemonic.findUnique({
+      where: { userId_subjectId: { userId, subjectId: subject.id } },
+      select: { meaningMnemonic: true, readingMnemonic: true, meaningHint: true, readingHint: true, acceptedMeanings: true },
+    }),
+  ]);
+
+  const merged = mergeMnemonicFields(subject, userMnemonic);
 
   return {
     id: subject.id,
@@ -496,12 +503,12 @@ export async function getSubjectDetail(
     characters: subject.characters,
     meanings: subject.meanings as unknown as LessonSubjectMeaning[],
     readings: subject.readings as unknown as LessonSubjectReading[],
-    meaningMnemonic: subject.meaningMnemonic,
-    readingMnemonic: subject.readingMnemonic,
-    meaningHint: subject.meaningHint,
-    readingHint: subject.readingHint,
-    acceptedMeanings: subject.acceptedMeanings as string[],
-    authored: subject.authored,
+    meaningMnemonic: merged.meaningMnemonic,
+    readingMnemonic: merged.readingMnemonic,
+    meaningHint: merged.meaningHint,
+    readingHint: merged.readingHint,
+    acceptedMeanings: merged.acceptedMeanings,
+    authored: userMnemonic !== null || subject.authored,
     jlpt: subject.jlpt,
     frequency: subject.frequency,
     furigana: subject.furigana as { ruby: string; rt?: string }[] | null,
@@ -630,7 +637,7 @@ const ROW_ORDER = [
 /// same locked/burned/learning/not-started state derivation as
 /// getSubjectsForLevel's KANA branch, just without the level-group
 /// structure.
-export async function getKanaBrowseGroups(userId: string = APP_USER_ID): Promise<KanaScriptGroup[]> {
+export async function getKanaBrowseGroups(userId: string): Promise<KanaScriptGroup[]> {
   const curriculumLevels = await getCurriculumLevels(userId);
   const kanaLevel = curriculumLevels[SubjectType.KANA];
 

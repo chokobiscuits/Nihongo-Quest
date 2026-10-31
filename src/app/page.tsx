@@ -12,8 +12,7 @@ import type { JlptLevel } from "@/components/stats/JlptStepper";
 import { ReviewsCard } from "@/components/dashboard/ReviewsCard";
 import { AchievementsCard } from "@/components/dashboard/AchievementsCard";
 import { RankLevelCard } from "@/components/rank/RankLevelCard";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 const JLPT_LEVELS: JlptLevel[] = ["N5", "N4", "N3", "N2", "N1"];
 
@@ -55,13 +54,14 @@ export default async function HomePage() {
   // which will fail on its own terms — rather than bouncing the user to a
   // tutorial route that cannot load either. redirect() throws a control-flow
   // signal, so it must sit outside the catch.
-  const firstRun = await getFirstRunTutorial(APP_USER_ID).catch(() => null);
+  const userId = await getCurrentUserId();
+  const firstRun = await getFirstRunTutorial(userId).catch(() => null);
   if (firstRun) redirect(`/tutorials/${firstRun.slug}?welcome=1`);
 
   const [dashboard, tutorialTips, progress] = await Promise.all([
-    getDashboard(APP_USER_ID),
-    getTriggeredOptionalTutorials(APP_USER_ID),
-    getProgress(APP_USER_ID),
+    getDashboard(userId),
+    getTriggeredOptionalTutorials(userId),
+    getProgress(userId),
   ]);
   const jlpt = jlptCardProps(progress.jlpt);
 

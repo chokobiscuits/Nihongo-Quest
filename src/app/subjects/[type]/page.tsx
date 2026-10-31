@@ -11,8 +11,7 @@ import {
   type BrowseFilters,
 } from "@/server/queries/subjects";
 import { getCurriculumLevels, getTypeUnlockStatuses } from "@/server/queries/curriculum";
-
-import { APP_USER_ID } from "@/lib/appUser";
+import { getCurrentUserId } from "@/lib/session";
 
 // Levels rendered per page load, windowed around the user's current level
 // (or page 1 of the ladder) so a full 60-level browse never fires 60
@@ -37,10 +36,11 @@ export default async function SubjectTypePage({
 
   const query = await searchParams;
   const theme = SUBJECT_THEME[subjectType];
+  const userId = await getCurrentUserId();
 
   const [curriculumLevels, unlockStatuses, levelIndex, jlptOptions] = await Promise.all([
-    getCurriculumLevels(APP_USER_ID),
-    getTypeUnlockStatuses(APP_USER_ID),
+    getCurriculumLevels(userId),
+    getTypeUnlockStatuses(userId),
     getSubjectLevelIndex(subjectType),
     getJlptOptions(subjectType),
   ]);
@@ -114,7 +114,7 @@ export default async function SubjectTypePage({
       .filter((l) => openKeys.includes(keyOf(l)))
       .map(async (level) => ({
         key: keyOf(level),
-        items: await getSubjectsForLevel(subjectType, level, filters, APP_USER_ID),
+        items: await getSubjectsForLevel(subjectType, level, filters, userId),
       })),
   );
   const itemsByKey = new Map(fetched.map((f) => [f.key, f.items]));

@@ -9,8 +9,6 @@ import { GURU_STAGE } from "@/services/srs/stages";
 import { curriculumLevel, type LevelGuruStats } from "@/services/srs/curriculum";
 import { typeUnlockStatuses, type GuruCounts, type TypeUnlockStatus } from "@/services/srs/typeUnlock";
 
-import { APP_USER_ID } from "@/lib/appUser";
-
 const LADDER_TYPES: SubjectType[] = [
   SubjectType.KANA,
   SubjectType.RADICAL,
@@ -23,7 +21,7 @@ const LADDER_TYPES: SubjectType[] = [
 /// Curriculum level for every laddered type, in one pass: a single grouped
 /// count of laddered subjects per (type, level), and a single grouped count
 /// of this user's Guru+ subjects per (type, level), joined in memory.
-export async function getCurriculumLevels(userId: string = APP_USER_ID): Promise<Record<SubjectType, number>> {
+export async function getCurriculumLevels(userId: string): Promise<Record<SubjectType, number>> {
   const [totals, guruRows] = await Promise.all([
     prisma.subject.groupBy({
       by: ["type", "level"],
@@ -81,7 +79,7 @@ export async function getCurriculumLevels(userId: string = APP_USER_ID): Promise
 /// Guru counts per gating type (RADICAL/KANJI/VOCAB/GRAMMAR), for
 /// typeUnlockStatuses. One grouped-by-subjectId-free query: count Guru+
 /// UserSubject rows joined to their subject type directly.
-export async function getGuruCounts(userId: string = APP_USER_ID): Promise<GuruCounts> {
+export async function getGuruCounts(userId: string): Promise<GuruCounts> {
   const rows = await prisma.userSubject.findMany({
     where: {
       userId,
@@ -105,7 +103,7 @@ export async function getGuruCounts(userId: string = APP_USER_ID): Promise<GuruC
 /// Convenience wrapper: type-unlock status for every gated type, for this
 /// user, in one call.
 export async function getTypeUnlockStatuses(
-  userId: string = APP_USER_ID,
+  userId: string,
 ): Promise<Record<"KANJI" | "VOCAB" | "SENTENCE" | "GRAMMAR" | "READING", TypeUnlockStatus>> {
   const guru = await getGuruCounts(userId);
   return typeUnlockStatuses(guru);

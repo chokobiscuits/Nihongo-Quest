@@ -17,8 +17,6 @@ const ALL_RADICALS_TOTAL = 214;
 // named locally against the same table Guru/Burned already read from.
 const MASTER_STAGE = 7;
 
-import { APP_USER_ID } from "@/lib/appUser";
-
 export interface AchievementRow {
   definition: AchievementDefinition;
   progress: number;
@@ -35,7 +33,7 @@ export interface AchievementsData {
 /// Computes real progress for every achievement in the roster from live
 /// UserSubject/Session/Profile data, then splits into unlocked/locked. Locked
 /// achievements are never hidden — the roadmap is the point.
-export async function getAchievements(userId: string = APP_USER_ID): Promise<AchievementsData> {
+export async function getAchievements(userId: string): Promise<AchievementsData> {
   const profile = await getOrCreateProfile(userId);
 
   const [passedCounts, stageCounts, sessions, masteryXpAgg, lpEvents] = await Promise.all([

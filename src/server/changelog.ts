@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { APP_USER_ID } from "@/lib/appUser";
 import { latestRelease } from "@/content/changelog";
 import { getOrCreateProfile } from "@/server/queries/profile";
 import type { InputJsonValue } from "@/generated/prisma/internal/prismaNamespace";
@@ -16,7 +15,7 @@ async function readSettings(userId: string): Promise<Record<string, unknown>> {
 
 /// Stores `id` as the last changelog release the user has seen. The caller is
 /// responsible for having validated `id` against the known releases.
-export async function recordChangelogSeen(id: string, userId: string = APP_USER_ID): Promise<void> {
+export async function recordChangelogSeen(id: string, userId: string): Promise<void> {
   const settings = await readSettings(userId);
   settings.lastSeenChangelogId = id;
   await prisma.userProfile.update({ where: { userId }, data: { settings: settings as InputJsonValue } });
@@ -25,7 +24,7 @@ export async function recordChangelogSeen(id: string, userId: string = APP_USER_
 /// Marks the newest release as seen, but only when nothing is recorded yet.
 /// Called when a brand-new account finishes first-run onboarding, so it
 /// starts out caught up instead of being told about releases that predate it.
-export async function stampChangelogSeenIfUnset(userId: string = APP_USER_ID): Promise<void> {
+export async function stampChangelogSeenIfUnset(userId: string): Promise<void> {
   const latest = latestRelease();
   if (!latest) return;
   const settings = await readSettings(userId);
@@ -36,6 +35,6 @@ export async function stampChangelogSeenIfUnset(userId: string = APP_USER_ID): P
 
 /// True once the account has completed any tutorial, which is what ends
 /// first-run onboarding (see getFirstRunTutorial).
-export async function hasCompletedAnyTutorial(userId: string = APP_USER_ID): Promise<boolean> {
+export async function hasCompletedAnyTutorial(userId: string): Promise<boolean> {
   return (await prisma.tutorialCompletion.count({ where: { userId } })) > 0;
 }

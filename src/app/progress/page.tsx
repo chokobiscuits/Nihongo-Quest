@@ -7,12 +7,14 @@ import { ActivityHeatmap } from "@/components/progress/ActivityHeatmap";
 import { AccountSummaryCard } from "@/components/progress/AccountSummaryCard";
 import { ReviewForecastCard } from "@/components/progress/ReviewForecastCard";
 import { ReviewStatsCard } from "@/components/progress/ReviewStatsCard";
+import { getCurrentUserId } from "@/lib/session";
 
 export default async function ProgressPage() {
+  const userId = await getCurrentUserId();
   const [progress, forecast, reviewStats] = await Promise.all([
-    getProgress(),
-    getReviewForecast(),
-    getReviewStats(),
+    getProgress(userId),
+    getReviewForecast(userId),
+    getReviewStats(userId),
   ]);
 
   return (
